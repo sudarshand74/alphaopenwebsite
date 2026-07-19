@@ -1,0 +1,1288 @@
+{
+  "sourceWorkbook": "../outputs/fall_2026_mock/AlphaOpen_Fall_2026_Mock_Data.xlsx",
+  "overview": "{\"kind\":\"sheet\",\"id\":\"ws/1muda4\",\"name\":\"Teams\",\"index\":0,\"range\":\"A1:E9\",\"address\":\"A1:E9\"}\n{\"kind\":\"sheet\",\"id\":\"ws/1l1pnf\",\"name\":\"Rosters\",\"index\":1,\"range\":\"A1:G113\",\"address\":\"A1:G113\"}\n{\"kind\":\"sheet\",\"id\":\"ws/sxmlln\",\"name\":\"Weeks\",\"index\":2,\"range\":\"A1:F11\",\"address\":\"A1:F11\"}\n{\"kind\":\"sheet\",\"id\":\"ws/om2t1k\",\"name\":\"Matchups\",\"index\":3,\"range\":\"A1:G29\",\"address\":\"A1:G29\"}\n{\"kind\":\"sheet\",\"id\":\"ws/rqv85b\",\"name\":\"Validation\",\"index\":4,\"range\":\"A1:C10\",\"address\":\"A1:C10\"}",
+  "teams": [
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "captainPlayerId": "P1207",
+      "captainName": "Sunil Shrotriya"
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "captainPlayerId": "P1120",
+      "captainName": "Prashant Pawar"
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "captainPlayerId": "P1073",
+      "captainName": "Kiran Nimkar"
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "captainPlayerId": "P1055",
+      "captainName": "Gopal Koratana"
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "captainPlayerId": "P1069",
+      "captainName": "Kartik Khamar"
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "captainPlayerId": "P1110",
+      "captainName": "Parag Marathe"
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "captainPlayerId": "P1185",
+      "captainName": "Shekar Viswanathan"
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "captainPlayerId": "P1001",
+      "captainName": "Abhay Kulkarni"
+    }
+  ],
+  "rosters": [
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 1,
+      "playerId": "P1207",
+      "playerName": "Sunil Shrotriya",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 2,
+      "playerId": "P1166",
+      "playerName": "Sanjay Dubey",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 3,
+      "playerId": "P1276",
+      "playerName": "Upendra Kulkarni",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 4,
+      "playerId": "P1061",
+      "playerName": "Hrushikesh Jog",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 5,
+      "playerId": "P1111",
+      "playerName": "Parag Walimbe",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 6,
+      "playerId": "P1053",
+      "playerName": "Gautam Kulkarni",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 7,
+      "playerId": "P1005",
+      "playerName": "Abhijit Patil",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 8,
+      "playerId": "P1033",
+      "playerName": "Ashish Udas",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 9,
+      "playerId": "P1082",
+      "playerName": "Makarand Bhave",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 10,
+      "playerId": "P1277",
+      "playerName": "Niladri Sarkar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 11,
+      "playerId": "P1183",
+      "playerName": "Shailesh Sarda",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 12,
+      "playerId": "P1102",
+      "playerName": "Nilesh Sabnis",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 13,
+      "playerId": "P1257",
+      "playerName": "Asim Musliar Akath",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T1",
+      "teamName": "Team Sunil",
+      "rank": 14,
+      "playerId": "P1159",
+      "playerName": "Salil Shete",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 1,
+      "playerId": "P1254",
+      "playerName": "Aravind Goli",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 2,
+      "playerId": "P1062",
+      "playerName": "Jaideep Bangal",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 3,
+      "playerId": "P1120",
+      "playerName": "Prashant Pawar",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 4,
+      "playerId": "P1164",
+      "playerName": "Sandeep Joshi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 5,
+      "playerId": "P1137",
+      "playerName": "Rajesh Bhanushali",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 6,
+      "playerId": "P1024",
+      "playerName": "Amit Tarwade",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 7,
+      "playerId": "P1217",
+      "playerName": "Uday Gupte",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 8,
+      "playerId": "P1244",
+      "playerName": "Kondala Rao Maddala",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 9,
+      "playerId": "P1104",
+      "playerName": "Nishikant Kadam",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 10,
+      "playerId": "P1191",
+      "playerName": "Siva Sareddy",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 11,
+      "playerId": "P1113",
+      "playerName": "Paul Dutt",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 12,
+      "playerId": "P1179",
+      "playerName": "Saurabh Padhye",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 13,
+      "playerId": "P1236",
+      "playerName": "Vivek Singh",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T2",
+      "teamName": "Team Prashant",
+      "rank": 14,
+      "playerId": "P1106",
+      "playerName": "Padmanaban Karvannan",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 1,
+      "playerId": "P1188",
+      "playerName": "Shreyas Joshi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 2,
+      "playerId": "P1230",
+      "playerName": "Vishal Borgaonkar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 3,
+      "playerId": "P1176",
+      "playerName": "Sathiya Barathan",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 4,
+      "playerId": "P1251",
+      "playerName": "Hemant Narang",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 5,
+      "playerId": "P1139",
+      "playerName": "Raju Iyer",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 6,
+      "playerId": "P1073",
+      "playerName": "Kiran Nimkar",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 7,
+      "playerId": "P1163",
+      "playerName": "Sandeep Gupta",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 8,
+      "playerId": "P1227",
+      "playerName": "Vinit Adi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 9,
+      "playerId": "P1028",
+      "playerName": "Anil Awati",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 10,
+      "playerId": "P1157",
+      "playerName": "Sahil Balhara",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 11,
+      "playerId": "P1072",
+      "playerName": "Kiran Hakathur",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 12,
+      "playerId": "P1013",
+      "playerName": "Akhil Pai",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 13,
+      "playerId": "P1156",
+      "playerName": "Sachin Sangole",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T3",
+      "teamName": "Team Kiran",
+      "rank": 14,
+      "playerId": "P1168",
+      "playerName": "Sanjay Singhal",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 1,
+      "playerId": "P1119",
+      "playerName": "Prasad Tirumareddi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 2,
+      "playerId": "P1197",
+      "playerName": "Srini Manick",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 3,
+      "playerId": "P1049",
+      "playerName": "Dhananjay Devdikar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 4,
+      "playerId": "P1010",
+      "playerName": "Ajay Houde",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 5,
+      "playerId": "P1059",
+      "playerName": "Hemant Joshi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 6,
+      "playerId": "P1258",
+      "playerName": "Kirbhashankar Prabhakaran",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 7,
+      "playerId": "P1118",
+      "playerName": "Prasad Marathe",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 8,
+      "playerId": "P1055",
+      "playerName": "Gopal Koratana",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 9,
+      "playerId": "P1143",
+      "playerName": "Ramesh Bala",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 10,
+      "playerId": "P1147",
+      "playerName": "Ravi Bhave",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 11,
+      "playerId": "P1081",
+      "playerName": "Mahesh Kulkarni",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 12,
+      "playerId": "P1161",
+      "playerName": "Sanchit Malhotra",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 13,
+      "playerId": "P1198",
+      "playerName": "Srini Santhana",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T4",
+      "teamName": "Team Gopal",
+      "rank": 14,
+      "playerId": "P1245",
+      "playerName": "Romeo Laskar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 1,
+      "playerId": "P1125",
+      "playerName": "Praveen Mudumba",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 2,
+      "playerId": "P1087",
+      "playerName": "Manish Joglekar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 3,
+      "playerId": "P1202",
+      "playerName": "Suhas Juvekar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 4,
+      "playerId": "P1012",
+      "playerName": "Ajeeth Pingle",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 5,
+      "playerId": "P1170",
+      "playerName": "Santosh Tirupari",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 6,
+      "playerId": "P1146",
+      "playerName": "Ramu Ajay",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 7,
+      "playerId": "P1211",
+      "playerName": "Suresh Palani",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 8,
+      "playerId": "P1243",
+      "playerName": "Saurabh Arora",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 9,
+      "playerId": "P1246",
+      "playerName": "Sujan Mahajan",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 10,
+      "playerId": "P1069",
+      "playerName": "Kartik Khamar",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 11,
+      "playerId": "P1253",
+      "playerName": "Prem Sailada",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 12,
+      "playerId": "P1255",
+      "playerName": "Sourin Deb",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 13,
+      "playerId": "P1016",
+      "playerName": "Ameya Ghanekar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T5",
+      "teamName": "Team Kartik",
+      "rank": 14,
+      "playerId": "P1203",
+      "playerName": "Sumeet Kurulkar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 1,
+      "playerId": "P1003",
+      "playerName": "Abhijit Katkar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 2,
+      "playerId": "P1130",
+      "playerName": "Rahul Kshirsagar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 3,
+      "playerId": "P1218",
+      "playerName": "Vaibhav Sathe",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 4,
+      "playerId": "P1153",
+      "playerName": "Rohit Natu",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 5,
+      "playerId": "P1045",
+      "playerName": "Chandramouli Vegi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 6,
+      "playerId": "P1155",
+      "playerName": "Sachin Khare",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 7,
+      "playerId": "P1214",
+      "playerName": "Thiru Chinna",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 8,
+      "playerId": "P1249",
+      "playerName": "Kumaresh Natarajan",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 9,
+      "playerId": "P1136",
+      "playerName": "Rajdeep Kshatriya",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 10,
+      "playerId": "P1110",
+      "playerName": "Parag Marathe",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 11,
+      "playerId": "P1241",
+      "playerName": "Sagar Gatfane",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 12,
+      "playerId": "P1029",
+      "playerName": "Anil Patil",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 13,
+      "playerId": "P1222",
+      "playerName": "Vijay Korde",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T6",
+      "teamName": "Team Parag",
+      "rank": 14,
+      "playerId": "P1215",
+      "playerName": "Tushar Mirajkar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 1,
+      "playerId": "P1270",
+      "playerName": "Mahesh Athalye",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 2,
+      "playerId": "P1080",
+      "playerName": "Mahesh Bhirangi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 3,
+      "playerId": "P1237",
+      "playerName": "Vivek Vakare",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 4,
+      "playerId": "P1180",
+      "playerName": "Saurabh Singhal",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 5,
+      "playerId": "P1077",
+      "playerName": "Kumar Chiru",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 6,
+      "playerId": "P1050",
+      "playerName": "Dilip Nawathe",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 7,
+      "playerId": "P1042",
+      "playerName": "Bhushan Karnik",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 8,
+      "playerId": "P1192",
+      "playerName": "Sivasankar Rajkumar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 9,
+      "playerId": "P1216",
+      "playerName": "Uday Gore",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 10,
+      "playerId": "P1185",
+      "playerName": "Shekar Viswanathan",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 11,
+      "playerId": "P1219",
+      "playerName": "Venkata Parupalli",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 12,
+      "playerId": "P1232",
+      "playerName": "Vishal Upadhyay",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 13,
+      "playerId": "P1260",
+      "playerName": "Chandan Acharya",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T7",
+      "teamName": "Team Shekhar",
+      "rank": 14,
+      "playerId": "P1109",
+      "playerName": "Pankaj Deore",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 1,
+      "playerId": "P1220",
+      "playerName": "Venumadhav Kotla",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 2,
+      "playerId": "P1001",
+      "playerName": "Abhay Kulkarni",
+      "captain": true
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 3,
+      "playerId": "P1093",
+      "playerName": "Miind Kumthekar",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 4,
+      "playerId": "P1259",
+      "playerName": "Manoj Tatikonda",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 5,
+      "playerId": "P1239",
+      "playerName": "Yogesh Kale",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 6,
+      "playerId": "P1079",
+      "playerName": "Kunal Sahu",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 7,
+      "playerId": "P1021",
+      "playerName": "Amit Kulkarni",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 8,
+      "playerId": "P1279",
+      "playerName": "Ramkumar Krishnan",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 9,
+      "playerId": "P1070",
+      "playerName": "Kavil Subramanian",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 10,
+      "playerId": "P1169",
+      "playerName": "Sanjeev Joshi",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 11,
+      "playerId": "P1242",
+      "playerName": "Shyam Sunkari",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 12,
+      "playerId": "P1037",
+      "playerName": "Ben Joseph",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 13,
+      "playerId": "P1142",
+      "playerName": "Rama Nathan",
+      "captain": false
+    },
+    {
+      "teamId": "AO-F-2026-T8",
+      "teamName": "Team Abhay",
+      "rank": 14,
+      "playerId": "P1035",
+      "playerName": "Atul Deval",
+      "captain": false
+    }
+  ],
+  "weeks": [
+    {
+      "weekId": "W1",
+      "label": "Week 1",
+      "stage": "regular",
+      "startDate": "2026-08-03",
+      "playByDate": "2026-08-17",
+      "lineupExchangeDate": "2026-08-01"
+    },
+    {
+      "weekId": "W2",
+      "label": "Week 2",
+      "stage": "regular",
+      "startDate": "2026-08-10",
+      "playByDate": "2026-08-24",
+      "lineupExchangeDate": "2026-08-08"
+    },
+    {
+      "weekId": "W3",
+      "label": "Week 3",
+      "stage": "regular",
+      "startDate": "2026-08-17",
+      "playByDate": "2026-08-31",
+      "lineupExchangeDate": "2026-08-15"
+    },
+    {
+      "weekId": "W4",
+      "label": "Week 4",
+      "stage": "regular",
+      "startDate": "2026-08-24",
+      "playByDate": "2026-09-07",
+      "lineupExchangeDate": "2026-08-22"
+    },
+    {
+      "weekId": "W5",
+      "label": "Week 5",
+      "stage": "regular",
+      "startDate": "2026-08-31",
+      "playByDate": "2026-09-14",
+      "lineupExchangeDate": "2026-08-29"
+    },
+    {
+      "weekId": "W6",
+      "label": "Week 6",
+      "stage": "regular",
+      "startDate": "2026-09-14",
+      "playByDate": "2026-10-05",
+      "lineupExchangeDate": "2026-09-12"
+    },
+    {
+      "weekId": "W7",
+      "label": "Week 7",
+      "stage": "regular",
+      "startDate": "2026-10-05",
+      "playByDate": "2026-10-19",
+      "lineupExchangeDate": "2026-10-03"
+    },
+    {
+      "weekId": "QF",
+      "label": "Quarter-Final",
+      "stage": "quarterfinal",
+      "startDate": "2026-10-20",
+      "playByDate": "2026-10-26",
+      "lineupExchangeDate": "2026-10-20"
+    },
+    {
+      "weekId": "SF",
+      "label": "Semi-Final",
+      "stage": "semifinal",
+      "startDate": "2026-10-27",
+      "playByDate": "2026-11-02",
+      "lineupExchangeDate": "2026-10-27"
+    },
+    {
+      "weekId": "F",
+      "label": "Final",
+      "stage": "final",
+      "startDate": "2026-11-08",
+      "playByDate": "2026-11-13",
+      "lineupExchangeDate": "2026-11-03"
+    }
+  ],
+  "matchups": [
+    {
+      "matchupId": "AO-F-2026-W1-M1",
+      "weekId": "W1",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Parag",
+      "startDate": "2026-08-03",
+      "playByDate": "2026-08-17",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W1-M2",
+      "weekId": "W1",
+      "homeTeam": "Team Prashant",
+      "awayTeam": "Team Kartik",
+      "startDate": "2026-08-03",
+      "playByDate": "2026-08-17",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W1-M3",
+      "weekId": "W1",
+      "homeTeam": "Team Kiran",
+      "awayTeam": "Team Abhay",
+      "startDate": "2026-08-03",
+      "playByDate": "2026-08-17",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W1-M4",
+      "weekId": "W1",
+      "homeTeam": "Team Gopal",
+      "awayTeam": "Team Shekhar",
+      "startDate": "2026-08-03",
+      "playByDate": "2026-08-17",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W2-M1",
+      "weekId": "W2",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Prashant",
+      "startDate": "2026-08-10",
+      "playByDate": "2026-08-24",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W2-M2",
+      "weekId": "W2",
+      "homeTeam": "Team Abhay",
+      "awayTeam": "Team Parag",
+      "startDate": "2026-08-10",
+      "playByDate": "2026-08-24",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W2-M3",
+      "weekId": "W2",
+      "homeTeam": "Team Kiran",
+      "awayTeam": "Team Shekhar",
+      "startDate": "2026-08-10",
+      "playByDate": "2026-08-24",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W2-M4",
+      "weekId": "W2",
+      "homeTeam": "Team Gopal",
+      "awayTeam": "Team Kartik",
+      "startDate": "2026-08-10",
+      "playByDate": "2026-08-24",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W3-M1",
+      "weekId": "W3",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Gopal",
+      "startDate": "2026-08-17",
+      "playByDate": "2026-08-31",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W3-M2",
+      "weekId": "W3",
+      "homeTeam": "Team Prashant",
+      "awayTeam": "Team Kiran",
+      "startDate": "2026-08-17",
+      "playByDate": "2026-08-31",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W3-M3",
+      "weekId": "W3",
+      "homeTeam": "Team Kartik",
+      "awayTeam": "Team Parag",
+      "startDate": "2026-08-17",
+      "playByDate": "2026-08-31",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W3-M4",
+      "weekId": "W3",
+      "homeTeam": "Team Shekhar",
+      "awayTeam": "Team Abhay",
+      "startDate": "2026-08-17",
+      "playByDate": "2026-08-31",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W4-M1",
+      "weekId": "W4",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Abhay",
+      "startDate": "2026-08-24",
+      "playByDate": "2026-09-07",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W4-M2",
+      "weekId": "W4",
+      "homeTeam": "Team Prashant",
+      "awayTeam": "Team Gopal",
+      "startDate": "2026-08-24",
+      "playByDate": "2026-09-07",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W4-M3",
+      "weekId": "W4",
+      "homeTeam": "Team Kiran",
+      "awayTeam": "Team Kartik",
+      "startDate": "2026-08-24",
+      "playByDate": "2026-09-07",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W4-M4",
+      "weekId": "W4",
+      "homeTeam": "Team Parag",
+      "awayTeam": "Team Shekhar",
+      "startDate": "2026-08-24",
+      "playByDate": "2026-09-07",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W5-M1",
+      "weekId": "W5",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Kiran",
+      "startDate": "2026-08-31",
+      "playByDate": "2026-09-14",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W5-M2",
+      "weekId": "W5",
+      "homeTeam": "Team Prashant",
+      "awayTeam": "Team Abhay",
+      "startDate": "2026-08-31",
+      "playByDate": "2026-09-14",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W5-M3",
+      "weekId": "W5",
+      "homeTeam": "Team Gopal",
+      "awayTeam": "Team Parag",
+      "startDate": "2026-08-31",
+      "playByDate": "2026-09-14",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W5-M4",
+      "weekId": "W5",
+      "homeTeam": "Team Kartik",
+      "awayTeam": "Team Shekhar",
+      "startDate": "2026-08-31",
+      "playByDate": "2026-09-14",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W6-M1",
+      "weekId": "W6",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Kartik",
+      "startDate": "2026-09-14",
+      "playByDate": "2026-10-05",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W6-M2",
+      "weekId": "W6",
+      "homeTeam": "Team Prashant",
+      "awayTeam": "Team Shekhar",
+      "startDate": "2026-09-14",
+      "playByDate": "2026-10-05",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W6-M3",
+      "weekId": "W6",
+      "homeTeam": "Team Kiran",
+      "awayTeam": "Team Parag",
+      "startDate": "2026-09-14",
+      "playByDate": "2026-10-05",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W6-M4",
+      "weekId": "W6",
+      "homeTeam": "Team Gopal",
+      "awayTeam": "Team Abhay",
+      "startDate": "2026-09-14",
+      "playByDate": "2026-10-05",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W7-M1",
+      "weekId": "W7",
+      "homeTeam": "Team Sunil",
+      "awayTeam": "Team Shekhar",
+      "startDate": "2026-10-05",
+      "playByDate": "2026-10-19",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W7-M2",
+      "weekId": "W7",
+      "homeTeam": "Team Prashant",
+      "awayTeam": "Team Parag",
+      "startDate": "2026-10-05",
+      "playByDate": "2026-10-19",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W7-M3",
+      "weekId": "W7",
+      "homeTeam": "Team Kiran",
+      "awayTeam": "Team Gopal",
+      "startDate": "2026-10-05",
+      "playByDate": "2026-10-19",
+      "status": "scheduled"
+    },
+    {
+      "matchupId": "AO-F-2026-W7-M4",
+      "weekId": "W7",
+      "homeTeam": "Team Kartik",
+      "awayTeam": "Team Abhay",
+      "startDate": "2026-10-05",
+      "playByDate": "2026-10-19",
+      "status": "scheduled"
+    }
+  ]
+}

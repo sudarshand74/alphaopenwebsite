@@ -1,0 +1,440 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function playerPrivatePath(playerId) {
+      return /databases/$(database)/documents/playerPrivate/$(playerId);
+    }
+
+    function playerMatchesAuthenticatedEmail(playerId) {
+      return request.auth.token.email_verified == true
+        && playerId is string
+        && exists(playerPrivatePath(playerId))
+        && get(playerPrivatePath(playerId)).data.emailNormalized == request.auth.token.email
+        && get(playerPrivatePath(playerId)).data.status == 'active';
+    }
+
+    function hasStoredSuperAdminRole() {
+      return signedIn()
+        && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.status == 'active'
+        && get(userPath(request.auth.uid)).data.globalRoles is list
+        && get(userPath(request.auth.uid)).data.globalRoles.hasAny(['superAdmin']);
+    }
+
+    // Temporary bootstrap path. Replace the email check with a custom claim
+    // after the first Super Admin account is provisioned by trusted code.
+    function isSuperAdmin() {
+      return signedIn()
+        && (
+          request.auth.token.superAdmin == true
+          || hasStoredSuperAdminRole()
+          || (
+            request.auth.token.email_verified == true
+            && request.auth.token.email == 'sudarshandesai74@gmail.com'
+          )
+        );
+    }
+
+    function isBootstrapAdminEmail(email) {
+      return email == 'sudarshandesai74@gmail.com';
+    }
+
+    function seasonMemberPath(seasonId) {
+      return /databases/$(database)/documents/seasons/$(seasonId)/members/$(request.auth.uid);
+    }
+
+    function isSeasonMember(seasonId) {
+      return signedIn()
+        && exists(seasonMemberPath(seasonId))
+        && get(seasonMemberPath(seasonId)).data.status == 'active';
+    }
+
+    function seasonMember(seasonId) {
+      return get(seasonMemberPath(seasonId)).data;
+    }
+
+    function hasSeasonRole(seasonId, role) {
+      return isSeasonMember(seasonId)
+        && seasonMember(seasonId).roles is list
+        && seasonMember(seasonId).roles.hasAny([role]);
+    }
+
+    function isSeasonEC(seasonId) {
+      return isSuperAdmin() || hasSeasonRole(seasonId, 'ec');
+    }
+
+    function isCaptainForTeam(seasonId, teamId) {
+      return isSeasonMember(seasonId)
+        && seasonMember(seasonId).roles.hasAny(['captain'])
+        && seasonMember(seasonId).teamIds.hasAny([teamId]);
+    }
+
+    function matchupPath(seasonId, matchupId) {
+      return /databases/$(database)/documents/seasons/$(seasonId)/matchups/$(matchupId);
+    }
+
+    function matchupExists(seasonId, matchupId) {
+      return exists(matchupPath(seasonId, matchupId));
+    }
+
+    function matchup(seasonId, matchupId) {
+      return get(matchupPath(seasonId, matchupId)).data;
+    }
+
+    function isMatchupApprover(seasonId, matchupId) {
+      return signedIn()
+        && matchupExists(seasonId, matchupId)
+        && matchup(seasonId, matchupId).approverUids.hasAny([request.auth.uid]);
+    }
+
+    function isMatchupTeamCaptain(seasonId, matchupId) {
+      return matchupExists(seasonId, matchupId)
+        && (
+          isCaptainForTeam(seasonId, matchup(seasonId, matchupId).homeTeamId)
+          || isCaptainForTeam(seasonId, matchup(seasonId, matchupId).awayTeamId)
+        );
+    }
+
+    function safeOwnUserCreate(uid) {
+      return request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.status == 'pending'
+        && request.resource.data.profileType == 'player'
+        && playerMatchesAuthenticatedEmail(request.resource.data.playerId)
+        && request.resource.data.globalRoles.size() == 0
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'emailVerified', 'displayName', 'photoUrl',
+          'status', 'profileType', 'playerId', 'globalRoles', 'createdAt', 'lastLoginAt',
+          'updatedAt'
+        ]);
+    }
+
+    match /users/{uid} {
+      allow create: if signedIn() && (isSuperAdmin() || safeOwnUserCreate(uid));
+      allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+      allow update: if (isSuperAdmin() && !isBootstrapAdminEmail(resource.data.email))
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'displayName', 'photoUrl', 'lastLoginAt', 'updatedAt'
+          ]))
+        || (signedIn()
+          && request.auth.uid == uid
+          && isBootstrapAdminEmail(request.auth.token.email)
+          && isBootstrapAdminEmail(resource.data.email)
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.status == 'active'
+          && request.resource.data.profileType == 'superAdmin'
+          && request.resource.data.playerId == 'P1201'
+          && request.resource.data.globalRoles is list
+          && request.resource.data.globalRoles.size() == 1
+          && request.resource.data.globalRoles.hasAny(['superAdmin'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'displayName', 'photoUrl', 'lastLoginAt', 'updatedAt',
+            'status', 'profileType', 'playerId', 'globalRoles'
+          ]));
+      allow delete: if isSuperAdmin() && !isBootstrapAdminEmail(resource.data.email);
+
+      match /notifications/{notificationId} {
+        allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
+        allow update: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+        allow create: if isSuperAdmin();
+        allow delete: if isSuperAdmin();
+      }
+    }
+
+    match /players/{playerId} {
+      allow read: if isSuperAdmin()
+        || signedIn()
+        || (resource.data.status == 'active' && resource.data.publicProfileEnabled == true);
+      allow write: if isSuperAdmin();
+    }
+
+    match /playerPrivate/{playerId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /playerEmailIndex/{emailKey} {
+      allow get: if isSuperAdmin()
+        || (signedIn()
+          && request.auth.token.email_verified == true
+          && resource.data.emailNormalized == request.auth.token.email);
+      allow list: if isSuperAdmin();
+      allow write: if isSuperAdmin();
+    }
+
+    match /systemCounters/{counterId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /playerAccountLinks/{playerId} {
+      allow read: if isSuperAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid);
+      allow write: if isSuperAdmin();
+    }
+
+    match /playerLinkRequests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.requestingUid == request.auth.uid
+        && request.resource.data.verifiedEmail == request.auth.token.email
+        && request.resource.data.status == 'pending';
+      allow read: if isSuperAdmin()
+        || (signedIn() && resource.data.requestingUid == request.auth.uid);
+      allow update: if isSuperAdmin()
+        || (signedIn()
+          && resource.data.requestingUid == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
+      allow delete: if false;
+    }
+
+    match /registrationRequests/{uid} {
+      allow create: if isSuperAdmin()
+        || (signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.uid == uid
+          && request.resource.data.email == request.auth.token.email
+          && request.auth.token.email_verified == true
+          && request.resource.data.status == 'pending'
+          && request.resource.data.assignedProfileType == 'player'
+          && playerMatchesAuthenticatedEmail(request.resource.data.matchedPlayerId));
+      allow read: if isSuperAdmin()
+        || (signedIn() && request.auth.uid == uid);
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    match /venues/{venueId} {
+      allow read: if signedIn() || resource.data.active == true;
+      allow write: if isSuperAdmin();
+    }
+
+    match /venuePrivate/{venueId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /systemConfig/{documentId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /seasons/{seasonId} {
+      allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+      allow write: if isSuperAdmin();
+
+      match /ruleVersions/{ruleVersionId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSuperAdmin();
+      }
+
+      match /members/{uid} {
+        allow read: if isSuperAdmin()
+          || isSeasonEC(seasonId)
+          || (signedIn() && request.auth.uid == uid);
+        allow write: if isSuperAdmin();
+      }
+
+      match /teams/{teamId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /rosterSlots/{slotId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /rosterAssignments/{assignmentId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /weeks/{weekId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /matchups/{matchupId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+
+        match /lineups/{teamId} {
+          function lineupPublished() {
+            return matchupExists(seasonId, matchupId)
+              && matchup(seasonId, matchupId).lineupsPublished == true;
+          }
+
+          function approverReviewReady() {
+            return isMatchupApprover(seasonId, matchupId)
+              && matchup(seasonId, matchupId).bothLineupsSubmitted == true;
+          }
+
+          allow read: if isSeasonEC(seasonId)
+            || isCaptainForTeam(seasonId, teamId)
+            || approverReviewReady()
+            || (isSeasonMember(seasonId) && lineupPublished());
+
+          // Captains may save drafts only. Submission and every official status
+          // transition are trusted server operations.
+          allow create: if isCaptainForTeam(seasonId, teamId)
+            && request.resource.data.teamId == teamId
+            && request.resource.data.status == 'draft';
+          allow update: if isCaptainForTeam(seasonId, teamId)
+            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested']
+            && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated']
+            && request.resource.data.teamId == teamId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'revisionNumber', 'ruleVersionId', 'lines',
+              'validation', 'updatedAt'
+            ]);
+          allow delete: if false;
+
+          match /revisions/{revisionId} {
+            allow read: if isSeasonEC(seasonId)
+              || isCaptainForTeam(seasonId, teamId)
+              || approverReviewReady()
+              || (isSeasonMember(seasonId) && lineupPublished());
+            allow write: if false;
+          }
+        }
+
+        match /lineupReviews/{reviewId} {
+          allow read: if isSeasonEC(seasonId)
+            || isMatchupApprover(seasonId, matchupId)
+            || isMatchupTeamCaptain(seasonId, matchupId);
+          allow write: if false;
+        }
+
+        match /lineMatches/{lineMatchId} {
+          allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+          allow write: if isSeasonEC(seasonId);
+
+          match /scheduleProposals/{proposalId} {
+            allow read: if isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId);
+            allow create: if isMatchupTeamCaptain(seasonId, matchupId)
+              && request.resource.data.proposedByUid == request.auth.uid;
+            allow update: if isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId);
+            allow delete: if false;
+          }
+
+          match /scoreSubmissions/{submissionId} {
+            allow read: if isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId);
+            allow create: if isMatchupTeamCaptain(seasonId, matchupId)
+              && request.resource.data.submittedByUid == request.auth.uid;
+            allow update, delete: if false;
+          }
+
+          match /scoreDecisions/{decisionId} {
+            allow read: if isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId);
+            allow write: if false;
+          }
+        }
+      }
+
+      match /approverAssignments/{assignmentId} {
+        allow read: if isSeasonEC(seasonId)
+          || (signedIn() && resource.data.approverUid == request.auth.uid)
+          || (signedIn() && resource.data.backupApproverUid == request.auth.uid);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /availability/{availabilityId} {
+        allow read: if isSeasonEC(seasonId)
+          || (signedIn() && resource.data.playerUid == request.auth.uid)
+          || isCaptainForTeam(seasonId, resource.data.teamId);
+        allow create: if isSeasonMember(seasonId)
+          && request.resource.data.playerUid == request.auth.uid;
+        allow update: if isSeasonEC(seasonId)
+          || (signedIn()
+            && resource.data.playerUid == request.auth.uid
+            && request.resource.data.playerUid == request.auth.uid);
+        allow delete: if false;
+      }
+
+      match /replacementRequests/{requestId} {
+        allow read: if isSeasonEC(seasonId)
+          || isCaptainForTeam(seasonId, resource.data.teamId);
+        allow create: if isCaptainForTeam(seasonId, request.resource.data.teamId)
+          && request.resource.data.requestedByUid == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow update: if isSeasonEC(seasonId);
+        allow delete: if false;
+      }
+
+      match /latePassRequests/{requestId} {
+        allow read: if isSeasonEC(seasonId)
+          || isCaptainForTeam(seasonId, resource.data.teamId);
+        allow create: if isCaptainForTeam(seasonId, request.resource.data.teamId)
+          && request.resource.data.requestedByUid == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow update: if isSeasonEC(seasonId);
+        allow delete: if false;
+      }
+
+      match /adjustments/{adjustmentId} {
+        allow read: if isSeasonEC(seasonId);
+        allow write: if isSuperAdmin();
+      }
+
+      match /standings/{teamId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if false;
+      }
+
+      match /standingsSnapshots/{snapshotId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if false;
+      }
+
+      match /playoffBrackets/{bracketId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /announcements/{announcementId} {
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /auditEvents/{eventId} {
+        allow read: if isSeasonEC(seasonId);
+        allow write: if false;
+      }
+    }
+
+    // Guest-readable publication tree. Writes come only from a trusted
+    // publisher or the bootstrap Super Admin.
+    match /publicSeasons/{seasonId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+
+      match /rosterAssignments/{assignmentId} {
+        allow read: if true;
+        allow write: if isSeasonEC(seasonId);
+      }
+
+      match /{document=**} {
+        allow read: if true;
+        allow write: if isSuperAdmin();
+      }
+    }
+
+    // Every collection not explicitly matched above remains inaccessible.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
