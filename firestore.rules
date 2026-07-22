@@ -18,8 +18,9 @@ service cloud.firestore {
       return request.auth.token.email_verified == true
         && playerId is string
         && exists(playerPrivatePath(playerId))
-        && get(playerPrivatePath(playerId)).data.emailNormalized == request.auth.token.email
-        && get(playerPrivatePath(playerId)).data.status == 'active';
+        && get(playerPrivatePath(playerId)).data.emailNormalized.lower() == request.auth.token.email.lower()
+        && get(playerPrivatePath(playerId)).data.status is string
+        && get(playerPrivatePath(playerId)).data.status.lower() == 'active';
     }
 
     function hasStoredSuperAdminRole() {
@@ -96,6 +97,17 @@ service cloud.firestore {
         && matchup(seasonId, matchupId).approverUids.hasAny([request.auth.uid]);
     }
 
+    function seasonApproverPath(seasonId) {
+      return /databases/$(database)/documents/seasons/$(seasonId)/approverAssignments/$(request.auth.uid);
+    }
+
+    function isSeasonApprover(seasonId) {
+      return signedIn()
+        && exists(seasonApproverPath(seasonId))
+        && get(seasonApproverPath(seasonId)).data.status == 'active'
+        && get(seasonApproverPath(seasonId)).data.approverUid == request.auth.uid;
+    }
+
     function isMatchupTeamCaptain(seasonId, matchupId) {
       return matchupExists(seasonId, matchupId)
         && (
@@ -170,7 +182,7 @@ service cloud.firestore {
       allow get: if isSuperAdmin()
         || (signedIn()
           && request.auth.token.email_verified == true
-          && resource.data.emailNormalized == request.auth.token.email);
+          && resource.data.emailNormalized.lower() == request.auth.token.email.lower());
       allow list: if isSuperAdmin();
       allow write: if isSuperAdmin();
     }
@@ -267,9 +279,31 @@ service cloud.firestore {
         allow write: if isSeasonEC(seasonId);
       }
 
+      match /importAudits/{importId} {
+        allow read, write: if isSuperAdmin();
+      }
+
       match /matchups/{matchupId} {
         allow read: if isSuperAdmin() || isSeasonMember(seasonId);
-        allow write: if isSeasonEC(seasonId);
+        allow write: if isSeasonEC(seasonId)
+          || (isSeasonApprover(seasonId)
+            && resource.data.homeTeamId == request.resource.data.homeTeamId
+            && resource.data.awayTeamId == request.resource.data.awayTeamId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'bothLineupsSubmitted', 'lineupsPublished', 'status',
+              'homeLineupStatus', 'awayLineupStatus',
+              'approvedByUid', 'approvedAt', 'updatedAt'
+            ]))
+          || (isCaptainForTeam(seasonId, resource.data.homeTeamId)
+            && request.resource.data.homeLineupStatus in ['draft', 'submitted']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'homeLineupStatus', 'updatedAt'
+            ]))
+          || (isCaptainForTeam(seasonId, resource.data.awayTeamId)
+            && request.resource.data.awayLineupStatus in ['draft', 'submitted']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'awayLineupStatus', 'updatedAt'
+            ]));
 
         match /lineups/{teamId} {
           function lineupPublished() {
@@ -278,8 +312,45 @@ service cloud.firestore {
           }
 
           function approverReviewReady() {
-            return isMatchupApprover(seasonId, matchupId)
-              && matchup(seasonId, matchupId).bothLineupsSubmitted == true;
+            return isSeasonApprover(seasonId)
+              || (isMatchupApprover(seasonId, matchupId)
+                && matchup(seasonId, matchupId).bothLineupsSubmitted == true);
+          }
+
+          function validSubmittedLineup() {
+            return request.resource.data.status != 'submitted'
+              || (
+                request.resource.data.validation.passed == true
+                && request.resource.data.lines.size() == 5
+                && request.resource.data.lines[0].lineNumber == 1
+                && request.resource.data.lines[1].lineNumber == 2
+                && request.resource.data.lines[2].lineNumber == 3
+                && request.resource.data.lines[3].lineNumber == 4
+                && request.resource.data.lines[4].lineNumber == 5
+                && request.resource.data.lines[0].sor <= request.resource.data.lines[1].sor
+                && request.resource.data.lines[1].sor <= request.resource.data.lines[2].sor
+                && request.resource.data.lines[2].sor <= request.resource.data.lines[3].sor
+                && request.resource.data.lines[3].sor <= request.resource.data.lines[4].sor
+                && request.resource.data.lines[0].player1Rank >= 1
+                && request.resource.data.lines[0].player1Rank <= 4
+                && request.resource.data.lines[0].player2Rank >= 1
+                && request.resource.data.lines[0].player2Rank <= 4
+                && request.resource.data.lines[3].player1Rank >= 7
+                && request.resource.data.lines[3].player1Rank <= 13
+                && request.resource.data.lines[3].player2Rank >= 7
+                && request.resource.data.lines[3].player2Rank <= 13
+                && request.resource.data.lines[4].player1Rank >= 11
+                && request.resource.data.lines[4].player1Rank <= 14
+                && request.resource.data.lines[4].player2Rank >= 11
+                && request.resource.data.lines[4].player2Rank <= 14
+                && [
+                  request.resource.data.lines[0].player1Id, request.resource.data.lines[0].player2Id,
+                  request.resource.data.lines[1].player1Id, request.resource.data.lines[1].player2Id,
+                  request.resource.data.lines[2].player1Id, request.resource.data.lines[2].player2Id,
+                  request.resource.data.lines[3].player1Id, request.resource.data.lines[3].player2Id,
+                  request.resource.data.lines[4].player1Id, request.resource.data.lines[4].player2Id
+                ].toSet().size() == 10
+              );
           }
 
           allow read: if isSeasonEC(seasonId)
@@ -289,16 +360,20 @@ service cloud.firestore {
 
           // Captains may save drafts only. Submission and every official status
           // transition are trusted server operations.
-          allow create: if isCaptainForTeam(seasonId, teamId)
+          allow create: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
             && request.resource.data.teamId == teamId
-            && request.resource.data.status == 'draft';
-          allow update: if isCaptainForTeam(seasonId, teamId)
-            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested']
-            && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated']
+            && request.resource.data.status in ['draft', 'systemValidated', 'submitted']
+            && validSubmittedLineup();
+          allow update: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
+            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'submitted']
+            && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'submitted', 'approved']
+            && (request.resource.data.status != 'approved' || isSeasonApprover(seasonId))
+            && validSubmittedLineup()
             && request.resource.data.teamId == teamId
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'status', 'revisionNumber', 'ruleVersionId', 'lines',
-              'validation', 'updatedAt'
+              'validation', 'submittedByUid', 'submittedAt',
+              'approvedByUid', 'approvedAt', 'updatedByUid', 'updatedAt'
             ]);
           allow delete: if false;
 
@@ -320,7 +395,18 @@ service cloud.firestore {
 
         match /lineMatches/{lineMatchId} {
           allow read: if isSuperAdmin() || isSeasonMember(seasonId);
-          allow write: if isSeasonEC(seasonId);
+          // Approval creates the operational records. Afterward, only Super
+          // Admin may change players or delete a line; ECs and captains remain
+          // limited to scheduling and score fields.
+          allow create: if isSeasonEC(seasonId) || isSeasonApprover(seasonId);
+          allow delete: if isSuperAdmin();
+          allow update: if isSuperAdmin()
+            || ((isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId))
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'venueId', 'venueNameSnapshot', 'scheduledAt', 'sets',
+                'scheduleStatus', 'scoreStatus', 'homePoints', 'awayPoints',
+                'winnerTeamId', 'updatedAt'
+              ]));
 
           match /scheduleProposals/{proposalId} {
             allow read: if isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId);
@@ -348,7 +434,7 @@ service cloud.firestore {
         allow read: if isSeasonEC(seasonId)
           || (signedIn() && resource.data.approverUid == request.auth.uid)
           || (signedIn() && resource.data.backupApproverUid == request.auth.uid);
-        allow write: if isSeasonEC(seasonId);
+        allow write: if isSuperAdmin();
       }
 
       match /availability/{availabilityId} {

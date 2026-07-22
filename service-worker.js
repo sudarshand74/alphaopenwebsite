@@ -1,6 +1,6 @@
-const CACHE_NAME = "alphaopen-shell-v39";
+const CACHE_NAME = "alphaopen-shell-v117";
 const APP_SHELL = [
-  "/", "/index.html", "/styles.css?v=43", "/workflow-mockup.css?v=1", "/app.js?v=50", "/workflow-mockup.js?v=2", "/fall-workflow-data.json", "/runtime-loader.js?v=1", "/firebase-auth.js?v=28", "/firebase-data.js?v=33", "/player-admin.js?v=27", "/venue-admin.js?v=26", "/season-operations.js?v=1", "/roster-admin-v3.js?v=3", "/pwa.js?v=26",
+  "/", "/index.html", "/styles.css?v=53", "/app.js?v=86", "/runtime-loader.js?v=12", "/firebase-client.js?v=1", "/lineup-bootstrap.js?v=6", "/lineup-submit.js?v=5", "/approval-bootstrap.js?v=4", "/lineup-approve.js?v=3", "/match-management-bootstrap.js?v=9", "/match-management.js?v=8", "/score-rules.js?v=1", "/firebase-auth.js?v=30", "/firebase-data.js?v=42", "/player-admin.js?v=28", "/venue-admin.js?v=26", "/season-operations.js?v=1", "/season-bulk-import.js?v=2", "/roster-admin-v3.js?v=4", "/season-structure-admin.js?v=1", "/lineup-approver-admin.js?v=3", "/lineup-update.js?v=2", "/pwa.js?v=26",
   "/manifest.webmanifest", "/assets/alphaopen-logo.png",
   "/assets/icon-192.png", "/assets/icon-512.png",
   "/assets/ao-community.jpeg", "/assets/community-patio.jpg", "/assets/community-group.jpg",

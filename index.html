@@ -14,12 +14,17 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=43">
-  <link rel="stylesheet" href="workflow-mockup.css?v=1">
+  <link rel="stylesheet" href="styles.css?v=53">
+  <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
+  <style>.quick-actions{grid-template-columns:1fr}.managed-player-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 22px 0}.managed-player-grid label{display:grid;gap:6px;font-size:.75rem;font-weight:850}.managed-player-grid select{width:100%;border:1px solid #cbd4de;border-radius:9px;background:#fff;padding:10px}.badge.red{background:#fee2e2;color:#991b1b}.match-detail{display:grid;gap:10px;padding:18px 0;border-top:1px solid var(--line);font-size:.82rem}.match-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--blue);font-size:.72rem;font-weight:900;text-transform:uppercase}.match-detail-title b{font-size:.98rem}.match-detail-identifiers,.match-detail-meta{display:flex;flex-wrap:wrap;gap:5px 20px;color:var(--muted);font-size:.72rem}.match-detail-identifiers b,.match-detail-meta b{color:var(--ink)}.match-detail-team{display:grid;gap:3px;padding:3px 0}.match-detail-team strong{font-size:.9rem}.match-detail-versus{color:var(--muted);font-size:.7rem;font-weight:900}.match-detail-result,.match-detail-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 24px}.match-detail-result{padding-top:4px;font-size:.88rem}.match-detail-status{justify-content:space-between}.match-detail-status strong{color:var(--blue)}.history-card .match-detail{border-bottom:2px solid var(--navy)}.history-card .match-detail+.match-detail{border-top:0}.selected-history-player{border-radius:4px;background:#dbeafe;color:#0d2f64;padding:2px 4px;font-weight:900}.match-detail .fall-admin-links{justify-self:start}@media(max-width:760px){.managed-player-grid{grid-template-columns:1fr}.match-detail{gap:9px}.match-detail-head{align-items:flex-start}.match-detail-head .badge{flex:none}.match-detail-identifiers,.match-detail-meta{display:grid;gap:5px}.match-detail-result,.match-detail-status{align-items:flex-start}}</style>
   <style>#springSeasonStats{grid-template-columns:repeat(3,1fr)}.journey-date-row{min-height:34px;background:#f5f8fb;color:#506078;font-size:.66rem;font-weight:800}.journey-date-row>b{text-align:left;color:#1758a5;text-transform:uppercase}.journey-week-cell{display:grid;gap:3px;justify-items:center}.journey-week-cell>b{font-size:.84rem}.journey-week-cell>small{max-width:68px;color:#667386;font-size:.61rem;line-height:1.15;white-space:normal}.journey-match-link{width:100%;min-height:46px;border:0;border-radius:8px;background:transparent;color:inherit;padding:4px}.journey-match-link:hover,.journey-match-link:focus-visible{background:#e9f1fb;color:#1758a5}.playoff-match-link{border:0;background:transparent;color:#1758a5;padding:0;text-align:left;font-size:.61rem;font-weight:800;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}.spring-roster-grid{grid-template-columns:1fr}.team-player-dashboard{overflow-x:auto;padding:0 18px 16px;border-top:1px solid #dce2e9}.team-player-stat-row{display:grid;grid-template-columns:48px minmax(190px,1.6fr) repeat(7,minmax(48px,.55fr)) 62px 58px 62px;align-items:center;gap:7px;min-width:920px;min-height:47px;border-bottom:1px solid #dce2e9;font-size:.76rem;text-align:center}.team-player-stat-head{min-height:40px;color:#667386;font-size:.62rem;font-weight:900;text-transform:uppercase}.team-player-stat-head>span:nth-child(2){text-align:left}.team-player-name{display:flex;align-items:center;gap:6px;text-align:left;min-width:0}.team-player-name small{color:#667386;text-decoration:line-through}.team-player-name i{color:#f47c20;font-style:normal;font-weight:900}.team-player-name em{margin-left:auto;border-radius:999px;background:#fff0e5;color:#a74b0d;padding:3px 6px;font-size:.52rem;font-style:normal;font-weight:850;text-transform:uppercase}.player-week-result{width:28px;height:25px;display:grid;place-items:center;margin:auto;border-radius:6px;font-size:.66rem;font-weight:900}.player-week-result.win{background:#dcfce7;color:#166534}.player-week-result.loss{background:#fee2e2;color:#991b1b}.player-week-result.empty{color:#9aa4b1}.team-player-stat-row>strong{font-size:.82rem}@media(max-width:760px){#springSeasonStats{grid-template-columns:1fr}.team-player-dashboard{padding-inline:10px}}</style>
   <style>.admin-season-select{display:grid;gap:5px;color:#667386;font-size:.68rem;font-weight:850;text-transform:uppercase}.admin-season-select select{min-width:220px;border:1px solid #bac5d1;border-radius:9px;background:#fff;padding:8px 30px 8px 10px;font-weight:750;text-transform:none}.roster-admin-teams{display:grid;gap:12px;margin-top:18px}.roster-admin-team{overflow:hidden;border:1px solid #dce2e9;border-radius:14px;background:#fff}.roster-admin-team>summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;cursor:pointer;list-style:none}.roster-admin-team>summary::-webkit-details-marker{display:none}.roster-admin-team>summary>div{display:grid;gap:3px}.roster-admin-team>summary small{color:#667386}.roster-admin-team>div{padding:0 18px 12px;border-top:1px solid #dce2e9}.roster-admin-row{display:grid;grid-template-columns:55px minmax(220px,.9fr) minmax(280px,1.1fr) auto;align-items:center;gap:14px;min-height:58px;border-bottom:1px solid #dce2e9}.roster-admin-row>span:first-child{color:#1758a5;font-weight:900}.roster-admin-row>div{display:grid;gap:3px}.roster-admin-row small{color:#667386}.roster-admin-head{min-height:40px;background:#f5f7fa;color:#667386;font-size:.67rem;font-weight:900;letter-spacing:.04em;text-transform:uppercase}.roster-replaced-players{display:grid;gap:4px}.roster-replaced-player{padding:5px 7px;border-left:3px solid #f47c20;border-radius:0 6px 6px 0;background:#fff7ed;color:#6b4a31;font-size:.72rem;font-weight:700}.roster-no-history{color:#8a95a3;font-size:.72rem}@media(max-width:700px){.roster-admin-row{grid-template-columns:45px 1fr auto}.roster-admin-row>.roster-replaced-players{grid-column:2}.roster-admin-row>button{grid-column:3;grid-row:1/3}.roster-admin-head{display:none}.admin-season-select select{min-width:170px}}</style>
   <style>.roster-current-player{display:grid;gap:3px}.roster-current-player b{font-size:.88rem}.roster-current-player small{color:#667386}.roster-history-list{display:grid;gap:4px;margin-top:5px}.roster-history-row{padding:5px 7px;border-left:3px solid #f47c20;border-radius:0 6px 6px 0;background:#fff7ed;color:#6b4a31;font-size:.68rem}.roster-empty-rank{color:#8a95a3;font-style:italic}</style>
-  <style>.team-player-link{border:0;background:transparent;color:#1758a5;padding:0;font-weight:850;text-align:left;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}.team-player-link:hover{color:#0d2f64}.spring-result-filters{grid-template-columns:repeat(3,minmax(180px,1fr))}@media(max-width:760px){.spring-result-filters{grid-template-columns:1fr}}</style>
+  <style>.team-player-link{border:0;background:transparent;color:#1758a5;padding:0;font-weight:850;text-align:left;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}.team-player-link:hover{color:#0d2f64}.spring-result-filters{grid-template-columns:repeat(4,minmax(160px,1fr))}@media(max-width:760px){.spring-result-filters{grid-template-columns:1fr}}</style>
+  <style>.season-dashboard-grid{grid-template-columns:110px 100px 110px minmax(270px,1.5fr) repeat(6,minmax(92px,.55fr));min-width:1220px}.season-dashboard-grid>*:nth-child(6){background:#dcecff;color:#0b4f91;box-shadow:inset 0 0 0 1px #9fc5ee}.season-dashboard-grid>*:nth-child(7){background:#fff0b8;color:#805200;box-shadow:inset 0 0 0 1px #f3cf59}.season-dashboard-grid>*:nth-child(8){justify-self:center;min-width:40px;border-radius:999px;padding:5px 9px;background:#dce6f1;color:#092b56;font-weight:950}.season-dashboard-head>*:nth-child(6),.season-dashboard-head>*:nth-child(7),.season-dashboard-head>*:nth-child(8){min-width:0;background:transparent;color:#fff;box-shadow:none;padding:0}.season-dashboard-grid>*:nth-child(9){color:#1758a5;font-weight:950}.season-dashboard-grid>*:nth-child(10){color:#d75a0d;font-weight:950}.season-dashboard-grand>*:nth-child(8){background:#fff;color:#071a38}.season-dashboard-grand>*:nth-child(9){color:#9ed0ff}.season-dashboard-grand>*:nth-child(10){color:#ffc28f}</style>
+  <style>.season-dashboard-drill-link{border:0;border-radius:999px;background:transparent;color:inherit;padding:0;font:inherit;font-weight:950;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}.season-dashboard-drill-link:hover{transform:scale(1.08);color:#071a38}.season-dashboard-drill-link:focus-visible{outline:2px solid #1758a5;outline-offset:3px}</style>
+  <style>.match-management-context{grid-template-columns:repeat(3,minmax(190px,1fr))}.match-management-context>.info-box{grid-column:1/-1}.match-management-context label{display:grid;gap:6px;font-size:.75rem;font-weight:850}.match-management-context select{width:100%;border:1px solid #cbd4de;border-radius:9px;background:#fff;padding:10px}@media(max-width:760px){.match-management-context{grid-template-columns:1fr}.match-management-context>.info-box{grid-column:auto}}</style>
+  <style>.season-import-preview{display:grid;gap:8px;max-height:280px;overflow:auto;margin:14px 0}.season-import-counts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.season-import-counts span{display:grid;gap:2px;padding:11px;border-radius:10px;background:#eef3f8;color:#667386;font-size:.68rem;text-transform:uppercase}.season-import-counts b{color:#071a38;font-size:1.25rem}.dialog-label{display:grid;gap:6px;margin-top:13px;color:#536176;font-size:.78rem;font-weight:750}.dialog-label input[type="text"],.dialog-label>input{border:1px solid #c8d2dd;border-radius:10px;padding:10px}.dialog-label span{display:flex;align-items:flex-start;gap:8px}@media(max-width:650px){.season-import-counts{grid-template-columns:1fr 1fr}}</style>
 </head>
 <body>
   <div class="prototype-bar">
@@ -36,11 +41,10 @@
     <nav class="desktop-nav" aria-label="Main navigation">
       <button data-route="home" class="active">Home</button>
       <button data-route="fall2026">Fall 2026</button>
-      <button data-route="rules">Rules</button>
-      <details class="nav-menu"><summary>History</summary><div><button data-route="schedule">Spring 2026</button><button data-access="player" data-route="history">My History</button></div></details>
+      <details class="nav-menu"><summary>History</summary><div><button data-route="schedule">Spring 2026</button><button data-route="history">Player History</button></div></details>
+      <details class="nav-menu" data-nav-roles="Captain"><summary>Captain</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="match-management">Schedule & Score</button></div></details>
+      <details class="nav-menu" data-nav-roles="EC,Neutral Approver"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access-any="approver,ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button></div></details>
       <button data-super-admin data-route="admin">Admin</button>
-      <details class="nav-menu" data-access="captain"><summary>Captain</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="ec-lineup">Update Lineup</button><button data-route="captain-score">Update Score</button></div></details>
-      <details class="nav-menu" data-access-any="approver,ec"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access-any="approver,ec" data-route="approvals">Approve Lineup</button><button data-access="ec" data-route="ec-lineup">Update Lineup</button><button data-access="ec" data-route="ec-score">Update Score</button></div></details>
     </nav>
     <button class="sign-in-button" id="signInButton"><span id="avatar">G</span><span class="profile-copy"><strong id="profileName">Sign in</strong><small id="profileRole">Guest</small></span></button>
   </header>
@@ -49,11 +53,10 @@
     <div class="drawer-head"><strong>AlphaOpen</strong><button id="closeDrawer" aria-label="Close navigation">×</button></div>
     <button data-route="home">Home</button>
     <button data-route="fall2026">Fall 2026</button>
-    <button data-route="rules">Rules</button>
-    <div class="drawer-group"><span>History</span><button data-route="schedule">Spring 2026</button><button data-access="player" data-route="history">My History</button></div>
+    <div class="drawer-group"><span>History</span><button data-route="schedule">Spring 2026</button><button data-route="history">Player History</button></div>
+    <div class="drawer-group" data-nav-roles="Captain"><span>Captain</span><button data-route="lineup">Submit Lineup</button><button data-route="match-management">Schedule & Score</button></div>
+    <div class="drawer-group" data-nav-roles="EC,Neutral Approver"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access-any="approver,ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button></div>
     <button data-super-admin data-route="admin">Admin</button>
-    <div class="drawer-group" data-access="captain"><span>Captain</span><button data-route="lineup">Submit Lineup</button><button data-route="ec-lineup">Update Lineup</button><button data-route="captain-score">Update Score</button></div>
-    <div class="drawer-group" data-access-any="approver,ec"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access-any="approver,ec" data-route="approvals">Approve Lineup</button><button data-access="ec" data-route="ec-lineup">Update Lineup</button><button data-access="ec" data-route="ec-score">Update Score</button></div>
   </aside>
   <div class="scrim" id="scrim"></div>
 
@@ -92,8 +95,18 @@
     </section>
 
     <section class="view content-wrap page-view" data-view="fall2026">
-      <div class="page-heading"><div><span class="kicker">Current season</span><h1>Fall 2026</h1><p>AlphaOpen Fall 2026 registration and season schedule.</p></div><span class="badge orange">Registration</span></div>
+      <a class="season-rules-notice" href="#rules" target="_blank" rel="noopener">Please check Season Rules Here <span aria-hidden="true">&rarr;</span></a>
+      <div class="page-heading"><div><span class="kicker">Current season</span><h1>Fall 2026</h1><p>AlphaOpen Fall 2026 registration and season schedule.</p></div><div class="heading-actions"><button type="button" class="secondary" data-route="season-dashboard">Season Dashboard</button><span class="badge orange">Registration</span></div></div>
       <section class="dashboard-card fall-registration-card"><strong>Registration in Progress, Team Selection is next</strong><p>The Fall 2026 schedule is available below.</p><img src="assets/ao-fall-2026-schedule.jpg" alt="AlphaOpen Fall 2026 schedule" loading="eager"></section>
+      <section class="spring-journey-section live-season-section"><div class="section-heading"><span class="kicker">Fall 2026 season journey</span><h2>Regular Season Standings & Playoffs</h2><p class="muted">Every team begins at zero. Weekly points and the playoff path update from approved Firebase results.</p></div><div id="fallSeasonJourney"><div class="dashboard-card empty-state"><b>Loading Fall standings and schedule from Firebase...</b></div></div></section>
+      <section class="live-season-section"><div id="fallSeasonDashboard"><div class="dashboard-card empty-state"><b>Loading Fall 2026 Match Tracker from Firebase…</b></div></div></section>
+      <section class="spring-rosters-section live-season-section"><div class="section-heading"><span class="kicker">Fall 2026 teams</span><h2>Teams, Captains & Ranks</h2><p class="muted">Ranked rosters are loaded from Firebase. Player results appear as approved line scores are completed.</p></div><div class="spring-roster-grid" id="fallRosterTeams" data-season-player-filter="fallPlayerFilter" data-season-results-section=".fall-live-results"><div class="dashboard-card empty-state"><b>Loading Fall rosters from Firebase…</b></div></div></section>
+      <section class="fall-results-section fall-live-results live-season-section"><div class="section-heading"><div><span class="kicker">Live season</span><h2>Matches by Round</h2><p class="muted">Scheduled matchups begin at zero and gain lineup, scheduling, and score details through the season workflow.</p></div></div><div class="spring-result-filters dashboard-card"><label>Week Name<select id="fallWeekFilter" class="filter-select"><option value="all">All weeks</option><option value="F">Final</option><option value="SF">Semifinals</option><option value="QF">Quarterfinals</option><option value="W7">Week 7</option><option value="W6">Week 6</option><option value="W5">Week 5</option><option value="W4">Week 4</option><option value="W3">Week 3</option><option value="W2">Week 2</option><option value="W1">Week 1</option></select></label><label>Team Name<select id="fallTeamFilter" class="filter-select"><option value="all">All teams</option></select></label><label>Player Name<select id="fallPlayerFilter" class="filter-select"><option value="all">All players</option></select></label><label>Match Status<select id="fallStatusFilter" class="filter-select"><option value="all">All statuses</option><option value="completed">Completed</option><option value="toBeScheduled">To Be Scheduled</option><option value="scheduled">Scheduled</option><option value="canceled">Canceled</option></select></label></div><div id="fallSeasonResults"><div class="dashboard-card empty-state"><b>Loading Fall 2026 from Firebase…</b></div></div></section>
+    </section>
+
+    <section class="view content-wrap page-view" data-view="season-dashboard">
+      <div class="page-heading"><div><span class="kicker">Active season operations</span><h1>Season Dashboard</h1><p>Weekly completion, scheduling readiness, and team points for AlphaOpen Fall 2026.</p></div><button type="button" class="secondary" data-route="fall2026">Back to Fall 2026</button></div>
+      <div id="seasonDashboard"><div class="dashboard-card empty-state"><b>Loading Fall 2026 season dashboard from Firebase…</b></div></div>
     </section>
 
     <section class="view content-wrap page-view" data-view="schedule">
@@ -102,7 +115,7 @@
       <section class="dashboard-card fall-stats-card"><div class="card-top"><div><span class="kicker">Summary of the season</span><h2>Season highlights</h2><p class="muted">The people, competition, and community moments that defined Spring 2026.</p></div></div><div class="fall-stat-grid" id="springSeasonStats"><div><b>3 Kattas · 1 MSP · 1 EOS</b><span>Community</span></div><div><b>Amit Kulkarni · Season MVP</b><span>Excellence</span></div><div><b>60 of 165 matches in 3 sets</b><span>Sportsmanship</span></div></div></section>
       <section class="spring-journey-section"><div class="section-heading"><span class="kicker">Spring 2026 season journey</span><h2>Regular Season Standings & Playoffs</h2><p class="muted">Weekly points establish the regular-season seed; the playoff path shows how the championship was decided.</p></div><div id="springSeasonJourney"><div class="dashboard-card empty-state"><b>Loading standings and playoff results from Firebase...</b></div></div></section>
       <section class="spring-rosters-section"><div class="section-heading"><span class="kicker">Spring 2026 teams</span><h2>Teams, Captains & Ranks</h2><p class="muted">Open a team to view its ranked roster. Replacement history remains visible at the original rank.</p></div><div class="spring-roster-grid" id="springRosterTeams"><div class="dashboard-card empty-state"><b>Loading Spring rosters from Firebase…</b></div></div></section>
-      <section class="fall-results-section"><div class="section-heading"><div><span class="kicker">Matches & results</span><h2>Matches by Round</h2><p class="muted">Final first, followed by semifinals, quarterfinals, and regular-season weeks.</p></div></div><div class="spring-result-filters dashboard-card"><label>Week Name<select id="springWeekFilter" class="filter-select"><option value="all">All weeks</option><option value="F">Final</option><option value="SF">Semifinals</option><option value="QF">Quarterfinals</option><option value="W7">Week 7</option><option value="W6">Week 6</option><option value="W5">Week 5</option><option value="W4">Week 4</option><option value="W3">Week 3</option><option value="W2">Week 2</option><option value="W1">Week 1</option></select></label><label>Team Name<select id="springTeamFilter" class="filter-select"><option value="all">All teams</option></select></label><label>Player Name<select id="springPlayerFilter" class="filter-select"><option value="all">All players</option></select></label></div><div id="springSeasonResults"><div class="dashboard-card empty-state"><b>Loading Spring 2026 from Firebase…</b></div></div></section>
+      <section class="fall-results-section"><div class="section-heading"><div><span class="kicker">Matches & results</span><h2>Matches by Round</h2><p class="muted">Final first, followed by semifinals, quarterfinals, and regular-season weeks.</p></div></div><div class="spring-result-filters dashboard-card"><label>Week Name<select id="springWeekFilter" class="filter-select"><option value="all">All weeks</option><option value="F">Final</option><option value="SF">Semifinals</option><option value="QF">Quarterfinals</option><option value="W7">Week 7</option><option value="W6">Week 6</option><option value="W5">Week 5</option><option value="W4">Week 4</option><option value="W3">Week 3</option><option value="W2">Week 2</option><option value="W1">Week 1</option></select></label><label>Team Name<select id="springTeamFilter" class="filter-select"><option value="all">All teams</option></select></label><label>Player Name<select id="springPlayerFilter" class="filter-select"><option value="all">All players</option></select></label><label>Match Status<select id="springStatusFilter" class="filter-select"><option value="all">All statuses</option><option value="completed">Completed</option><option value="toBeScheduled">To Be Scheduled</option><option value="scheduled">Scheduled</option><option value="canceled">Canceled</option></select></label></div><div id="springSeasonResults"><div class="dashboard-card empty-state"><b>Loading Spring 2026 from Firebase…</b></div></div></section>
     </section>
 
     <section class="view content-wrap page-view" data-view="standings">
@@ -116,15 +129,16 @@
       </div>
     </section>
 
-    <section class="view content-wrap page-view" data-view="history" data-access="player">
-      <div class="page-heading"><div><span class="kicker">Private player dashboard</span><h1>My playing history</h1><p id="historySubtitle">History follows your permanent Player ID—not your display name.</p></div><span class="badge navy" id="playerIdBadge">Player</span></div>
+    <section class="view content-wrap page-view" data-view="history">
+      <div class="page-heading"><div><span class="kicker">Public player dashboard</span><h1>Player History</h1></div></div>
+      <div class="dashboard-card history-player-picker"><label for="historyPlayerFilter">Player Name</label><select class="filter-select" id="historyPlayerFilter"><option value="">Select a player</option></select></div>
       <div class="history-summary" id="historySummary"></div>
       <div class="dashboard-card history-card"><div class="history-head"><div><h2>Playing history</h2><span class="muted">Completed and published results</span></div><select class="filter-select" id="historySeasonFilter" aria-label="Filter history by season"><option value="all">All Seasons</option></select></div><div id="historyRows"></div></div>
     </section>
 
-    <section class="view content-wrap page-view" data-view="lineup" data-access="captain">
-      <div id="lineupWorkflowSubmit"></div>
-      <div class="page-heading"><div><span class="kicker">Captain workspace · Firebase</span><h1>Build lineup</h1><p>Lineup access appears after your registered account is linked to a Fall team and matchup.</p></div><div class="heading-actions"><span class="badge orange">Firebase assignment required</span></div></div>
+    <section class="view content-wrap page-view" data-view="lineup" data-access-any="captain,approver,ec">
+      <div class="page-heading"><div><span class="kicker">Season lineup management · Firebase</span><h1>Submit lineup</h1><p>Build, validate, save, and submit the five-line team lineup.</p></div><div class="heading-actions"><span class="badge orange" id="lineupRoleBadge">Loading role</span></div></div>
+      <div class="dashboard-card lineup-context"><div class="season-form-grid lineup-context-grid"><label>Season<select id="lineupSeason" disabled><option value="">Loading active season...</option></select></label><label>Week<select id="lineupWeek"><option value="">Select week</option></select></label><label class="wide">Team name<select id="lineupTeam"><option value="">Select team</option></select></label></div><select id="lineupMatchup" hidden aria-hidden="true"><option value="">Select matchup</option></select><div class="lineup-matchup-summary" id="lineupMatchupSummary" hidden><div><small>Matchup ID</small><b id="lineupMatchupId">—</b></div><div><small>Opposing team</small><b id="lineupOpponent">—</b></div></div><div id="lineupStateMessage" class="info-box">Select a week and team to begin.</div></div>
       <div class="lineup-layout">
         <div class="dashboard-card lineup-builder">
           <div class="lineup-head"><span>Line</span><span>Player one</span><span>Player two</span><span>SOR</span></div>
@@ -132,33 +146,36 @@
           <div class="validation-box" id="validationBox"><div><span class="validation-icon">✓</span><div><b>Ready to validate</b><small>Run checks before sealed submission.</small></div></div><button id="validateLineup" class="secondary">Run checks</button></div>
           <div class="form-actions"><button class="secondary" id="saveDraft">Save draft</button><button class="primary" id="submitLineup" disabled>Submit sealed lineup</button></div>
         </div>
-        <aside class="dashboard-card participation-card"><span class="kicker">Rank participation</span><h3>Min / max tracker</h3><div id="rankProgress"></div><p class="helper">Counts remain attached to rank even if an EC approves a replacement player.</p></aside>
+        <aside class="dashboard-card participation-card"><span class="kicker">Submission validation</span><h3>SOR rule checks</h3><div class="lineup-rule-list"><span>Exactly 5 doubles lines</span><span>2 eligible players per line</span><span>10 unique players</span><span>Line 1: ranks 1–4</span><span>Line 4: ranks 7–13</span><span>Line 5: ranks 11–14</span><span>SOR cannot decrease from L1 to L5</span></div><p class="helper">Submit remains locked until every validation check passes.</p></aside>
       </div>
     </section>
 
     <section class="view content-wrap page-view" data-view="captain-schedule" data-access="captain">
-      <div id="lineupWorkflowSchedule"></div>
       <div class="page-heading"><div><span class="kicker">Captain workspace</span><h1>Team schedule</h1><p>Review your assigned team matchups, play-by dates, venues, and line schedules.</p></div><span class="badge navy">Captain</span></div>
       <div class="dashboard-card" id="captainScheduleRows"><div class="empty-state compact"><b>Loading Firebase team schedule…</b></div></div>
     </section>
 
     <section class="view content-wrap page-view" data-view="captain-score" data-access="captain">
-      <div id="lineupWorkflowScore"></div>
       <div class="page-heading"><div><span class="kicker">Captain workspace</span><h1>Update score</h1><p>Submit a score for one of your team’s scheduled line matches.</p></div><span class="badge navy">Captain</span></div>
       <div class="dashboard-card empty-state"><b>Select an assigned matchup</b><p>Eligible Firebase matchups will appear after the Fall 2026 schedule and team assignments are published.</p></div>
     </section>
 
-    <section class="view content-wrap page-view" data-view="approvals" data-access-any="approver,ec">
-      <div id="lineupWorkflowApproval"></div>
-      <div class="page-heading"><div><span class="kicker">Neutral approval queue</span><h1>Review sealed lineups</h1><p>Both lineups become visible to the approver together.</p></div><span class="badge orange">1 ready</span></div>
-      <div class="comparison-card dashboard-card"><div id="approvalRows"><div class="empty-state compact"><b>No Firebase lineup pair ready</b></div></div></div>
-      <div class="approval-actions"><button class="secondary" id="requestChange">Request changes</button><button class="primary" id="approveLineups">Approve & publish together</button></div>
+    <section class="view content-wrap page-view" data-view="match-management" data-access-any="captain,ec">
+      <div class="page-heading"><div><span class="kicker">Match operations · Firebase</span><h1>Schedule & Score</h1><p>Schedule approved line matches, enter results, and calculate official points.</p></div><span class="badge orange" id="matchManagementRole">Loading access</span></div>
+      <div class="dashboard-card match-management-context"><label>Active season<select id="matchManagementSeason" disabled><option>Loading active season...</option></select></label><label>Match status<select id="matchManagementStatus"><option value="all">To Be Scheduled + Scheduled</option><option value="toBeScheduled">To Be Scheduled</option><option value="scheduled">Scheduled</option></select></label><label>Captain name<select id="matchManagementCaptain"><option value="all">All captains</option></select></label><div id="matchManagementMessage" class="info-box">Loading approved line matches...</div></div>
+      <div id="matchManagementList" class="match-management-list"><div class="dashboard-card empty-state"><b>Loading matches...</b></div></div>
     </section>
 
-    <section class="view content-wrap page-view" data-view="ec-lineup" data-access-any="captain,ec">
-      <div id="lineupWorkflowUpdate"></div>
-      <div class="page-heading"><div><span class="kicker">EC workspace</span><h1>Update lineup</h1><p>Review and update an approved lineup when an EC-authorized correction or replacement is required.</p></div><span class="badge navy">EC</span></div>
-      <div class="dashboard-card empty-state"><b>Select a Fall 2026 matchup</b><p>Published Firebase matchups requiring EC action will appear here.</p></div>
+    <section class="view content-wrap page-view" data-view="approvals" data-access="approver">
+      <div class="page-heading"><div><span class="kicker">Season lineup approval · Firebase</span><h1>Approve Lineup</h1><p>Review every pending matchup and approve both submitted team lineups together.</p></div><span class="badge orange" id="approvalRoleBadge">Loading access</span></div>
+      <div class="dashboard-card approval-season-context"><label>Active season<select id="approvalSeason" disabled><option value="">Loading active season...</option></select></label><div id="approvalMessage" class="info-box">Loading pending lineups...</div></div>
+      <div id="approvalQueue" class="approval-queue"><div class="dashboard-card empty-state"><b>Loading lineup approval queue...</b></div></div>
+    </section>
+
+    <section class="view content-wrap page-view" data-view="ec-lineup" data-super-admin>
+      <div class="page-heading"><div><span class="kicker">Super Admin workspace · Firebase</span><h1>Update approved lineup</h1><p>Directly correct an approved lineup through its Match Line Record.</p></div><span class="badge navy" id="lineupUpdateRole">Super Admin</span></div>
+      <div class="dashboard-card match-management-context"><label>Active season<select id="lineupUpdateSeason" disabled><option>Loading active season...</option></select></label><div id="lineupUpdateMessage" class="info-box">Loading scheduled line matches...</div></div>
+      <div id="lineupUpdateList" class="match-management-list"><div class="dashboard-card empty-state"><b>Loading editable matches...</b></div></div>
     </section>
 
     <section class="view content-wrap page-view" data-view="ec-score" data-access="ec">
@@ -168,21 +185,28 @@
 
     <section class="view content-wrap page-view" data-view="ec-roster" data-access="ec">
       <div class="page-heading"><div><span class="kicker">EC workspace</span><h1>Manage Team Roster</h1><p>Manage active ranked players and season replacement history.</p></div><span class="badge navy">EC</span></div>
-      <section class="dashboard-card season-admin-card">
+      <div id="ecRosterMount"><section class="dashboard-card season-admin-card" id="rosterAdminCard">
         <div class="card-top"><div><span class="kicker">Roster Management</span><h2>Team Rosters & Replacements</h2><p class="muted">Review every team by rank and record roster corrections or replacements.</p></div><div class="card-actions"><label class="admin-season-select">Season<select id="rosterAdminSeason"><option>Loading seasons...</option></select></label><button class="secondary compact-button" id="exportTeamRoster" type="button">Export Team Roster</button><button class="secondary compact-button" id="refreshRosterAdmin" type="button">Refresh</button></div></div>
         <div id="rosterAdminMessage" class="info-box">Select a season to manage its team rosters.</div>
         <div id="rosterAdminTeams" class="roster-admin-teams"><p class="muted">Loading Firebase team rosters...</p></div>
-      </section>
+      </section></div>
     </section>
 
     <section class="view content-wrap page-view" data-view="admin" data-super-admin>
       <div class="page-heading"><div><span class="kicker">League administration</span><h1>Admin control room</h1><p>Choose a management area to maintain AlphaOpen records and access.</p></div></div>
       <nav class="admin-subnav" aria-label="Administration sections">
         <button class="active" type="button" data-admin-panel="players">Player Management</button>
-        <button type="button" data-route="ec-roster">Team Rosters</button>
+        <button type="button" data-admin-panel="rosters">Team Rosters</button>
         <button type="button" data-admin-panel="users">User Management</button>
         <button type="button" data-admin-panel="venues">Venue Management</button>
         <button type="button" data-admin-panel="seasons">Season Management</button>
+        <button type="button" data-admin-panel="season-teams">Season Teams</button>
+        <button type="button" data-admin-panel="season-matchups">Matchup Schedule</button>
+        <button type="button" data-admin-panel="lineup-approvers">Lineup Approvers</button>
+        <button type="button" data-admin-panel="submit-lineup">Submit Lineup</button>
+        <button type="button" data-admin-panel="approve-lineup">Approve Lineup</button>
+        <button type="button" data-admin-panel="update-lineup">Update Lineup</button>
+        <button type="button" data-admin-panel="schedule-score">Schedule & Score</button>
       </nav>
 
       <div class="admin-section active" data-admin-section="players">
@@ -194,6 +218,10 @@
         <div class="toolbar dashboard-card"><input id="rosterSearch" type="search" placeholder="Search players or teams"><span>Active-season Firebase roster assignments</span></div>
         <div class="dashboard-card roster-table"><div class="table-row roster-header"><span>Player</span><span>Team</span><span>Rank</span><span>Assignment</span><span>Status</span></div><div id="rosterRows"></div></div>
         <section class="dashboard-card season-admin-card"><div class="card-top"><div><span class="kicker">Captain onboarding</span><h2>Fall captain readiness</h2><p class="muted">A captain UID appears after Google registration, approval, and team assignment.</p></div></div><div id="captainReadiness"><p class="muted">Loading captain status…</p></div></section>
+      </div>
+
+      <div class="admin-section" data-admin-section="rosters" hidden>
+        <div id="adminRosterMount"></div>
       </div>
 
       <div class="admin-section" data-admin-section="users" hidden>
@@ -214,20 +242,48 @@
 
       <div class="admin-section" data-admin-section="seasons" hidden>
         <section class="dashboard-card season-admin-card" data-super-admin>
-          <div class="card-top"><div><span class="kicker">Season Management</span><h2>Season setup</h2><p class="muted">Create and manage independent Spring and Fall competition records.</p></div><div class="card-actions"><button class="primary compact-button" id="openCreateSeason" type="button">Create season</button><span class="badge navy">Super Admin</span></div></div>
+          <div class="card-top"><div><span class="kicker">Season Management</span><h2>Season setup</h2><p class="muted">Create, validate, or replace an entire season from the controlled Excel template.</p></div><div class="card-actions"><button class="secondary compact-button" id="downloadSeasonTemplate" type="button">Download bulk template</button><button class="secondary compact-button" id="openSeasonImport" type="button">Bulk upload season</button><button class="primary compact-button" id="openCreateSeason" type="button">Create season</button><span class="badge navy">Super Admin</span></div></div>
           <div id="seasonAdminList" class="season-admin-list"><p class="muted">Loading seasons…</p></div>
         </section>
       </div>
+
+      <div class="admin-section" data-admin-section="season-teams" hidden>
+        <section class="dashboard-card season-admin-card" data-super-admin>
+          <div class="card-top"><div><span class="kicker">Season Team Management</span><h2>Teams & Captains</h2><p class="muted">Create and update season-specific Team IDs, names, and captain assignments.</p></div><div class="card-actions"><label class="admin-season-select">Season<select id="seasonTeamsSeason"><option>Loading seasons...</option></select></label><button class="primary compact-button" id="addSeasonTeam" type="button">+ Add team</button><button class="secondary compact-button" id="refreshSeasonTeams" type="button">Refresh</button></div></div>
+          <div id="seasonTeamsMessage" class="info-box">Select a season to manage its teams.</div>
+          <div id="seasonTeamsList" class="structure-admin-list"><p class="muted">Loading season teams...</p></div>
+        </section>
+      </div>
+
+      <div class="admin-section" data-admin-section="season-matchups" hidden>
+        <section class="dashboard-card season-admin-card" data-super-admin>
+          <div class="card-top"><div><span class="kicker">Season Schedule Management</span><h2>Team Matchups</h2><p class="muted">Create and update week, team, deadline, venue, and matchup status details.</p></div><div class="card-actions"><label class="admin-season-select">Season<select id="seasonMatchupsSeason"><option>Loading seasons...</option></select></label><button class="primary compact-button" id="addSeasonMatchup" type="button">+ Add matchup</button><button class="secondary compact-button" id="refreshSeasonMatchups" type="button">Refresh</button></div></div>
+          <div id="seasonMatchupsMessage" class="info-box">Select a season to manage its matchup schedule.</div>
+          <div id="seasonMatchupsList" class="structure-admin-list"><p class="muted">Loading matchup schedule...</p></div>
+        </section>
+      </div>
+      <div class="admin-section" data-admin-section="lineup-approvers" hidden>
+        <section class="dashboard-card season-admin-card" data-super-admin>
+          <div class="card-top"><div><span class="kicker">Season Lineup Management</span><h2>Lineup Approvers</h2><p class="muted">Only active season approvers can review and approve a matchup’s two submitted lineups.</p></div><div class="card-actions"><label class="admin-season-select">Season<select id="lineupApproverSeason"><option>Loading seasons...</option></select></label><button class="secondary compact-button" id="refreshLineupApprovers" type="button">Refresh</button></div></div>
+          <div class="season-form-grid lineup-approver-form"><label class="wide">Registered player<select id="lineupApproverPlayer"><option value="">Select a registered player</option></select></label><button class="primary" id="assignLineupApprover" type="button">Assign approver</button></div>
+          <div id="lineupApproverMessage" class="info-box">Select a season and registered player.</div>
+          <div id="lineupApproverList" class="structure-admin-list"><p class="muted">Loading season approvers...</p></div>
+        </section>
+      </div>
+      <div class="admin-section" data-admin-section="submit-lineup" hidden><div id="adminSubmitLineupMount"></div></div>
+      <div class="admin-section" data-admin-section="approve-lineup" hidden><div id="adminApproveLineupMount"></div></div>
+      <div class="admin-section" data-admin-section="update-lineup" hidden><div id="adminUpdateLineupMount"></div></div>
+      <div class="admin-section" data-admin-section="schedule-score" hidden><div id="adminScheduleScoreMount"></div></div>
     </section>
   </main>
 
   <nav class="bottom-nav" aria-label="Mobile navigation">
     <button data-route="home" class="active"><span>⌂</span>Home</button>
     <button data-route="fall2026"><span>◫</span>Fall 2026</button>
-    <button data-route="schedule"><span>◉</span>History</button>
+    <button data-nav-roles="Player,Captain,EC,Neutral Approver" data-route="schedule"><span>◉</span>History</button>
+    <button data-nav-roles="Captain" data-route="lineup"><span>⇅</span>Captain</button>
+    <button data-nav-roles="EC,Neutral Approver" data-route="approvals"><span>✓</span>EC</button>
     <button data-super-admin data-route="admin"><span>⚙</span>Admin</button>
-    <button data-access="captain" data-route="lineup"><span>⇅</span>Captain</button>
-    <button data-access-any="approver,ec" data-route="approvals"><span>✓</span>EC</button>
   </nav>
 
   <dialog id="signInDialog"><form method="dialog"><div class="dialog-head"><div><span class="kicker">Secure access</span><h2>Continue with Google</h2></div><button value="cancel" aria-label="Close">×</button></div><p class="muted">Registration requires a verified Google email that already exists in Player Master. All new accounts remain pending until Super Admin approval.</p><div class="google-mark">G</div><div class="form-actions"><button value="cancel" class="secondary">Cancel</button><button type="button" class="primary" id="continueGoogle">Continue with Google</button></div></form></dialog>
@@ -239,6 +295,8 @@
   <dialog id="addPlayerDialog"><form id="addPlayerForm"><div class="dialog-head"><div><span class="kicker">Player Master</span><h2>Add player</h2></div><button type="button" id="closeAddPlayer" aria-label="Close">×</button></div><p class="muted">The system assigns the permanent Player ID. Email Address is required and uniquely identifies duplicates.</p><div class="season-form-grid"><label>First name<input id="playerFirstName" maxlength="60" required></label><label>Last name<input id="playerLastName" maxlength="60" required></label><label class="wide">Full name<input id="playerFullName" maxlength="120" required></label><label>Email address<input id="playerEmail" type="email" maxlength="150" required></label><label>Mobile number<input id="playerPhone" type="tel" maxlength="30"></label><label>T-shirt size<select id="playerTShirt"><option value="">Not provided</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select></label><label>AOR Suggested<input id="playerGlobalRank" type="number" min="1" max="999"></label></div><div class="info-box" id="addPlayerMessage">Exact email duplicates are blocked. Matching names require confirmation.</div><div class="form-actions"><button type="button" class="secondary" id="cancelAddPlayer">Cancel</button><button type="submit" class="primary" id="savePlayer">Create player</button></div></form></dialog>
 
   <dialog id="importPlayersDialog"><form id="importPlayersForm"><div class="dialog-head"><div><span class="kicker">Player Master</span><h2>Import Excel</h2></div><button type="button" id="closeImportPlayers" aria-label="Close">×</button></div><p class="muted">Column order: Email Address, First Name, Last Name, Full Name, Mobile Number, T-Shirt Size, AOR Suggested. Email Address, First Name, and Last Name are required.</p><div class="import-actions"><button type="button" class="secondary" id="downloadPlayerTemplate">Download template</button><label class="file-picker">Choose Excel file<input id="playerImportFile" type="file" accept=".xlsx,.xls,.csv" required></label></div><div id="playerImportSummary" class="info-box">Choose a file to validate it before import.</div><div id="playerImportPreview" class="import-preview"></div><div class="form-actions"><button type="button" class="secondary" id="cancelImportPlayers">Cancel</button><button type="submit" class="primary" id="commitPlayerImport" disabled>Import valid players</button></div></form></dialog>
+
+  <dialog id="seasonImportDialog"><form id="seasonImportForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Season bulk upload</span><h2>Validate and replace season</h2></div><button type="button" id="closeSeasonImport" aria-label="Close">×</button></div><p class="muted">Upload the controlled workbook. No Firebase records change until validation passes and you confirm the permanent Season ID.</p><div class="import-actions"><button type="button" class="secondary" id="downloadSeasonTemplateDialog">Download template</button><label class="file-picker">Choose season workbook<input id="seasonImportFile" type="file" accept=".xlsx,.xls" required></label></div><div id="seasonImportSummary" class="info-box">Choose a workbook to validate Captains, Team Roster, and Weekly Schedule.</div><div id="seasonImportPreview" class="season-import-preview"></div><label class="dialog-label">Type the Season ID to confirm replacement<input id="seasonImportConfirmId" autocomplete="off" placeholder="Validation required first" disabled></label><label class="dialog-label"><span><input id="seasonImportAcknowledgement" type="checkbox" disabled> I understand existing generated records for this draft season will be replaced.</span></label><div class="form-actions"><button type="button" class="secondary" id="cancelSeasonImport">Cancel</button><button type="submit" class="primary" id="commitSeasonImport" disabled>Replace and process season</button></div></form></dialog>
 
   <dialog id="editPlayerDialog"><form id="editPlayerForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Player Master</span><h2>Edit player</h2></div><button type="button" id="closeEditPlayer" aria-label="Close">×</button></div><p class="muted">Update the master identity. Player ID is permanent and cannot be changed.</p><div class="season-form-grid"><label>Player ID<input id="editPlayerId" readonly></label><label>Email address<input id="editPlayerEmail" type="email" maxlength="150" required></label><label>First name<input id="editPlayerFirstName" maxlength="60" required></label><label>Last name<input id="editPlayerLastName" maxlength="60" required></label><label class="wide">Full name<input id="editPlayerFullName" maxlength="120" required></label><label>Mobile number<input id="editPlayerPhone" type="tel" maxlength="30"></label><label>T-shirt size<select id="editPlayerTShirt"><option value="">Not provided</option><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>XXXL</option></select></label><label>AOR Suggested<input id="editPlayerGlobalRank" type="number" min="1" max="999"></label></div><div class="info-box" id="editPlayerMessage">Player ID is permanent. A changed Email Address must remain unique.</div><div class="form-actions"><button type="button" class="secondary" id="cancelEditPlayer">Cancel</button><button type="submit" class="primary" id="saveEditedPlayer">Save changes</button></div></form></dialog>
 
@@ -252,6 +310,10 @@
 
   <dialog id="rosterReplacementDialog"><form id="rosterReplacementForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Team roster</span><h2>Manage ranked player</h2><p class="muted" id="rosterReplacementContext"></p></div><button type="button" id="closeRosterReplacement" aria-label="Close">×</button></div><input type="hidden" id="replacementAssignmentId"><label class="dialog-label">Player at this rank<select id="replacementPlayerId" required><option value="">Select a Firebase player</option></select></label><label class="dialog-label"><span><input type="checkbox" id="recordRosterReplacement" checked> Record the current player in replacement history</span></label><div class="info-box" id="rosterReplacementMessage">Turn replacement history off when correcting inaccurate prototype roster data.</div><div class="form-actions"><button type="button" class="secondary" id="cancelRosterReplacement">Cancel</button><button type="submit" class="primary" id="saveRosterReplacement">Save rank</button></div></form></dialog>
 
+  <dialog id="seasonTeamDialog"><form id="seasonTeamForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Season Teams</span><h2 id="seasonTeamDialogTitle">Add team</h2></div><button type="button" id="closeSeasonTeamDialog" aria-label="Close">×</button></div><div class="season-form-grid"><label>Team ID<input id="seasonTeamId" maxlength="80" required></label><label>Team name<input id="seasonTeamName" maxlength="120" required></label><label>Short name<input id="seasonTeamShortName" maxlength="40" required></label><label>Captain<select id="seasonTeamCaptainPlayerId"><option value="">No captain assigned</option></select></label><label>Status<select id="seasonTeamStatus"><option value="active">Active</option><option value="withdrawn">Withdrawn</option></select></label><label>Seed<input id="seasonTeamSeed" type="number" min="1" max="99"></label><label>Team color<input id="seasonTeamColor" type="color" value="#1758a5"></label></div><div class="info-box" id="seasonTeamFormMessage">Team ID is permanent after creation.</div><div class="form-actions"><button type="button" class="secondary" id="cancelSeasonTeamDialog">Cancel</button><button type="submit" class="primary" id="saveSeasonTeam">Save team</button></div></form></dialog>
+
+  <dialog id="seasonMatchupDialog"><form id="seasonMatchupForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Matchup Schedule</span><h2 id="seasonMatchupDialogTitle">Add matchup</h2></div><button type="button" id="closeSeasonMatchupDialog" aria-label="Close">×</button></div><div class="season-form-grid"><label>Matchup ID<input id="seasonMatchupId" maxlength="100" required></label><label>Week ID<input id="seasonMatchupWeek" list="seasonMatchupWeekOptions" maxlength="40" required><datalist id="seasonMatchupWeekOptions"></datalist></label><label>Stage<select id="seasonMatchupStage"><option value="regular">Regular season</option><option value="quarterfinal">Quarterfinal</option><option value="semifinal">Semifinal</option><option value="final">Final</option></select></label><label>Home team<select id="seasonMatchupHomeTeam" required></select></label><label>Away team<select id="seasonMatchupAwayTeam" required></select></label><label>Scheduled start<input id="seasonMatchupStart" type="datetime-local" required></label><label>Lineup deadline<input id="seasonMatchupLineupDeadline" type="datetime-local" required></label><label>Approval deadline<input id="seasonMatchupApprovalDeadline" type="datetime-local" required></label><label>Publish date/time<input id="seasonMatchupPublishAt" type="datetime-local" required></label><label>Play-by date/time<input id="seasonMatchupPlayBy" type="datetime-local" required></label><label>Default venue<select id="seasonMatchupVenue"><option value="">Not assigned</option></select></label><label>Status<select id="seasonMatchupStatus"><option value="scheduled">Scheduled</option><option value="lineupsOpen">Lineups open</option><option value="readyForApproval">Ready for approval</option><option value="approved">Approved</option><option value="published">Published</option><option value="inProgress">In progress</option><option value="completed">Completed</option><option value="ecReview">EC review</option><option value="cancelled">Cancelled</option></select></label></div><div class="info-box" id="seasonMatchupFormMessage">Home and away teams must be different. Matchup ID is permanent after creation.</div><div class="form-actions"><button type="button" class="secondary" id="cancelSeasonMatchupDialog">Cancel</button><button type="submit" class="primary" id="saveSeasonMatchup">Save matchup</button></div></form></dialog>
+
   <div class="toast" id="toast" role="status"></div>
   <aside class="install-prompt" id="installPrompt" hidden aria-label="Install AlphaOpen">
     <img src="assets/icon-192.png" alt="">
@@ -260,9 +322,11 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=50"></script>
-  <script src="workflow-mockup.js?v=2"></script>
-  <script type="module" src="runtime-loader.js?v=1"></script>
+  <script src="app.js?v=86"></script>
+  <script src="lineup-bootstrap.js?v=6"></script>
+  <script src="approval-bootstrap.js?v=4"></script>
+  <script src="match-management-bootstrap.js?v=9"></script>
+  <script type="module" src="runtime-loader.js?v=12"></script>
   <script src="pwa.js?v=26"></script>
 </body>
 </html>

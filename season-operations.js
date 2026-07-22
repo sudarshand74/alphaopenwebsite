@@ -30,4 +30,5 @@ function renderCaptainSchedule(){
 function renderCaptainReadiness(){const panel=$("#captainReadiness");if(!panel||!state)return;panel.innerHTML=state.teams.map(team=>`<div class="season-admin-row"><div><b>${esc(team.name)}</b><small>${esc((team.captainPlayerIds||[]).join(", "))}</small></div><span class="badge ${(team.captainUids||[]).length?"lime":"orange"}">${(team.captainUids||[]).length?"Registered":"Awaiting captain sign-in"}</span></div>`).join("");}
 
 window.addEventListener("alphaopen:profile-ready",()=>loadActiveSeason().catch(error=>console.error("Active season load failed",error)));
+if(window.alphaOpenProfileReady?.status==="ready")loadActiveSeason().catch(error=>console.error("Active season load failed",error));
 $("#rosterSearch")?.addEventListener("input",event=>renderRoster(event.target.value));

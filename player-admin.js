@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDocs, getFirestore, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, getFirestore, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
 const firebaseConfig = {
   projectId: "alphaopen-development-2026",
@@ -230,9 +230,19 @@ async function submitEditPlayer(event) {
   const newIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(candidate.email));
   try {
     $("#saveEditedPlayer").disabled = true;
+    const [linkedUsersSnapshot, registrationSnapshot] = await Promise.all([
+      getDocs(query(collection(db, "users"), where("playerId", "==", playerId), limit(2))),
+      getDocs(query(collection(db, "registrationRequests"), where("matchedPlayerId", "==", playerId)))
+    ]);
+    if (linkedUsersSnapshot.size > 1) throw new Error(`Identity conflict: ${playerId} is linked to multiple user accounts.`);
+    const linkedUser = linkedUsersSnapshot.docs[0] || null;
+    if (linkedUser && normalizeEmail(linkedUser.data().email) !== candidate.email) {
+      throw new Error(`Identity conflict: ${playerId} is linked to ${linkedUser.data().email}. Remove that account link before changing Player Master to ${candidate.email}.`);
+    }
+    const accountLinkRef = doc(db, "playerAccountLinks", playerId);
     await runTransaction(db, async transaction => {
-      const [privateSnapshot, oldIndexSnapshot, newIndexSnapshot] = await Promise.all([
-        transaction.get(privateRef), transaction.get(oldIndexRef), transaction.get(newIndexRef)
+      const [privateSnapshot, oldIndexSnapshot, newIndexSnapshot, accountLinkSnapshot] = await Promise.all([
+        transaction.get(privateRef), transaction.get(oldIndexRef), transaction.get(newIndexRef), transaction.get(accountLinkRef)
       ]);
       if (!privateSnapshot.exists()) throw new Error("Player Master record no longer exists.");
       if (newIndexSnapshot.exists() && newIndexSnapshot.data().playerId !== playerId) throw new Error(`Email is already assigned to ${newIndexSnapshot.data().playerId}.`);
@@ -240,14 +250,34 @@ async function submitEditPlayer(event) {
         firstName: candidate.firstName, lastName: candidate.lastName, fullName: candidate.fullName,
         emailNormalized: candidate.email, phone: candidate.phone || null,
         tShirtSize: candidate.tShirtSize || null, globalRank: candidate.globalRank ? Number(candidate.globalRank) : null,
+        accountUid: accountLinkSnapshot.exists() ? accountLinkSnapshot.data().uid : linkedUser?.id || null,
+        accountStatus: linkedUser?.data().status || accountLinkSnapshot.data()?.status || "unlinked",
         updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
       });
       transaction.set(publicRef, { playerId, displayName: candidate.fullName, updatedAt: serverTimestamp() }, { merge: true });
       transaction.set(newIndexRef, { emailNormalized: candidate.email, playerId, status: "active", updatedAt: serverTimestamp(), updatedByUid: auth.currentUser.uid }, { merge: true });
       if (oldEmail !== candidate.email && oldIndexSnapshot.exists()) transaction.delete(oldIndexRef);
+      if (linkedUser) transaction.set(linkedUser.ref, { playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
+      registrationSnapshot.docs.forEach(request => transaction.set(request.ref, { matchedPlayerId: playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true }));
+      if (accountLinkSnapshot.exists()) transaction.set(accountLinkRef, { playerId, emailAtApproval: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
     });
+    const [verifiedPrivate, verifiedPublic, verifiedIndex, verifiedOldIndex, verifiedLink] = await Promise.all([
+      getDoc(privateRef), getDoc(publicRef), getDoc(newIndexRef), oldEmail === candidate.email ? Promise.resolve(null) : getDoc(oldIndexRef), getDoc(accountLinkRef)
+    ]);
+    const verificationErrors = [];
+    if (normalizeEmail(verifiedPrivate.data()?.emailNormalized) !== candidate.email) verificationErrors.push("Player Master email");
+    if (verifiedPublic.data()?.displayName !== candidate.fullName) verificationErrors.push("public display name");
+    if (verifiedIndex.data()?.playerId !== playerId || normalizeEmail(verifiedIndex.data()?.emailNormalized) !== candidate.email) verificationErrors.push("email index");
+    if (verifiedOldIndex?.exists()) verificationErrors.push("old email index removal");
+    if (linkedUser && normalizeEmail((await getDoc(linkedUser.ref)).data()?.playerEmailNormalized) !== candidate.email) verificationErrors.push("linked user");
+    for (const request of registrationSnapshot.docs) {
+      const verifiedRequest = await getDoc(request.ref);
+      if (normalizeEmail(verifiedRequest.data()?.playerEmailNormalized) !== candidate.email) verificationErrors.push(`registration ${request.id}`);
+    }
+    if (verifiedLink.exists() && normalizeEmail(verifiedLink.data()?.emailAtApproval) !== candidate.email) verificationErrors.push("account link");
+    if (verificationErrors.length) throw new Error(`Player saved, but identity verification failed for: ${verificationErrors.join(", ")}.`);
     closeDialog(editDialog); await loadPlayers();
-    window.alphaOpenAuthUI.showMessage(`${playerId} updated successfully`);
+    window.alphaOpenAuthUI.showMessage(`${playerId} updated and all linked identity records verified`);
   } catch (error) { message.textContent = error.message; }
   finally { $("#saveEditedPlayer").disabled = false; }
 }

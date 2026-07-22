@@ -111,7 +111,7 @@ async function eligiblePlayerId(user) {
   const normalizedEmail = user.email.trim().toLowerCase();
   const indexRef = doc(db, "playerEmailIndex", encodeURIComponent(normalizedEmail));
   const indexSnapshot = await getDoc(indexRef);
-  if (!indexSnapshot.exists() || indexSnapshot.data().emailNormalized !== normalizedEmail || indexSnapshot.data().status === "inactive") {
+  if (!indexSnapshot.exists() || indexSnapshot.data().emailNormalized?.toLowerCase() !== normalizedEmail || String(indexSnapshot.data().status || "active").toLowerCase() === "inactive") {
     const error = new Error("Your Gmail account was authenticated successfully. However, this Gmail address does not have an AlphaOpen Player Master record, so it cannot be registered for the AlphaOpen application. Please register as an AlphaOpen player or contact AlphaOpen Administration.");
     error.code = "registration/not-in-player-master";
     throw error;
@@ -219,7 +219,7 @@ async function authorizationFor(user, userData) {
     : roles.has("neutralApprover") ? "Neutral Approver"
     : roles.has("player") ? "Player"
     : "Guest";
-  return { role, access: uniqueAccess, playerId: userData.playerId || null, status: "active", roles: [...roles], activeSeasonId };
+  return { role, access: uniqueAccess, playerId: userData.playerId || null, status: "active", roles: [...roles], activeSeasonId, teamIds: membership?.exists() ? membership.data().teamIds || [] : [] };
 }
 
 async function startGoogleSignIn() {
@@ -292,7 +292,7 @@ onAuthStateChanged(auth, async user => {
       return;
     }
     ui.applyUser(user, { role: "Pending approval", access: [], playerId: null, status: "pending" });
-    ui.showMessage("Google sign-in succeeded, but the AlphaOpen registration record could not be saved. Please sign out and try again.");
+    ui.showMessage(`Google sign-in succeeded, but registration could not be saved (${error.code || "unknown"}). ${error.message || "Please sign out and try again."}`);
     window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
   }
 });

@@ -254,7 +254,7 @@ async function loadRoster() {
           startAssignment(button.dataset.manageAssignment),
         ),
       );
-    statusBox.textContent = `${teamsById.size} teams · ${activeByRank.size} ranked assignments · ${history.length} replacement history rows. Duplicate prototype rows are hidden.`;
+    statusBox.textContent = `${teamsById.size} teams · ${activeByRank.size} ranked assignments · ${history.length} replacement history rows.`;
   } catch (error) {
     panel.innerHTML = `<div class="empty-state compact"><b>Roster could not be loaded</b><p>${esc(error.message)}</p></div>`;
     statusBox.textContent = "Firebase roster access failed.";

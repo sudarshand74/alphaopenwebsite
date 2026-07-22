@@ -26,28 +26,93 @@ const firebaseConfig = {
 const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
+let publishedHistorySeasons = [];
+const readCache = new Map();
+
+function cachedRead(key, loader) {
+  if (readCache.has(key)) return readCache.get(key);
+  const request = Promise.resolve().then(loader).catch((error) => {
+    readCache.delete(key);
+    throw error;
+  });
+  readCache.set(key, request);
+  return request;
+}
+
+function publicSeasonsOnce() {
+  return cachedRead("public-seasons", async () => {
+    const snapshot = await getDocs(collection(db, "publicSeasons"));
+    return snapshot.docs.map((item) => ({ seasonId: item.id, ref: item.ref, ...item.data() }));
+  });
+}
+
+function seasonTree(seasonRef, cacheKey, includeStandings = false) {
+  return cachedRead(cacheKey, async () => {
+    const baseReads = [
+      getDoc(seasonRef),
+      getDocs(collection(seasonRef, "teams")),
+      getDocs(collection(seasonRef, "matchups")),
+      getDocs(collection(seasonRef, "rosterAssignments")),
+      getDocs(collection(seasonRef, "weeks")),
+    ];
+    if (includeStandings) baseReads.push(getDocs(collection(seasonRef, "standings")));
+    const [seasonSnapshot, teamsSnapshot, matchupsSnapshot, rosterSnapshot, weeksSnapshot, standingsSnapshot] =
+      await Promise.all(baseReads);
+    if (!seasonSnapshot.exists()) throw new Error(`Season ${seasonRef.id} was not found.`);
+    const matchups = matchupsSnapshot.docs.map((snapshot) => ({ matchupId: snapshot.id, ...snapshot.data() }));
+    const lineGroups = await Promise.all(matchups.map(async (matchup) => {
+      const snapshot = await getDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
+      return snapshot.docs.map((line) => ({ lineMatchId: line.id, matchupId: matchup.matchupId, ...line.data() }));
+    }));
+    return {
+      season: { seasonId: seasonSnapshot.id, ...seasonSnapshot.data() },
+      teams: teamsSnapshot.docs.map((snapshot) => ({ teamId: snapshot.id, ...snapshot.data() })),
+      matchups,
+      lineMatches: lineGroups.flat(),
+      weeks: weeksSnapshot.docs.map((snapshot) => ({ weekId: snapshot.id, ...snapshot.data() })),
+      rosterAssignments: rosterSnapshot.docs.map((snapshot) => ({ assignmentId: snapshot.id, ...snapshot.data() })),
+      standings: standingsSnapshot?.docs.map((snapshot) => ({ teamId: snapshot.id, ...snapshot.data() })) || [],
+    };
+  });
+}
+
+async function loadPublicActiveSeason() {
+  try {
+    const seasons = await publicSeasonsOnce();
+    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
+    const today = new Date().toISOString().slice(0, 10);
+    const newestFirst = (a, b) =>
+      String(b.startDate || "").localeCompare(String(a.startDate || "")) ||
+      Number(b.year || 0) - Number(a.year || 0) ||
+      String(b.term || "").localeCompare(String(a.term || ""));
+    const active =
+      seasons
+        .filter(
+          (season) =>
+            String(season.status || "").toLowerCase() === "active" &&
+            (!season.endDate || season.endDate >= today),
+        )
+        .sort(newestFirst)[0] ||
+      seasons.find(
+        (season) =>
+          (!season.startDate || season.startDate <= today) &&
+          (!season.endDate || season.endDate >= today),
+      ) ||
+      seasons.find((season) => season.seasonId === "AO-F-2026") ||
+      [...seasons].sort(newestFirst)[0] ||
+      null;
+    window.alphaOpenDataUI?.applyActiveSeason(active);
+  } catch (error) {
+    console.error("Public active season lookup failed", error);
+  }
+}
 async function loadPublishedHistoryData() {
   try {
-    const seasonsSnapshot = await getDocs(collection(db, "publicSeasons"));
-    const seasons = await Promise.all(seasonsSnapshot.docs.map(async seasonSnapshot => {
-      const seasonRef = seasonSnapshot.ref;
-      const [teamsSnapshot, matchupsSnapshot, rosterSnapshot, weeksSnapshot] = await Promise.all([
-        getDocs(collection(seasonRef, "teams")), getDocs(collection(seasonRef, "matchups")), getDocs(collection(seasonRef, "rosterAssignments")), getDocs(collection(seasonRef, "weeks"))
-      ]);
-      const matchups = matchupsSnapshot.docs.map(snapshot => ({ matchupId: snapshot.id, ...snapshot.data() }));
-      const lineGroups = await Promise.all(matchups.map(async matchup => {
-        const snapshot = await getDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
-        return snapshot.docs.map(line => ({ lineMatchId: line.id, matchupId: matchup.matchupId, ...line.data() }));
-      }));
-      return {
-        season: { seasonId: seasonSnapshot.id, ...seasonSnapshot.data() },
-        teams: teamsSnapshot.docs.map(snapshot => ({ teamId: snapshot.id, ...snapshot.data() })),
-        matchups,
-        lineMatches: lineGroups.flat(),
-        weeks: weeksSnapshot.docs.map(snapshot => ({ weekId: snapshot.id, ...snapshot.data() })),
-        rosterAssignments: rosterSnapshot.docs.map(snapshot => ({ assignmentId: snapshot.id, ...snapshot.data() }))
-      };
-    }));
+    const published = await publicSeasonsOnce();
+    const seasons = await Promise.all(
+      published.map((season) => seasonTree(season.ref, `public-tree:${season.seasonId}`)),
+    );
+    publishedHistorySeasons = seasons;
     window.alphaOpenDataUI?.applyHistoryData(seasons);
   } catch (error) {
     console.error("All-season player history load failed", error);
@@ -55,32 +120,37 @@ async function loadPublishedHistoryData() {
   }
 }
 
+async function loadOperationalFallHistoryData() {
+  try {
+    const fall = await seasonTree(doc(db, "seasons", "AO-F-2026"), "operational-tree:AO-F-2026");
+    window.alphaOpenDataUI?.applyHistoryData([
+      ...publishedHistorySeasons.filter(
+        (item) => item.season?.seasonId !== "AO-F-2026",
+      ),
+      fall,
+    ]);
+  } catch (error) {
+    console.error("Operational Fall 2026 load failed", error);
+  }
+}
+
+async function loadPublicFallHistoryData() {
+  try {
+    const fall = await seasonTree(doc(db, "publicSeasons", "AO-F-2026"), "public-tree:AO-F-2026");
+    window.alphaOpenDataUI?.applyHistoryData([
+      ...publishedHistorySeasons.filter((item) => item.season?.seasonId !== "AO-F-2026"),
+      fall,
+    ]);
+  } catch (error) {
+    console.error("Public Fall 2026 load failed", error);
+  }
+}
+
 async function loadPublicLeagueData() {
   try {
-    const publishedSnapshot=await getDocs(collection(db,"publicSeasons"));
-    const allPublished=publishedSnapshot.docs;
-    const published=allPublished.filter(item=>item.id==="AO-S-2026"||(String(item.data().term||"").toLowerCase()==="spring"&&Number(item.data().year)===2026));
-    if (!published.length) throw new Error("No published AlphaOpen season was found.");
-    const seasonRef=published[0].ref;
-    const [seasonSnapshot,teamsSnapshot,standingsSnapshot,matchupsSnapshot]=await Promise.all([
-      getDoc(seasonRef),
-      getDocs(collection(seasonRef,"teams")),
-      getDocs(collection(seasonRef,"standings")),
-      getDocs(collection(seasonRef,"matchups"))
-    ]);
-    if (!seasonSnapshot.exists()) throw new Error("The published AlphaOpen season was not found.");
-    const matchups=matchupsSnapshot.docs.map(snapshot=>({matchupId:snapshot.id,...snapshot.data()}));
-    const lineGroups=await Promise.all(matchups.map(async matchup=>{
-      const snapshot=await getDocs(collection(seasonRef,"matchups",matchup.matchupId,"lineMatches"));
-      return snapshot.docs.map(line=>({lineMatchId:line.id,matchupId:matchup.matchupId,...line.data()}));
-    }));
-    window.alphaOpenDataUI?.applyLeagueData({
-      season:{seasonId:seasonSnapshot.id,...seasonSnapshot.data()},
-      teams:teamsSnapshot.docs.map(snapshot=>({teamId:snapshot.id,...snapshot.data()})),
-      standings:standingsSnapshot.docs.map(snapshot=>({teamId:snapshot.id,...snapshot.data()})),
-      matchups,
-      lineMatches:lineGroups.flat()
-    });
+    window.alphaOpenDataUI?.applyLeagueData(
+      await seasonTree(doc(db, "publicSeasons", "AO-S-2026"), "public-league:AO-S-2026", true),
+    );
   } catch (error) {
     console.error("Public Firebase league data load failed",error);
     window.alphaOpenDataUI?.showError(error.message||"Please refresh and try again.");
@@ -667,8 +737,10 @@ refreshRegisteredUsers.addEventListener("click", loadRegisteredUsers);
 document.querySelector("#userManagementSearch").addEventListener("input", event => renderRegisteredUsers(registeredUserRecords, event.target.value));
 
 function startAdminLoads(user) {
-  if (!isBootstrapAdmin(user)) return;
-  loadSeasons();
+  if (!isBootstrapAdmin(user) || currentRoute() !== "admin") return;
+  const panel = document.querySelector("[data-admin-panel].active")?.dataset.adminPanel;
+  if (panel === "seasons") loadSeasons();
+  if (panel !== "users") return;
   if (window.alphaOpenProfileReady?.uid === user.uid && window.alphaOpenProfileReady.status === "ready") {
     loadRegisteredUsers();
   } else if (window.alphaOpenProfileReady?.uid === user.uid && window.alphaOpenProfileReady.status === "error") {
@@ -699,9 +771,46 @@ window.addEventListener("alphaopen:update-spring-line",async event=>{
   } catch(error) { console.error("Spring line update failed",error);reply(false,error.message||"The lineup and score could not be saved."); }
 });
 
+function currentRoute() {
+  return location.hash.slice(1) || "home";
+}
+
+async function loadForRoute(route, user = auth.currentUser) {
+  if (route === "home") {
+    await loadPublicActiveSeason();
+    return;
+  }
+  if (route === "fall2026" || route === "season-dashboard") {
+    await loadPublicActiveSeason();
+    await (user ? loadOperationalFallHistoryData() : loadPublicFallHistoryData());
+    return;
+  }
+  if (route === "schedule") {
+    await loadPublicLeagueData();
+    return;
+  }
+  if (route === "history") {
+    await loadPublishedHistoryData();
+    if (user) await loadOperationalFallHistoryData();
+    return;
+  }
+  if (route === "admin") {
+    startAdminLoads(user);
+  }
+}
+
 onAuthStateChanged(auth, user => {
-  startAdminLoads(user);
+  loadForRoute(currentRoute(), user).catch((error) =>
+    console.error("Route data load failed", error),
+  );
 });
 
-loadPublicLeagueData();
-loadPublishedHistoryData();
+window.addEventListener("alphaopen:route-changed", (event) => {
+  loadForRoute(event.detail?.route || currentRoute()).catch((error) =>
+    console.error("Route data load failed", error),
+  );
+});
+
+window.addEventListener("alphaopen:admin-panel-changed", () => {
+  startAdminLoads(auth.currentUser);
+});
