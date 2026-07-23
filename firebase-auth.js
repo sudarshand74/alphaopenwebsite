@@ -2,7 +2,6 @@ import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebase
 import {
   GoogleAuthProvider,
   browserSessionPersistence,
-  browserLocalPersistence,
   getAuth,
   inMemoryPersistence,
   onAuthStateChanged,
@@ -43,7 +42,7 @@ const registrationBlockedDialog = document.querySelector("#registrationBlockedDi
 const registrationBlockedMessage = document.querySelector("#registrationBlockedMessage");
 const acknowledgeRegistrationBlocked = document.querySelector("#acknowledgeRegistrationBlocked");
 const BOOTSTRAP_ADMIN_EMAIL = "sudarshandesai74@gmail.com";
-const BOOTSTRAP_ADMIN_PLAYER_ID = "P1201";
+const BOOTSTRAP_ADMIN_PLAYER_ID = "P1200";
 const SEASON_CONTROL_REF = doc(db, "systemConfig", "seasonControl");
 
 function friendlyAuthError(error) {
@@ -65,14 +64,18 @@ async function ensureUserProfile(user) {
   const userRef = doc(db, "users", user.uid);
   const snapshot = await getDoc(userRef);
   const isBootstrapAdmin = user.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL;
-  const common = {
-    displayName: user.displayName || user.email,
+  const commonFields = {
     photoUrl: user.photoURL || null,
     lastLoginAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
 
   if (snapshot.exists()) {
+    const linkedPlayerId = isBootstrapAdmin ? BOOTSTRAP_ADMIN_PLAYER_ID : snapshot.data().playerId;
+    const common = {
+      ...commonFields,
+      displayName: await canonicalPlayerName(linkedPlayerId, snapshot.data().displayName || user.displayName || user.email)
+    };
     if (isBootstrapAdmin) return ensureBootstrapAdminPlayerLink(user, userRef, common);
     await updateDoc(userRef, common);
     const refreshed = await getDoc(userRef);
@@ -89,6 +92,10 @@ async function ensureUserProfile(user) {
   }
 
   const matchedPlayerId = isBootstrapAdmin ? BOOTSTRAP_ADMIN_PLAYER_ID : await eligiblePlayerId(user);
+  const common = {
+    ...commonFields,
+    displayName: await canonicalPlayerName(matchedPlayerId, user.displayName || user.email)
+  };
   const batch = writeBatch(db);
   batch.set(userRef, {
     uid: user.uid,
@@ -105,6 +112,14 @@ async function ensureUserProfile(user) {
   await batch.commit();
   if (isBootstrapAdmin) return ensureBootstrapAdminPlayerLink(user, userRef, common);
   return (await getDoc(userRef)).data();
+}
+
+async function canonicalPlayerName(playerId, fallback) {
+  if (!playerId) return fallback;
+  const playerSnapshot = await getDoc(doc(db, "players", playerId));
+  if (!playerSnapshot.exists()) return fallback;
+  const player = playerSnapshot.data();
+  return player.displayName || player.fullName || [player.firstName, player.lastName].filter(Boolean).join(" ") || fallback;
 }
 
 async function eligiblePlayerId(user) {
@@ -191,12 +206,12 @@ async function ensureRegistrationRequest(user, matchedPlayerId) {
 
 async function authorizationFor(user, userData) {
   if (user.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL) {
-    return { role: "Super Admin", access: ["player", "captain", "approver", "ec"], playerId: userData.playerId || null, status: "active" };
+    return { role: "Super Admin", access: ["player", "captain", "approver", "ec"], playerId: userData.playerId || null, playerName: userData.displayName || null, status: "active" };
   }
 
   if (userData.status !== "active") {
     const labels = { pending: "Pending approval", rejected: "Registration rejected", suspended: "Account suspended" };
-    return { role: labels[userData.status] || "Pending approval", access: [], playerId: null, status: userData.status };
+    return { role: labels[userData.status] || "Pending approval", access: [], playerId: userData.playerId || null, playerName: userData.displayName || null, status: userData.status };
   }
 
   const seasonControl = await getDoc(SEASON_CONTROL_REF);
@@ -219,7 +234,7 @@ async function authorizationFor(user, userData) {
     : roles.has("neutralApprover") ? "Neutral Approver"
     : roles.has("player") ? "Player"
     : "Guest";
-  return { role, access: uniqueAccess, playerId: userData.playerId || null, status: "active", roles: [...roles], activeSeasonId, teamIds: membership?.exists() ? membership.data().teamIds || [] : [] };
+  return { role, access: uniqueAccess, playerId: userData.playerId || null, playerName: userData.displayName || null, status: "active", roles: [...roles], activeSeasonId, teamIds: membership?.exists() ? membership.data().teamIds || [] : [] };
 }
 
 async function startGoogleSignIn() {
@@ -247,7 +262,7 @@ window.addEventListener("alphaopen:request-signout", async () => {
 });
 
 async function configurePersistence() {
-  for (const persistence of [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence]) {
+  for (const persistence of [browserSessionPersistence, inMemoryPersistence]) {
     try {
       await setPersistence(auth, persistence);
       return;
@@ -259,10 +274,17 @@ async function configurePersistence() {
 
 await configurePersistence();
 
+let authStateObserved = false;
+let previousAuthUid = null;
 onAuthStateChanged(auth, async user => {
+  const nextAuthUid = user?.uid || null;
+  const accountChanged = authStateObserved && previousAuthUid !== nextAuthUid;
+  authStateObserved = true;
+  previousAuthUid = nextAuthUid;
   if (!user) {
     window.alphaOpenProfileReady = null;
     ui.applyGuest();
+    if (accountChanged) window.location.hash = "home";
     return;
   }
 
@@ -272,6 +294,7 @@ onAuthStateChanged(auth, async user => {
     const authorization = await authorizationFor(user, userData);
     window.alphaOpenProfileReady = { uid: user.uid, status: "ready" };
     ui.applyUser(user, authorization, true);
+    if (accountChanged) window.location.hash = "home";
     window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
   } catch (error) {
     console.error("AlphaOpen profile initialization failed", error);
@@ -279,6 +302,7 @@ onAuthStateChanged(auth, async user => {
     if (isProtectedAdmin) {
       window.alphaOpenProfileReady = { uid: user.uid, status: "ready", protectedAdminFallback: true };
       ui.applyUser(user, { role: "Super Admin", access: ["player", "captain", "approver", "ec"], playerId: BOOTSTRAP_ADMIN_PLAYER_ID, status: "active" }, true);
+      if (accountChanged) window.location.hash = "home";
       ui.showMessage("Signed in as the protected AlphaOpen Super Admin.");
       window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
       return;
@@ -292,6 +316,7 @@ onAuthStateChanged(auth, async user => {
       return;
     }
     ui.applyUser(user, { role: "Pending approval", access: [], playerId: null, status: "pending" });
+    if (accountChanged) window.location.hash = "home";
     ui.showMessage(`Google sign-in succeeded, but registration could not be saved (${error.code || "unknown"}). ${error.message || "Please sign out and try again."}`);
     window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
   }

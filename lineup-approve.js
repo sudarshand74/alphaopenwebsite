@@ -33,8 +33,13 @@ async function load(user){
   byId("approvalSeason").replaceChildren(Object.assign(document.createElement("option"),{value:seasonId,textContent:state.season.name||seasonId}));byId("approvalRoleBadge").textContent=isSuperAdmin?"Super Admin":"Season Approver";
   const pending=[];
   for(const matchup of state.matchups){
-    const snapshots=await Promise.all([getDoc(doc(seasonRef,"matchups",matchup.matchupId,"lineups",matchup.homeTeamId)),getDoc(doc(seasonRef,"matchups",matchup.matchupId,"lineups",matchup.awayTeamId))]);
-    const home=snapshots[0].exists()&&snapshots[0].data().status==="submitted"?snapshots[0].data():null,away=snapshots[1].exists()&&snapshots[1].data().status==="submitted"?snapshots[1].data():null;if(!home&&!away)continue;
+    const homeSubmitted=matchup.homeLineupStatus==="submitted",awaySubmitted=matchup.awayLineupStatus==="submitted";
+    if(!homeSubmitted&&!awaySubmitted)continue;
+    const snapshots=await Promise.all([
+      homeSubmitted?getDoc(doc(seasonRef,"matchups",matchup.matchupId,"lineups",matchup.homeTeamId)):Promise.resolve(null),
+      awaySubmitted?getDoc(doc(seasonRef,"matchups",matchup.matchupId,"lineups",matchup.awayTeamId)):Promise.resolve(null)
+    ]);
+    const home=snapshots[0]?.exists()&&snapshots[0].data().status==="submitted"?snapshots[0].data():null,away=snapshots[1]?.exists()&&snapshots[1].data().status==="submitted"?snapshots[1].data():null;
     pending.push({matchup,home,away,reason:""});
   }
   pending.sort((a,b)=>String(a.matchup.weekId).localeCompare(String(b.matchup.weekId))||a.matchup.matchupId.localeCompare(b.matchup.matchupId));const queue=byId("approvalQueue");queue.replaceChildren();if(!pending.length){const empty=div("dashboard-card empty-state");empty.innerHTML="<b>No lineups pending approval</b><p>Submitted lineups will appear here automatically.</p>";queue.appendChild(empty);}else pending.forEach(record=>queue.appendChild(renderCard(record)));setMessage(pending.length+" matchup"+(pending.length===1?"":"s")+" pending review in "+(state.season.name||seasonId)+".");

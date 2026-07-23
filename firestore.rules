@@ -31,6 +31,12 @@ service cloud.firestore {
         && get(userPath(request.auth.uid)).data.globalRoles.hasAny(['superAdmin']);
     }
 
+    function isActiveUser() {
+      return signedIn()
+        && exists(userPath(request.auth.uid))
+        && get(userPath(request.auth.uid)).data.status == 'active';
+    }
+
     // Temporary bootstrap path. Replace the email check with a custom claim
     // after the first Super Admin account is provisioned by trusted code.
     function isSuperAdmin() {
@@ -92,7 +98,7 @@ service cloud.firestore {
     }
 
     function isMatchupApprover(seasonId, matchupId) {
-      return signedIn()
+      return isActiveUser()
         && matchupExists(seasonId, matchupId)
         && matchup(seasonId, matchupId).approverUids.hasAny([request.auth.uid]);
     }
@@ -102,7 +108,7 @@ service cloud.firestore {
     }
 
     function isSeasonApprover(seasonId) {
-      return signedIn()
+      return isActiveUser()
         && exists(seasonApproverPath(seasonId))
         && get(seasonApproverPath(seasonId)).data.status == 'active'
         && get(seasonApproverPath(seasonId)).data.approverUid == request.auth.uid;
@@ -147,7 +153,7 @@ service cloud.firestore {
           && request.resource.data.email == resource.data.email
           && request.resource.data.status == 'active'
           && request.resource.data.profileType == 'superAdmin'
-          && request.resource.data.playerId == 'P1201'
+          && request.resource.data.playerId == 'P1200'
           && request.resource.data.globalRoles is list
           && request.resource.data.globalRoles.size() == 1
           && request.resource.data.globalRoles.hasAny(['superAdmin'])
@@ -367,7 +373,7 @@ service cloud.firestore {
           allow update: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
             && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'submitted']
             && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'submitted', 'approved']
-            && (request.resource.data.status != 'approved' || isSeasonApprover(seasonId))
+            && (request.resource.data.status != 'approved' || isSeasonApprover(seasonId) || isSuperAdmin())
             && validSubmittedLineup()
             && request.resource.data.teamId == teamId
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -395,15 +401,20 @@ service cloud.firestore {
 
         match /lineMatches/{lineMatchId} {
           allow read: if isSuperAdmin() || isSeasonMember(seasonId);
-          // Approval creates the operational records. Afterward, only Super
-          // Admin may change players or delete a line; ECs and captains remain
-          // limited to scheduling and score fields.
+          // Approval creates the operational records. Super Admin and EC may
+          // correct players; captains remain limited to schedule and scores.
           allow create: if isSeasonEC(seasonId) || isSeasonApprover(seasonId);
           allow delete: if isSuperAdmin();
           allow update: if isSuperAdmin()
-            || ((isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId))
+            || (isSeasonEC(seasonId)
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'venueId', 'venueNameSnapshot', 'scheduledAt', 'sets',
+                'homePlayers', 'awayPlayers', 'venueId', 'venueNameSnapshot', 'venueAddressSnapshot',
+                'scheduledAt', 'sets', 'scheduleStatus', 'scoreStatus',
+                'homePoints', 'awayPoints', 'winnerTeamId', 'updatedAt'
+              ]))
+            || (isMatchupTeamCaptain(seasonId, matchupId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'venueId', 'venueNameSnapshot', 'venueAddressSnapshot', 'scheduledAt', 'sets',
                 'scheduleStatus', 'scoreStatus', 'homePoints', 'awayPoints',
                 'winnerTeamId', 'updatedAt'
               ]));
@@ -506,6 +517,15 @@ service cloud.firestore {
     match /publicSeasons/{seasonId} {
       allow read: if true;
       allow write: if isSuperAdmin();
+
+      match /matchups/{matchupId}/lineMatches/{lineMatchId} {
+        allow read: if true;
+        allow create, update: if
+          (isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId))
+          && existsAfter(/databases/$(database)/documents/seasons/$(seasonId)/matchups/$(matchupId)/lineMatches/$(lineMatchId))
+          && request.resource.data == getAfter(/databases/$(database)/documents/seasons/$(seasonId)/matchups/$(matchupId)/lineMatches/$(lineMatchId)).data;
+        allow delete: if false;
+      }
 
       match /rosterAssignments/{assignmentId} {
         allow read: if true;

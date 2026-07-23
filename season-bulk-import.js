@@ -591,6 +591,246 @@ function open() {
 function close() {
   dialog.close();
 }
+function excelValue(value) {
+  if (value == null) return "";
+  if (typeof value?.toDate === "function") return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value?.path === "string") return value.path;
+  if (Array.isArray(value) || typeof value === "object") {
+    return JSON.stringify(value, (_key, nested) => {
+      if (typeof nested?.toDate === "function") return nested.toDate().toISOString();
+      if (typeof nested?.path === "string") return nested.path;
+      return nested;
+    });
+  }
+  return value;
+}
+function appendSnapshotRows(target, snapshot, context = {}) {
+  snapshot.docs.forEach((item) => {
+    const values = Object.fromEntries(
+      Object.entries(item.data()).map(([field, value]) => [field, excelValue(value)]),
+    );
+    target.push({
+      "Document Path": item.ref.path,
+      "Document ID": item.id,
+      ...context,
+      ...values,
+    });
+  });
+}
+async function exportEntireDatabase() {
+  if (!isAdmin()) {
+    window.alphaOpenAuthUI?.showMessage("Only Super Admin can export the Firebase database.");
+    return;
+  }
+  const button = $("#exportDatabase");
+  button.disabled = true;
+  button.textContent = "Reading Firebase…";
+  try {
+    const XLSX = await loadXlsx();
+    const sheets = new Map();
+    const bucket = (name) => {
+      if (!sheets.has(name)) sheets.set(name, []);
+      return sheets.get(name);
+    };
+    const globalCollections = [
+      ["Users", "users"],
+      ["Players Public", "players"],
+      ["Player Private", "playerPrivate"],
+      ["Email Index", "playerEmailIndex"],
+      ["Account Links", "playerAccountLinks"],
+      ["Player Link Requests", "playerLinkRequests"],
+      ["Registrations", "registrationRequests"],
+      ["Venues", "venues"],
+      ["Venue Private", "venuePrivate"],
+      ["System Config", "systemConfig"],
+      ["System Counters", "systemCounters"],
+    ];
+    const globalSnapshots = await Promise.all(
+      globalCollections.map(([, collectionName]) => getDocs(collection(db, collectionName))),
+    );
+    globalSnapshots.forEach((snapshot, index) =>
+      appendSnapshotRows(bucket(globalCollections[index][0]), snapshot),
+    );
+    const userSnapshot = globalSnapshots[0];
+    for (const user of userSnapshot.docs) {
+      appendSnapshotRows(
+        bucket("Notifications"),
+        await getDocs(collection(user.ref, "notifications")),
+        { "User UID": user.id },
+      );
+    }
+
+    const seasonSnapshot = await getDocs(collection(db, "seasons"));
+    appendSnapshotRows(bucket("Seasons"), seasonSnapshot);
+    const seasonCollections = [
+      ["Season Teams", "teams"],
+      ["Season Members", "members"],
+      ["Roster Slots", "rosterSlots"],
+      ["Roster Assignments", "rosterAssignments"],
+      ["Weeks", "weeks"],
+      ["Matchups", "matchups"],
+      ["Approvers", "approverAssignments"],
+      ["Rule Versions", "ruleVersions"],
+      ["Standings", "standings"],
+      ["Standings Snapshots", "standingsSnapshots"],
+      ["Availability", "availability"],
+      ["Replacement Requests", "replacementRequests"],
+      ["Late Pass Requests", "latePassRequests"],
+      ["Adjustments", "adjustments"],
+      ["Import Audits", "importAudits"],
+      ["Playoff Brackets", "playoffBrackets"],
+      ["Announcements", "announcements"],
+      ["Audit Events", "auditEvents"],
+    ];
+    const matchupCollections = [
+      ["Lineups", "lineups"],
+      ["Line Matches", "lineMatches"],
+      ["Lineup Reviews", "lineupReviews"],
+    ];
+    const lineWorkflowCollections = [
+      ["Schedule Proposals", "scheduleProposals"],
+      ["Score Submissions", "scoreSubmissions"],
+      ["Score Decisions", "scoreDecisions"],
+    ];
+    for (const season of seasonSnapshot.docs) {
+      const snapshots = await Promise.all(
+        seasonCollections.map(([, collectionName]) =>
+          getDocs(collection(season.ref, collectionName)),
+        ),
+      );
+      snapshots.forEach((snapshot, index) =>
+        appendSnapshotRows(bucket(seasonCollections[index][0]), snapshot, {
+          "Season ID": season.id,
+        }),
+      );
+      const matchups = snapshots[5];
+      for (const matchup of matchups.docs) {
+        const nested = await Promise.all(
+          matchupCollections.map(([, collectionName]) =>
+            getDocs(collection(matchup.ref, collectionName)),
+          ),
+        );
+        nested.forEach((snapshot, index) =>
+          appendSnapshotRows(bucket(matchupCollections[index][0]), snapshot, {
+            "Season ID": season.id,
+            "Matchup ID": matchup.id,
+          }),
+        );
+        for (const lineup of nested[0].docs) {
+          appendSnapshotRows(
+            bucket("Lineup Revisions"),
+            await getDocs(collection(lineup.ref, "revisions")),
+            {
+              "Season ID": season.id,
+              "Matchup ID": matchup.id,
+              "Team ID": lineup.id,
+            },
+          );
+        }
+        for (const lineMatch of nested[1].docs) {
+          const workflowSnapshots = await Promise.all(
+            lineWorkflowCollections.map(([, collectionName]) =>
+              getDocs(collection(lineMatch.ref, collectionName)),
+            ),
+          );
+          workflowSnapshots.forEach((snapshot, index) =>
+            appendSnapshotRows(bucket(lineWorkflowCollections[index][0]), snapshot, {
+              "Season ID": season.id,
+              "Matchup ID": matchup.id,
+              "Line Match ID": lineMatch.id,
+            }),
+          );
+        }
+      }
+    }
+
+    const publicSeasonSnapshot = await getDocs(collection(db, "publicSeasons"));
+    appendSnapshotRows(bucket("Public Seasons"), publicSeasonSnapshot);
+    const publicCollections = [
+      ["Public Teams", "teams"],
+      ["Public Rosters", "rosterAssignments"],
+      ["Public Weeks", "weeks"],
+      ["Public Matchups", "matchups"],
+      ["Public Standings", "standings"],
+    ];
+    for (const season of publicSeasonSnapshot.docs) {
+      const snapshots = await Promise.all(
+        publicCollections.map(([, collectionName]) =>
+          getDocs(collection(season.ref, collectionName)),
+        ),
+      );
+      snapshots.forEach((snapshot, index) =>
+        appendSnapshotRows(bucket(publicCollections[index][0]), snapshot, {
+          "Season ID": season.id,
+        }),
+      );
+      for (const matchup of snapshots[3].docs) {
+        appendSnapshotRows(
+          bucket("Public Line Matches"),
+          await getDocs(collection(matchup.ref, "lineMatches")),
+          { "Season ID": season.id, "Matchup ID": matchup.id },
+        );
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const summaryRows = [
+      ["AlphaOpen Firebase Database Export"],
+      ["Exported At", new Date()],
+      ["Firebase Project", config.projectId],
+      ["Exported By", auth.currentUser.email || auth.currentUser.uid],
+      [],
+      ["Worksheet", "Records", "Purpose"],
+      ...[...sheets.entries()].map(([name, records]) => [
+        name,
+        records.length,
+        "Firestore documents with Document Path and Document ID preserved",
+      ]),
+    ];
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows, { cellDates: true });
+    summarySheet["!cols"] = [{ wch: 28 }, { wch: 18 }, { wch: 62 }];
+    summarySheet["!freeze"] = { xSplit: 0, ySplit: 6 };
+    XLSX.utils.book_append_sheet(workbook, summarySheet, "Export Summary");
+    for (const [name, records] of sheets) {
+      const rows = records.length
+        ? records
+        : [{ "Document Path": "", "Document ID": "", Note: "No records found" }];
+      const worksheet = XLSX.utils.json_to_sheet(rows, { cellDates: true });
+      worksheet["!autofilter"] = { ref: worksheet["!ref"] };
+      worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+      const headings = Object.keys(rows[0]);
+      worksheet["!cols"] = headings.map((heading) => ({
+        wch: Math.min(
+          55,
+          Math.max(
+            12,
+            heading.length + 2,
+            ...rows.slice(0, 100).map((row) => String(row[heading] ?? "").length + 2),
+          ),
+        ),
+      }));
+      XLSX.utils.book_append_sheet(workbook, worksheet, name.slice(0, 31));
+    }
+    const exportDate = new Date().toISOString().replace(/[:.]/g, "-");
+    XLSX.writeFileXLSX(
+      workbook,
+      `AlphaOpen-Firebase-Full-Export-${exportDate}.xlsx`,
+      { cellDates: true, compression: true },
+    );
+    const totalDocuments = [...sheets.values()].reduce((total, rows) => total + rows.length, 0);
+    window.alphaOpenAuthUI?.showMessage(
+      `${totalDocuments} Firebase documents exported across ${sheets.size} worksheets.`,
+    );
+  } catch (error) {
+    console.error("Firebase database export failed", error);
+    window.alphaOpenAuthUI?.showMessage(`Database export failed: ${error.message}`);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Export database to Excel";
+  }
+}
+$("#exportDatabase")?.addEventListener("click", exportEntireDatabase);
 $("#downloadSeasonTemplate")?.addEventListener("click", downloadTemplate);
 $("#downloadSeasonTemplateDialog")?.addEventListener("click", downloadTemplate);
 $("#openSeasonImport")?.addEventListener("click", open);

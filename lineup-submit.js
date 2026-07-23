@@ -28,9 +28,25 @@ function setOptions(select, firstLabel, rows) {
   rows.forEach(row => select.appendChild(option(row.value, row.label)));
 }
 function status(text) { byId("lineupStateMessage").textContent = text; }
+function submissionConfirmation(matchup, teamId, visible) {
+  const message = byId("lineupSubmissionMessage");
+  if (!message) return;
+  message.hidden = !visible;
+  if (!visible || !matchup) {
+    message.textContent = "";
+    return;
+  }
+  const opponentId = matchup.homeTeamId === teamId ? matchup.awayTeamId : matchup.homeTeamId;
+  message.textContent = `${weekLabel(weekKey(matchup))} lineup against ${teamName(opponentId)} is submitted, awaiting approval.`;
+}
 function isManager(user) {
-  return user.email && user.email.toLowerCase() === "sudarshandesai74@gmail.com" ||
-    Boolean(window.alphaOpenAuthorization && window.alphaOpenAuthorization.access && window.alphaOpenAuthorization.access.includes("ec"));
+  const authorization = window.alphaOpenAuthorization || {};
+  const memberRoles = Array.isArray(state?.member?.roles) ? state.member.roles : [];
+  const globalRoles = Array.isArray(state?.userRecord?.globalRoles) ? state.userRecord.globalRoles : [];
+  return authorization.role === "Super Admin" ||
+    (Array.isArray(authorization.access) && authorization.access.includes("ec")) ||
+    memberRoles.includes("ec") ||
+    globalRoles.includes("superAdmin");
 }
 function isApprover(user) {
   return state.approver && state.approver.status === "active" && state.approver.approverUid === user.uid;
@@ -52,11 +68,16 @@ function weekKey(matchup) {
   const number = String(matchup.weekId || "").match(/\d+/);
   return number ? "W" + number[0] : String(matchup.weekId || "");
 }
-function weekLabel(key) { return ["QF", "SF", "F"].includes(key) ? key : "Week" + key.replace("W", ""); }
+function weekLabel(key) {
+  return { QF: "Qualifiers", SF: "Semifinals", F: "Finals" }[key] || "Week" + key.replace("W", "");
+}
 function activeRoster(teamId) {
   return state.assignments.filter(item => item.teamId === teamId && item.status === "active").sort((a, b) => Number(a.rankNumber) - Number(b.rankNumber));
 }
 function selectedMatchup() { return state.matchups.find(item => item.matchupId === byId("lineupMatchup").value); }
+function lockedLineupStatus(value) {
+  return String(value || "").toLowerCase() === "approved";
+}
 
 async function load(user) {
   status("Reading the active season from Firebase...");
@@ -67,6 +88,7 @@ async function load(user) {
   const results = await Promise.all([
     getDoc(seasonRef),
     getDoc(doc(seasonRef, "members", user.uid)),
+    getDoc(doc(db, "users", user.uid)),
     getDocs(collection(seasonRef, "teams")),
     getDocs(collection(seasonRef, "rosterAssignments")),
     getDocs(collection(seasonRef, "matchups"))
@@ -82,10 +104,11 @@ async function load(user) {
     seasonId,
     season: results[0].data(),
     member: results[1].exists() ? results[1].data() : null,
+    userRecord: results[2].exists() ? results[2].data() : null,
     approver,
-    teams: results[2].docs.map(item => ({ teamId: item.id, ...item.data() })),
-    assignments: results[3].docs.map(item => ({ assignmentId: item.id, ...item.data() })),
-    matchups: results[4].docs.map(item => ({ matchupId: item.id, ...item.data() }))
+    teams: results[3].docs.map(item => ({ teamId: item.id, ...item.data() })),
+    assignments: results[4].docs.map(item => ({ assignmentId: item.id, ...item.data() })),
+    matchups: results[5].docs.map(item => ({ matchupId: item.id, ...item.data() }))
   };
   const authorization = window.alphaOpenAuthorization || {};
   const playerId = String(authorization.playerId || state.member && state.member.playerId || "").trim();
@@ -94,19 +117,28 @@ async function load(user) {
     (playerId && Array.isArray(team.captainPlayerIds) && team.captainPlayerIds.includes(playerId))
   ).map(team => team.teamId);
   const captainTeamsFromMember = Array.isArray(state.member && state.member.teamIds) ? state.member.teamIds : [];
-  state.captainTeamIds = [...new Set(captainTeamsFromTeamRecords.length ? captainTeamsFromTeamRecords : captainTeamsFromMember)];
+  const captainTeamsFromAuthorization = Array.isArray(authorization.teamIds) ? authorization.teamIds : [];
+  state.captainTeamIds = [...new Set([...captainTeamsFromTeamRecords, ...captainTeamsFromMember, ...captainTeamsFromAuthorization])];
   byId("lineupSeason").replaceChildren(option(seasonId, state.season.name || seasonId));
-  const eligible = state.matchups.filter(item => !["completed", "cancelled"].includes(String(item.status).toLowerCase()));
   const teamIds = isManager(user) || isApprover(user)
-    ? [...new Set(eligible.flatMap(item => [item.homeTeamId, item.awayTeamId]))]
+    ? [...new Set(state.matchups.flatMap(item => [item.homeTeamId, item.awayTeamId]))]
     : state.captainTeamIds;
-  const weeks = [...new Set(eligible.filter(item => [item.homeTeamId, item.awayTeamId].some(id => teamIds.includes(id))).map(weekKey))]
+  const weeks = [...new Set([
+    ...state.matchups.filter(item => [item.homeTeamId, item.awayTeamId].some(id => teamIds.includes(id))).map(weekKey),
+    "QF", "SF", "F"
+  ])]
     .sort((a, b) => ({ QF: 80, SF: 90, F: 100 }[a] || Number(a.replace("W", ""))) - ({ QF: 80, SF: 90, F: 100 }[b] || Number(b.replace("W", ""))));
   setOptions(byId("lineupWeek"), "Select week", weeks.map(key => ({ value: key, label: weekLabel(key) })));
   setOptions(byId("lineupTeam"), "Select team", teamIds.map(id => ({ value: id, label: teamName(id) })));
-  if (!isManager(user) && !isApprover(user) && teamIds.length === 1) byId("lineupTeam").value = teamIds[0];
+  const captainOnly = !isManager(user) && !isApprover(user);
+  byId("lineupTeam").disabled = captainOnly;
+  if (captainOnly && teamIds.length === 1) byId("lineupTeam").value = teamIds[0];
   byId("lineupRoleBadge").textContent = isManager(user) ? "EC / Super Admin" : isApprover(user) ? "Season Approver" : "Captain";
-  status("Loaded " + (state.season.name || seasonId) + ": " + state.teams.length + " teams · " + state.matchups.length + " matchups · " + state.assignments.length + " roster assignments. Select a week and team.");
+  if (captainOnly && teamIds.length !== 1) {
+    clearBuilder(teamIds.length ? "Your Captain account is linked to multiple teams. Ask the Super Admin to correct the season assignment." : "Your Captain account is not linked to a Fall 2026 team. Ask the Super Admin to assign your Player ID as the team's captain.");
+    return;
+  }
+  status("Loaded " + (state.season.name || seasonId) + ": " + state.teams.length + " teams · " + state.matchups.length + " matchups · " + state.assignments.length + " roster assignments. Select a week.");
   const jumpRaw = sessionStorage.getItem("alphaopenLineupJump");
   if (jumpRaw) {
     sessionStorage.removeItem("alphaopenLineupJump");
@@ -122,6 +154,7 @@ async function load(user) {
 }
 
 function clearBuilder(message) {
+  submissionConfirmation(null, "", false);
   byId("lineupMatchup").replaceChildren(option("", "Select matchup"));
   byId("lineupMatchupSummary").hidden = true;
   byId("lineupRows").innerHTML = '<div class="empty-state compact"><b>Select a week and team</b></div>';
@@ -144,10 +177,14 @@ async function resolveContext() {
   byId("lineupOpponent").textContent = teamName(opponentId);
   byId("lineupMatchupSummary").hidden = false;
   const lineup = await getDoc(doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineups", teamId));
-  renderLines(lineup.exists() ? lineup.data().lines || [] : []);
-  status("Status: " + (lineup.exists() ? lineup.data().status : "New draft") + ".");
+  const lineupData = lineup.exists() ? lineup.data() : null;
+  renderLines(lineupData?.lines || [], lockedLineupStatus(lineupData?.status));
+  submissionConfirmation(matchup, teamId, String(lineupData?.status || "").toLowerCase() === "submitted");
+  status(lockedLineupStatus(lineupData?.status)
+    ? "Lineup approved. It is shown read-only and cannot be changed."
+    : "Status: " + (lineupData ? lineupData.status : "New draft") + ".");
 }
-function renderLines(existing) {
+function renderLines(existing, readOnly = false) {
   const teamId = byId("lineupTeam").value;
   const roster = activeRoster(teamId);
   const panel = byId("lineupRows");
@@ -162,14 +199,18 @@ function renderLines(existing) {
     [first, second].forEach((select, playerIndex) => {
       setOptions(select, "Select player", roster.map(item => ({ value: item.playerId, label: "R" + item.rankNumber + " · " + (item.playerNameSnapshot || item.playerId) })));
       const saved = existing[index] && existing[index][playerIndex === 0 ? "player1Id" : "player2Id"];
+      const savedName = existing[index] && existing[index][playerIndex === 0 ? "player1Name" : "player2Name"];
+      if (saved && ![...select.options].some(item => item.value === saved)) select.appendChild(option(saved, savedName || saved));
       if (saved) select.value = saved;
-      select.addEventListener("change", () => { validation = null; byId("submitLineup").disabled = true; updateSor(); });
+      select.disabled = readOnly;
+      select.addEventListener("change", () => { validation = null; submissionConfirmation(null, "", false); byId("submitLineup").disabled = true; updateSor(); });
     });
     const sor = document.createElement("span"); sor.className = "badge gray"; sor.dataset.sor = ""; sor.textContent = "—";
     row.append(label, first, second, sor); panel.appendChild(row);
   }
-  byId("validateLineup").disabled = false;
-  byId("saveDraft").disabled = false;
+  panel.classList.toggle("lineup-readonly", readOnly);
+  byId("validateLineup").disabled = readOnly;
+  byId("saveDraft").disabled = readOnly;
   byId("submitLineup").disabled = true;
   updateSor();
 }
@@ -205,11 +246,19 @@ async function save(nextStatus) {
   const matchupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId);
   await runTransaction(db, async transaction => {
     const current = await transaction.get(lineupRef);
+    if (current.exists() && lockedLineupStatus(current.data().status)) throw new Error("This lineup has been approved and cannot be changed.");
     transaction.set(lineupRef, { seasonId: state.seasonId, matchupId: matchup.matchupId, teamId, status: nextStatus, revisionNumber: Number(current.data() && current.data().revisionNumber || 0) + 1, ruleVersionId: state.season.activeRuleVersionId || "v1", lines: lines(), validation: nextStatus === "draft" ? null : validation, submittedByUid: nextStatus === "submitted" ? user.uid : current.data() && current.data().submittedByUid || null, submittedAt: nextStatus === "submitted" ? serverTimestamp() : current.data() && current.data().submittedAt || null, updatedByUid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
     const lineupStatusField = matchup.homeTeamId === teamId ? "homeLineupStatus" : "awayLineupStatus";
     transaction.update(matchupRef, { [lineupStatusField]: nextStatus === "submitted" ? "submitted" : "draft", updatedAt: serverTimestamp() });
   });
-  status(nextStatus === "submitted" ? "Lineup submitted and pending approval." : "Draft lineup saved.");
+  if (nextStatus === "submitted") {
+    byId("submitLineup").disabled = true;
+    submissionConfirmation(matchup, teamId, true);
+    status("Lineup submitted and pending approval.");
+  } else {
+    submissionConfirmation(null, "", false);
+    status("Draft lineup saved.");
+  }
 }
 
 byId("lineupWeek").addEventListener("change", () => resolveContext().catch(error => status(error.message)));

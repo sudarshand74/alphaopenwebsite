@@ -38,6 +38,16 @@ function localValue(value) {
     .toISOString()
     .slice(0, 16);
 }
+function venueFullAddress(venue) {
+  if (!venue) return null;
+  return venue.fullAddress || [
+    venue.address || venue.addressLine1 || venue.address1,
+    venue.addressLine2 || venue.address2,
+    venue.city,
+    venue.state,
+    venue.postalCode
+  ].filter(Boolean).join(", ") || null;
+}
 function rosterPlayers(teamId, current = []) {
   const players = new Map();
   (state.rostersByTeam.get(teamId) || []).forEach((player) => players.set(player.playerId, player));
@@ -185,6 +195,7 @@ async function saveRecord(article, record, button) {
     awayPlayers,
     venueId: venueId || null,
     venueNameSnapshot: venue ? venue.venueName || venue.name || venue.venueId : null,
+    venueAddressSnapshot: venueFullAddress(venue),
     scheduledAt: dateValue ? new Date(dateValue) : null,
     sets,
     scheduleStatus,
@@ -252,6 +263,11 @@ async function load(user) {
   };
   byId("lineupUpdateSeason").replaceChildren(option(seasonId, state.season.name || seasonId, true));
   for (const matchup of state.matchups) {
+    if (
+      matchup.lineupsPublished !== true &&
+      matchup.homeLineupStatus !== "approved" &&
+      matchup.awayLineupStatus !== "approved"
+    ) continue;
     const lines = await getDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
     lines.docs.forEach((item) => state.records.push({ matchup, line: { lineMatchId: item.id, ...item.data() } }));
   }

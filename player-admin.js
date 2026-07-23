@@ -22,6 +22,8 @@ const importDialog = $("#importPlayersDialog");
 const importForm = $("#importPlayersForm");
 const editDialog = $("#editPlayerDialog");
 const editForm = $("#editPlayerForm");
+const emailTransferDialog = $("#emailTransferDialog");
+const emailTransferForm = $("#emailTransferForm");
 const playerPanel = $("#playerMasterPanel");
 const playerCount = $("#playerMasterCount");
 const importSummary = $("#playerImportSummary");
@@ -29,6 +31,7 @@ const importPreview = $("#playerImportPreview");
 const commitImport = $("#commitPlayerImport");
 let playerCache = [];
 let preparedImport = [];
+let pendingEmailTransfer = null;
 let xlsxModule;
 
 function isAdmin(user = auth.currentUser) {
@@ -202,6 +205,226 @@ function openEditPlayer(playerId) {
   openDialog(editDialog);
 }
 
+function openEmailTransfer(existing, candidate, linkedUser) {
+  pendingEmailTransfer = {
+    playerId: existing.playerId,
+    oldEmail: normalizeEmail(existing.emailNormalized),
+    newEmail: candidate.email,
+    candidate,
+    linkedUid: linkedUser.id,
+    linkedEmail: normalizeEmail(linkedUser.data().email),
+  };
+  $("#emailTransferPlayer").textContent = `${existing.fullName} (${existing.playerId})`;
+  $("#emailTransferOldEmail").textContent = linkedUser.data().email || existing.emailNormalized;
+  $("#emailTransferNewEmail").textContent = candidate.email;
+  $("#emailTransferConfirmation").value = "";
+  $("#emailTransferAcknowledgement").checked = false;
+  $("#emailTransferMessage").textContent = "No records change until you confirm the transfer.";
+  closeDialog(editDialog);
+  openDialog(emailTransferDialog);
+}
+
+async function transferPlayerEmail(event) {
+  event.preventDefault();
+  if (!isAdmin() || !pendingEmailTransfer) return;
+  const transfer = pendingEmailTransfer;
+  const message = $("#emailTransferMessage");
+  const confirmation = normalizeEmail($("#emailTransferConfirmation").value);
+  if (confirmation !== transfer.newEmail) {
+    message.textContent = `Type ${transfer.newEmail} exactly to confirm.`;
+    return;
+  }
+  if (!$("#emailTransferAcknowledgement").checked) {
+    message.textContent = "Confirm that the old Google account will lose AlphaOpen access.";
+    return;
+  }
+  const button = $("#confirmEmailTransfer");
+  button.disabled = true;
+  message.textContent = "Validating identity and preserving season access…";
+  try {
+    const linkedUsersSnapshot = await getDocs(
+      query(collection(db, "users"), where("playerId", "==", transfer.playerId), limit(3)),
+    );
+    if (linkedUsersSnapshot.size !== 1 || linkedUsersSnapshot.docs[0].id !== transfer.linkedUid) {
+      throw new Error(
+        `${transfer.playerId} no longer has exactly one linked user. Refresh Player Management and resolve duplicate accounts first.`,
+      );
+    }
+    const linkedUser = linkedUsersSnapshot.docs[0];
+    const seasonsSnapshot = await getDocs(collection(db, "seasons"));
+    const seasonAccess = [];
+    const approverAccess = [];
+    const memberRefs = [];
+    const approverRefs = [];
+    for (const season of seasonsSnapshot.docs) {
+      const memberRef = doc(season.ref, "members", transfer.linkedUid);
+      const approverRef = doc(season.ref, "approverAssignments", transfer.linkedUid);
+      const [memberSnapshot, approverSnapshot] = await Promise.all([
+        getDoc(memberRef),
+        getDoc(approverRef),
+      ]);
+      if (memberSnapshot.exists() && memberSnapshot.data().status === "active") {
+        seasonAccess.push({
+          seasonId: season.id,
+          roles: memberSnapshot.data().roles || [],
+          teamIds: memberSnapshot.data().teamIds || [],
+        });
+        memberRefs.push(memberRef);
+      }
+      if (approverSnapshot.exists() && approverSnapshot.data().status === "active") {
+        approverAccess.push({
+          seasonId: season.id,
+          scopeType: approverSnapshot.data().scopeType || "season",
+          weekId: approverSnapshot.data().weekId || null,
+          matchupId: approverSnapshot.data().matchupId || null,
+          priority: Number(approverSnapshot.data().priority) || 1,
+        });
+        approverRefs.push(approverRef);
+      }
+    }
+    const privateRef = doc(db, "playerPrivate", transfer.playerId);
+    const publicRef = doc(db, "players", transfer.playerId);
+    const oldIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(transfer.oldEmail));
+    const newIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(transfer.newEmail));
+    const userRef = linkedUser.ref;
+    const registrationRef = doc(db, "registrationRequests", transfer.linkedUid);
+    const accountLinkRef = doc(db, "playerAccountLinks", transfer.playerId);
+    await runTransaction(db, async (transaction) => {
+      const references = [
+        privateRef,
+        oldIndexRef,
+        newIndexRef,
+        userRef,
+        registrationRef,
+        accountLinkRef,
+        ...memberRefs,
+        ...approverRefs,
+      ];
+      const snapshots = await Promise.all(references.map((reference) => transaction.get(reference)));
+      const [
+        privateSnapshot,
+        oldIndexSnapshot,
+        newIndexSnapshot,
+        userSnapshot,
+        registrationSnapshot,
+        accountLinkSnapshot,
+      ] = snapshots;
+      if (!privateSnapshot.exists()) throw new Error("Player Master record no longer exists.");
+      if (!userSnapshot.exists() || userSnapshot.data().playerId !== transfer.playerId) {
+        throw new Error("The old user account is no longer linked to this Player ID.");
+      }
+      if (newIndexSnapshot.exists() && newIndexSnapshot.data().playerId !== transfer.playerId) {
+        throw new Error(`The new email is already assigned to ${newIndexSnapshot.data().playerId}.`);
+      }
+      if (accountLinkSnapshot.exists() && accountLinkSnapshot.data().uid !== transfer.linkedUid) {
+        throw new Error("The approved account link belongs to a different Firebase UID.");
+      }
+      const candidate = transfer.candidate;
+      transaction.update(privateRef, {
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        fullName: candidate.fullName,
+        emailNormalized: transfer.newEmail,
+        phone: candidate.phone || null,
+        tShirtSize: candidate.tShirtSize || null,
+        globalRank: candidate.globalRank ? Number(candidate.globalRank) : null,
+        accountUid: null,
+        accountStatus: "awaitingRegistration",
+        updatedByUid: auth.currentUser.uid,
+        updatedAt: serverTimestamp(),
+      });
+      transaction.set(publicRef, {
+        playerId: transfer.playerId,
+        displayName: candidate.fullName,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      transaction.set(newIndexRef, {
+        emailNormalized: transfer.newEmail,
+        playerId: transfer.playerId,
+        status: "active",
+        updatedAt: serverTimestamp(),
+        updatedByUid: auth.currentUser.uid,
+      }, { merge: true });
+      if (transfer.oldEmail !== transfer.newEmail && oldIndexSnapshot.exists()) {
+        transaction.delete(oldIndexRef);
+      }
+      transaction.update(userRef, {
+        status: "suspended",
+        profileType: "pending",
+        playerId: null,
+        globalRoles: [],
+        playerEmailNormalized: transfer.oldEmail,
+        suspensionReason: `Login email transferred to ${transfer.newEmail}`,
+        updatedAt: serverTimestamp(),
+      });
+      transaction.set(registrationRef, {
+        ...(registrationSnapshot.exists() ? {} : {
+          uid: transfer.linkedUid,
+          email: transfer.linkedEmail,
+          requestedAt: serverTimestamp(),
+        }),
+        status: "rejected",
+        matchedPlayerId: null,
+        assignedProfileType: null,
+        decidedByUid: auth.currentUser.uid,
+        decidedAt: serverTimestamp(),
+        decisionNote: `Login email transferred to ${transfer.newEmail}`,
+      }, { merge: true });
+      transaction.set(accountLinkRef, {
+        playerId: transfer.playerId,
+        uid: transfer.linkedUid,
+        emailAtApproval: transfer.linkedEmail,
+        status: "revoked",
+        revokedByUid: auth.currentUser.uid,
+        revokedAt: serverTimestamp(),
+        reason: `Login email transferred to ${transfer.newEmail}`,
+        transferStatus: "awaitingRegistration",
+        previousUid: transfer.linkedUid,
+        previousEmail: transfer.linkedEmail,
+        pendingNewEmail: transfer.newEmail,
+        pendingGlobalRoles: linkedUser.data().globalRoles || [],
+        pendingSeasonAccess: seasonAccess,
+        pendingApproverAccess: approverAccess,
+        transferredByUid: auth.currentUser.uid,
+        transferredAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+      let snapshotIndex = 6;
+      memberRefs.forEach((reference) => {
+        const snapshot = snapshots[snapshotIndex++];
+        if (snapshot.exists()) {
+          transaction.update(reference, {
+            status: "inactive",
+            effectiveTo: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+      approverRefs.forEach((reference) => {
+        const snapshot = snapshots[snapshotIndex++];
+        if (snapshot.exists()) {
+          transaction.update(reference, {
+            status: "inactive",
+            effectiveTo: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      });
+    });
+    pendingEmailTransfer = null;
+    closeDialog(emailTransferDialog);
+    await loadPlayers();
+    window.alphaOpenAuthUI?.showMessage(
+      `${transfer.playerId} now uses ${transfer.newEmail}. The player must register with that Google email and await approval.`,
+    );
+  } catch (error) {
+    console.error("Player email transfer failed", error);
+    message.textContent = error.message || "The email transfer could not be completed.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function submitEditPlayer(event) {
   event.preventDefault();
   if (!isAdmin()) return;
@@ -234,10 +457,19 @@ async function submitEditPlayer(event) {
       getDocs(query(collection(db, "users"), where("playerId", "==", playerId), limit(2))),
       getDocs(query(collection(db, "registrationRequests"), where("matchedPlayerId", "==", playerId)))
     ]);
-    if (linkedUsersSnapshot.size > 1) throw new Error(`Identity conflict: ${playerId} is linked to multiple user accounts.`);
+    if (linkedUsersSnapshot.size > 1) {
+      const accounts = linkedUsersSnapshot.docs
+        .map((item) => `${item.data().email || "email unavailable"} (${item.data().status || "unknown"})`)
+        .join(" and ");
+      throw new Error(
+        `Identity conflict: ${playerId} is linked to multiple user accounts: ${accounts}. ` +
+        `Open User Management, search ${playerId}, and delete the incorrect profile before changing the email.`,
+      );
+    }
     const linkedUser = linkedUsersSnapshot.docs[0] || null;
     if (linkedUser && normalizeEmail(linkedUser.data().email) !== candidate.email) {
-      throw new Error(`Identity conflict: ${playerId} is linked to ${linkedUser.data().email}. Remove that account link before changing Player Master to ${candidate.email}.`);
+      openEmailTransfer(existing, candidate, linkedUser);
+      return;
     }
     const accountLinkRef = doc(db, "playerAccountLinks", playerId);
     await runTransaction(db, async transaction => {
@@ -359,9 +591,18 @@ $("#closeImportPlayers").addEventListener("click", () => closeDialog(importDialo
 $("#cancelImportPlayers").addEventListener("click", () => closeDialog(importDialog));
 $("#closeEditPlayer").addEventListener("click", () => closeDialog(editDialog));
 $("#cancelEditPlayer").addEventListener("click", () => closeDialog(editDialog));
+$("#closeEmailTransfer").addEventListener("click", () => {
+  pendingEmailTransfer = null;
+  closeDialog(emailTransferDialog);
+});
+$("#cancelEmailTransfer").addEventListener("click", () => {
+  pendingEmailTransfer = null;
+  closeDialog(emailTransferDialog);
+});
 addForm.addEventListener("submit", submitAddPlayer);
 importForm.addEventListener("submit", commitExcel);
 editForm.addEventListener("submit", submitEditPlayer);
+emailTransferForm.addEventListener("submit", transferPlayerEmail);
 $("#playerImportFile").addEventListener("change", event => event.target.files[0] && prepareExcel(event.target.files[0]).catch(error => { importSummary.textContent = error.message; commitImport.disabled = true; }));
 $("#downloadPlayerTemplate").addEventListener("click", async () => {
   const XLSX = await loadXlsx();

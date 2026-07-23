@@ -61,8 +61,11 @@ function setAccount(key, announce = false) {
   $$("[data-super-admin]").forEach(
     (el) => (el.hidden = account.role !== "Super Admin"),
   );
+  const requestedRoute = location.hash.slice(1) || "home";
+  const requestedView = $(`.view[data-view="${requestedRoute}"]`);
   const active = $(".view.active");
-  if (active && !allowed(active, account)) navigate("home");
+  if ((requestedView && !allowed(requestedView, account)) || (active && !allowed(active, account)))
+    navigate("home");
   const historyPlayerFilter = $("#historyPlayerFilter");
   if (historyPlayerFilter)
     historyPlayerFilter.dataset.preferredPlayerId =
@@ -81,7 +84,13 @@ function renderWorkspace(account) {
   $("#welcomeTitle").textContent =
     account.role === "Guest"
       ? "Welcome to AlphaOpen"
-      : `Welcome, ${account.name.split(" ")[0]}`;
+      : `Welcome, ${account.name}`;
+  const workspaceIdentity = $("#workspaceIdentity");
+  workspaceIdentity.hidden = account.role === "Guest";
+  workspaceIdentity.textContent =
+    account.role === "Guest"
+      ? ""
+      : `${account.playerId ? `Player ID: ${account.playerId} · ` : ""}Email: ${account.email}`;
   $("#roleBadge").textContent = account.role;
   const copy = {
     Guest:
@@ -101,7 +110,24 @@ function renderWorkspace(account) {
     "Account suspended":
       "Your AlphaOpen access is suspended. Contact an AlphaOpen Super Admin for assistance.",
   };
-  $("#welcomeCopy").textContent = copy[account.role] || copy.Guest;
+  let workspaceCopy = copy[account.role] || copy.Guest;
+  if (account.role === "Captain") {
+    const memberTeamIds = new Set(account.teamIds || []);
+    const assignedTeams = [...teamsById.values()].filter(
+      (team) =>
+        memberTeamIds.has(team.teamId) ||
+        (account.playerId &&
+          Array.isArray(team.captainPlayerIds) &&
+          team.captainPlayerIds.includes(account.playerId)),
+    );
+    const assignedLabels = assignedTeams.length
+      ? assignedTeams.map((team) => team.name || team.teamId)
+      : [...memberTeamIds];
+    workspaceCopy = assignedLabels.length
+      ? `Your captain account is active for ${assignedLabels.join(", ")} in the active season.`
+      : "Your captain account is active; an active-season team assignment is still required.";
+  }
+  $("#welcomeCopy").textContent = workspaceCopy;
   const activeSeason =
     (activeWorkspaceSeason ? { season: activeWorkspaceSeason } : null) ||
     historySeasons.find(
@@ -129,25 +155,32 @@ function renderWorkspace(account) {
       activeSeasonLabel,
       "Click here to see current season’s teams, schedule, ranking and match results.",
     ],
+    [
+      "matches",
+      "Matches",
+      "Click here to see today’s, upcoming and recently completed matches and generate posters on the fly.",
+    ],
   ];
+  if (account.role !== "Super Admin" && account.access.includes("captain"))
+    actions.push(["lineup", "Build & Submit Lineup", "Run SOR checks"]);
+  if (account.role !== "Super Admin" && account.access.includes("approver"))
+    actions.push(["approvals", "Review lineups", "Publish both together"]);
+  if (account.role === "Super Admin")
+    actions.push(["admin", "Season admin", "Manage people and data"]);
+  if (account.access.includes("player"))
+    actions.push(["history", "My Player History", "View all matches played by me", "my-player-history"]);
   if (completedSeason)
     actions.push([
       "schedule",
-      `Completed season: ${completedSeason.seasonId} · ${completedSeason.name || completedSeason.seasonId}`,
+      `Past season: ${completedSeason.seasonId} · ${completedSeason.name || completedSeason.seasonId}`,
       "Click here to see Spring 2026 teams, standings, playoffs and match results.",
+      "",
+      "past-season-action",
     ]);
-  if (account.role !== "Super Admin" && account.access.includes("captain"))
-    actions.push(["lineup", "Build lineup", "Run SOR checks"]);
-  if (account.role !== "Super Admin" && account.access.includes("approver"))
-    actions.push(["approvals", "Review lineups", "Publish both together"]);
-  if (account.access.includes("ec"))
-    actions.push(["admin", "Season admin", "Manage people and data"]);
-  if (account.access.includes("player"))
-    actions.push(["history", "My history", "Private Player ID record"]);
   $("#quickActions").innerHTML = actions
     .map(
-      ([route, title, sub]) =>
-        `<button data-route="${route}"><b>${title}</b><small>${sub}</small><span>→</span></button>`,
+      ([route, title, sub, action, className]) =>
+        `<button data-route="${route}"${action ? ` data-home-action="${action}"` : ""}${className ? ` class="${className}"` : ""}><b>${title}</b><small>${sub}</small><span>→</span></button>`,
     )
     .join("");
   $("#quickActions").hidden = actions.length === 0;
@@ -210,6 +243,14 @@ function bindRoutes(root = document) {
     if (!button.dataset.bound) {
       button.dataset.bound = "1";
       button.addEventListener("click", () => {
+        if (button.dataset.homeAction === "my-player-history") {
+          const playerFilter = $("#historyPlayerFilter"),
+            playerId = accounts[currentAccountKey]?.playerId || "";
+          if (playerFilter) {
+            playerFilter.value = "";
+            playerFilter.dataset.preferredPlayerId = playerId;
+          }
+        }
         navigate(button.dataset.route);
         button.closest("details")?.removeAttribute("open");
       });
@@ -1408,6 +1449,244 @@ function renderMatches(filter = "all") {
   );
 }
 
+function matchesPageDate(value) {
+  if (!value) return null;
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function matchesPageDateTime(value) {
+  const date = matchesPageDate(value);
+  return date
+    ? date.toLocaleString("en-US", {
+        month: "2-digit",
+        day: "2-digit",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "TBD";
+}
+
+function matchesPageTeam(teamId, snapshot) {
+  return teamsById.get(teamId)?.name || snapshot || teamId || "TBD";
+}
+
+function matchesPagePlayers(players) {
+  return (players || [])
+    .map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId)
+    .filter(Boolean)
+    .join(" / ") || "TBD";
+}
+
+function matchesPageScore(line) {
+  const sets = (line.sets || []).filter(
+    (set) => set && !(Number(set.home) === 0 && Number(set.away) === 0),
+  );
+  return sets.length ? sets.map((set) => `${set.home}-${set.away}`).join(" ") : "—";
+}
+
+function matchesPageWeekLine(line, matchup) {
+  const weekId = String(matchup.weekId || "");
+  const week = /^W\d+$/i.test(weekId)
+    ? `Week${weekId.replace(/\D/g, "")}`
+    : ({ QF: "Qualifiers", SF: "Semifinals", F: "Finals" }[weekId] || weekId);
+  return `${week}-L${line.lineNumber}`;
+}
+
+function matchesPageSection(title, subtitle, records, className) {
+  const labels = ["Week–Line", "Lineup ID", "Home Team", "Home Team Players", "Away Team", "Away Team Players", "Date & Time", "Venue", "Score", "Home Team Pts", "Away Team Pts"];
+  const rows = records
+    .map(({ line, matchup }) => {
+      const posterReady = ["scheduled", "completed"].includes(line.scheduleStatus);
+      const values = [
+        matchesPageWeekLine(line, matchup),
+        line.lineMatchId || `${matchup.matchupId}-L${line.lineNumber}`,
+        matchesPageTeam(matchup.homeTeamId, matchup.homeTeamNameSnapshot),
+        matchesPagePlayers(line.homePlayers),
+        matchesPageTeam(matchup.awayTeamId, matchup.awayTeamNameSnapshot),
+        matchesPagePlayers(line.awayPlayers),
+        matchesPageDateTime(line.scheduledAt),
+        line.venueNameSnapshot || "TBD",
+        matchesPageScore(line),
+        Number(line.homePoints || 0),
+        Number(line.awayPoints || 0),
+      ];
+      return `<tr>${values.map((value, index) => index === 1
+        ? `<td data-label="${safeText(labels[index])}"><button class="poster-link" type="button" data-public-poster="${safeText(line.lineMatchId || "")}" ${posterReady ? "" : "disabled"}>${safeText(value)}</button></td>`
+        : `<td data-label="${safeText(labels[index])}">${safeText(value)}</td>`).join("")}</tr>`;
+    })
+    .join("");
+  return `<section class="dashboard-card match-table-section ${className}">
+    <div class="match-table-heading"><div><h2>${safeText(title)}</h2><p>${safeText(subtitle)}</p></div><span class="badge navy">${records.length} matches</span></div>
+    ${rows ? `<div class="match-table-scroll"><table class="match-operations-table public-matches-table"><thead><tr>${labels.map((label) => `<th>${safeText(label)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty-state compact"><p>No matches in this section.</p></div>'}
+  </section>`;
+}
+
+function renderMatchesPage() {
+  const panel = $("#matchesPage");
+  if (!panel) return;
+  const seasonLabel = $("#matchesSeasonLabel");
+  if (seasonLabel)
+    seasonLabel.textContent = `Season: ${leagueSeason?.name || leagueSeason?.seasonName || leagueSeason?.seasonId || "Active season"}`;
+  if (!leagueDataLoaded) {
+    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading matches from Firebase…</b></div>';
+    return;
+  }
+  const matchupIndex = new Map(matchups.map((matchup) => [matchup.matchupId, matchup]));
+  const records = lineMatches
+    .map((line) => ({ line, matchup: matchupIndex.get(line.matchupId) }))
+    .filter((record) => record.matchup)
+    .sort((left, right) => {
+      const leftDate = matchesPageDate(left.line.scheduledAt);
+      const rightDate = matchesPageDate(right.line.scheduledAt);
+      if (leftDate && rightDate) return leftDate - rightDate;
+      if (leftDate) return -1;
+      if (rightDate) return 1;
+      return String(left.matchup.matchupId).localeCompare(String(right.matchup.matchupId)) || Number(left.line.lineNumber) - Number(right.line.lineNumber);
+    });
+  const today = new Date();
+  const sameDay = (date) => date && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+  const todayMatches = records.filter(({ line }) => {
+    const status = line.scheduleStatus || "toBeScheduled";
+    return !["completed", "canceled"].includes(status) && sameDay(matchesPageDate(line.scheduledAt));
+  });
+  const upcomingMatches = records.filter(({ line }) => {
+    const status = line.scheduleStatus || "toBeScheduled";
+    return !["completed", "canceled"].includes(status) && !sameDay(matchesPageDate(line.scheduledAt));
+  });
+  const completedMatches = records
+    .filter(({ line }) => line.scheduleStatus === "completed")
+    .sort((left, right) => (matchesPageDate(right.line.scheduledAt)?.getTime() || 0) - (matchesPageDate(left.line.scheduledAt)?.getTime() || 0));
+  panel.innerHTML = [
+    matchesPageSection("Today’s Matches", "Matches scheduled for today", todayMatches, "today"),
+    matchesPageSection("Upcoming Matches", "Scheduled and to-be-scheduled matches", upcomingMatches, "upcoming"),
+    matchesPageSection("Completed Matches", "Completed matches with official scores and points", completedMatches, "completed"),
+  ].join("");
+  const recordIndex = new Map(records.map((record) => [record.line.lineMatchId, record]));
+  panel.querySelectorAll("[data-public-poster]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const record = recordIndex.get(button.dataset.publicPoster);
+      if (!record) return;
+      const { line, matchup } = record;
+      window.dispatchEvent(new CustomEvent("alphaopen:generate-poster", { detail: {
+        seasonName: leagueSeason?.name || leagueSeason?.seasonName || leagueSeason?.seasonId || "AlphaOpen",
+        matchupId: matchup.matchupId,
+        lineupId: line.lineMatchId || `${matchup.matchupId}-L${line.lineNumber}`,
+        weekLabel: matchesPageWeekLine(line, matchup).replace(/-L\d+$/, ""),
+        lineNumber: line.lineNumber,
+        homeTeam: matchesPageTeam(matchup.homeTeamId, matchup.homeTeamNameSnapshot),
+        awayTeam: matchesPageTeam(matchup.awayTeamId, matchup.awayTeamNameSnapshot),
+        homePlayers: (line.homePlayers || []).map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId),
+        awayPlayers: (line.awayPlayers || []).map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId),
+        scheduledAt: matchesPageDate(line.scheduledAt)?.toISOString() || null,
+        venueName: line.venueNameSnapshot || "Venue TBD",
+        venueAddress: line.venueAddressSnapshot || "",
+        status: line.scheduleStatus || "toBeScheduled",
+        score: matchesPageScore(line),
+        homePoints: Number(line.homePoints || 0),
+        awayPoints: Number(line.awayPoints || 0),
+      }}));
+    });
+  });
+}
+
+/*
+function matchesPageDate(value) {
+  if (!value) return null;
+  const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function matchesPageDateTime(value) {
+  const date = matchesPageDate(value);
+  return date
+    ? date.toLocaleString("en-US", { month: "2-digit", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : "TBD";
+}
+
+function matchesPageTeam(teamId, snapshot) {
+  return teamsById.get(teamId)?.name || snapshot || teamId || "TBD";
+}
+
+function matchesPagePlayers(players) {
+  return (players || []).map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId).filter(Boolean).join(" / ") || "TBD";
+}
+
+function matchesPageScore(line) {
+  const sets = (line.sets || []).filter((set) => set && !(Number(set.home) === 0 && Number(set.away) === 0));
+  return sets.length ? sets.map((set) => `${set.home}-${set.away}`).join(" ") : "—";
+}
+
+function matchesPageWeekLine(line, matchup) {
+  const weekId = String(matchup.weekId || "");
+  const week = /^W\d+$/i.test(weekId) ? `Week${weekId.replace(/\D/g, "")}` : ({ QF: "Qualifiers", SF: "Semifinals", F: "Finals" }[weekId] || weekId);
+  return `${week}-L${line.lineNumber}`;
+}
+
+function matchesPageSection(title, subtitle, records, className) {
+  const labels = ["Week–Line", "Home Team", "Home Team Players", "Away Team", "Away Team Players", "Date & Time", "Venue", "Score", "Home Team Pts", "Away Team Pts"];
+  const rows = records.map(({ line, matchup }) => {
+    const values = [
+      matchesPageWeekLine(line, matchup),
+      matchesPageTeam(matchup.homeTeamId, matchup.homeTeamNameSnapshot),
+      matchesPagePlayers(line.homePlayers),
+      matchesPageTeam(matchup.awayTeamId, matchup.awayTeamNameSnapshot),
+      matchesPagePlayers(line.awayPlayers),
+      matchesPageDateTime(line.scheduledAt),
+      line.venueNameSnapshot || "TBD",
+      matchesPageScore(line),
+      Number(line.homePoints || 0),
+      Number(line.awayPoints || 0),
+    ];
+    return `<tr>${values.map((value, index) => `<td data-label="${safeText(labels[index])}">${safeText(value)}</td>`).join("")}</tr>`;
+  }).join("");
+  return `<section class="dashboard-card match-table-section ${className}">
+    <div class="match-table-heading"><div><h2>${safeText(title)}</h2><p>${safeText(subtitle)}</p></div><span class="badge navy">${records.length} matches</span></div>
+    ${rows ? `<div class="match-table-scroll"><table class="match-operations-table public-matches-table"><thead><tr>${labels.map((label) => `<th>${safeText(label)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty-state compact"><p>No matches in this section.</p></div>'}
+  </section>`;
+}
+
+function renderMatchesPage() {
+  const panel = $("#matchesPage");
+  if (!panel) return;
+  if (!leagueDataLoaded) {
+    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading matches from Firebase…</b></div>';
+    return;
+  }
+  const matchupIndex = new Map(matchups.map((matchup) => [matchup.matchupId, matchup]));
+  const records = lineMatches
+    .map((line) => ({ line, matchup: matchupIndex.get(line.matchupId) }))
+    .filter((record) => record.matchup)
+    .sort((left, right) => {
+      const leftDate = matchesPageDate(left.line.scheduledAt);
+      const rightDate = matchesPageDate(right.line.scheduledAt);
+      if (leftDate && rightDate) return leftDate - rightDate;
+      if (leftDate) return -1;
+      if (rightDate) return 1;
+      return String(left.matchup.matchupId).localeCompare(String(right.matchup.matchupId)) || Number(left.line.lineNumber) - Number(right.line.lineNumber);
+    });
+  const today = new Date();
+  const sameDay = (date) => date && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+  const todayMatches = records.filter(({ line }) => {
+    const status = line.scheduleStatus || "toBeScheduled";
+    return !["completed", "canceled"].includes(status) && sameDay(matchesPageDate(line.scheduledAt));
+  });
+  const upcomingMatches = records.filter(({ line }) => {
+    const status = line.scheduleStatus || "toBeScheduled";
+    return !["completed", "canceled"].includes(status) && !sameDay(matchesPageDate(line.scheduledAt));
+  });
+  const completedMatches = records
+    .filter(({ line }) => line.scheduleStatus === "completed")
+    .sort((left, right) => (matchesPageDate(right.line.scheduledAt)?.getTime() || 0) - (matchesPageDate(left.line.scheduledAt)?.getTime() || 0));
+  panel.innerHTML = [
+    matchesPageSection("Today’s Matches", "Matches scheduled for today", todayMatches, "today"),
+    matchesPageSection("Upcoming Matches", "Scheduled and to-be-scheduled matches", upcomingMatches, "upcoming"),
+    matchesPageSection("Completed Matches", "Completed matches with official scores and points", completedMatches, "completed"),
+  ].join("");
+}
+
+*/
 function renderHistory(account) {
   if (!historyDataLoaded) {
     $("#historyRows").innerHTML =
@@ -1432,6 +1711,8 @@ function renderHistory(account) {
         ),
       ),
   );
+  if (account?.playerId && !playerIndex.has(account.playerId))
+    playerIndex.set(account.playerId, account.name || account.playerId);
   const playerFilter = $("#historyPlayerFilter"),
     priorPlayerId = playerFilter?.value || "",
     preferredPlayerId = playerFilter?.dataset.preferredPlayerId || "",
@@ -1696,6 +1977,7 @@ window.alphaOpenDataUI = {
   applyLeagueData(data) {
     leagueSeason = data.season || null;
     teamsById = new Map((data.teams || []).map((team) => [team.teamId, team]));
+    renderWorkspace(accounts[currentAccountKey]);
     standings = [...(data.standings || [])].sort(
       (a, b) =>
         Number(a.playoffPosition || 99) - Number(b.playoffPosition || 99),
@@ -1719,6 +2001,7 @@ window.alphaOpenDataUI = {
       $("#seasonTeamCount").textContent = teamsById.size;
     renderStandings();
     renderMatches($("#weekFilter")?.value || "all");
+    renderMatchesPage();
     renderHistory(accounts[currentAccountKey]);
   },
   applyHistoryData(seasons) {
@@ -1792,10 +2075,11 @@ window.alphaOpenDataUI = {
 window.alphaOpenAuthUI = {
   applyUser(user, authorization = {}, announce = false) {
     window.alphaOpenAuthorization = authorization;
+    const playerName = authorization.playerName || user.displayName || user.email || "Google User";
     const authorizedAccount = {
-      name: user.displayName || user.email || "Google User",
+      name: playerName,
       email: user.email || "",
-      avatar: initials(user.displayName || user.email),
+      avatar: initials(playerName),
       role: authorization.role || "Pending approval",
       access: authorization.access || [],
       playerId: authorization.playerId || null,
@@ -1935,6 +2219,24 @@ window.addEventListener("alphaopen:spring-line-updated", (event) => {
   if (ok) {
     setTimeout(() => location.reload(), 700);
   }
+});
+$("#refreshMatches")?.addEventListener("click", () => {
+  const button = $("#refreshMatches");
+  button.disabled = true;
+  button.textContent = "Refreshing…";
+  $("#matchesPage").innerHTML =
+    '<div class="dashboard-card empty-state"><b>Refreshing matches from Firebase…</b></div>';
+  window.dispatchEvent(new CustomEvent("alphaopen:refresh-matches"));
+});
+window.addEventListener("alphaopen:matches-refreshed", (event) => {
+  const button = $("#refreshMatches");
+  if (button) {
+    button.disabled = false;
+    button.textContent = "Refresh";
+  }
+  if (!event.detail?.ok)
+    $("#matchesPage").innerHTML =
+      `<div class="dashboard-card empty-state"><b>Matches could not be refreshed</b><p>${event.detail?.message || "Please try again."}</p></div>`;
 });
 $("#menuButton").addEventListener("click", openDrawer);
 $("#closeDrawer").addEventListener("click", closeDrawer);

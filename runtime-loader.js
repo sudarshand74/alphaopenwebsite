@@ -1,12 +1,12 @@
 const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LOCAL_HOSTS.has(location.hostname),useFirebaseEmulator=isLocalDevelopment&&new URLSearchParams(location.search).get("firebase")==="emulator";
-const coreModules=["./firebase-auth.js?v=30","./firebase-data.js?v=42"];
+const coreModules=["./firebase-auth.js?v=34","./firebase-data.js?v=53"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
-const adminModuleForPanel={players:"./player-admin.js?v=28",rosters:"./roster-admin-v3.js?v=4",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=2","season-teams":"./season-structure-admin.js?v=1","season-matchups":"./season-structure-admin.js?v=1","lineup-approvers":"./lineup-approver-admin.js?v=3"};
+const adminModuleForPanel={players:"./player-admin.js?v=30","identity-audit":"./identity-reconciliation.js?v=7",rosters:"./roster-admin-v3.js?v=4",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=4","season-teams":"./season-structure-admin.js?v=1","season-matchups":"./season-structure-admin.js?v=1","lineup-approvers":"./lineup-approver-admin.js?v=4"};
 function loadRouteFeature(route){
   if(["fall2026","captain-schedule","captain-score"].includes(route))return importFeature("./season-operations.js?v=1");
   if(route==="ec-roster")return importFeature("./roster-admin-v3.js?v=4");
-  if(route==="ec-lineup")return importFeature("./lineup-update.js?v=2");
+  if(route==="ec-lineup")return importFeature("./lineup-update.js?v=4");
   if(route==="admin")return importFeature(adminModuleForPanel[document.querySelector("[data-admin-panel].active")?.dataset.adminPanel]||adminModuleForPanel.players);
   return Promise.resolve();
 }
@@ -28,12 +28,10 @@ if(!isLocalDevelopment||useFirebaseEmulator){
 }else{
   window.alphaOpenLocalDevelopment=true;
   document.body.classList.add("local-development");
-  const user={uid:"LOCAL-DEV-SUPER-ADMIN",displayName:"Sudarshan Desai",email:"sudarshandesai74@gmail.com",emailVerified:true};
-  const authorization={role:"Super Admin",access:["player","captain","approver","ec"],playerId:"P1201",status:"active"};
-  window.alphaOpenProfileReady={uid:user.uid,status:"ready",localDevelopment:true};
-  window.alphaOpenAuthUI?.applyUser(user,authorization,false);
+  window.alphaOpenProfileReady=null;
+  window.alphaOpenAuthUI?.applyGuest();
   const authStatus=document.querySelector("#authStatus"),prototypeBar=document.querySelector(".prototype-bar>span");
-  if(authStatus)authStatus.textContent="Local Super Admin";
+  if(authStatus)authStatus.textContent="Local development · Guest";
   if(prototypeBar)prototypeBar.innerHTML="<b>AlphaOpen</b><span class=\"desktop-only\"> · Local development · Firebase disabled</span>";
   window.alphaOpenDataUI?.showError("Local development mode is active. Firebase reads and writes are disabled.");
   window.alphaOpenDataUI?.showHistoryError("Local development mode is active. Firebase reads and writes are disabled.");
@@ -47,7 +45,7 @@ if(!isLocalDevelopment||useFirebaseEmulator){
   window.addEventListener("alphaopen:request-signin",async()=>{
     if(firebaseAuthEnabled)return;
     firebaseAuthEnabled=true;
-    await import("./firebase-auth.js?v=30");
+    await import("./firebase-auth.js?v=33");
     window.dispatchEvent(new CustomEvent("alphaopen:request-signin"));
   });
 }

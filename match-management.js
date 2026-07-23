@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { collection, doc, getDoc, getDocs, getFirestore, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { calculateMatchScore } from "./score-rules.js?v=1";
 
 const config = {
@@ -16,13 +16,22 @@ else app = initializeApp(config);
 const auth = getAuth(app);
 const db = getFirestore(app);
 let state;
+const feedbackByLineId = new Map();
 
 function byId(id) { return document.getElementById(id); }
 function message(value) { byId("matchManagementMessage").textContent = value; }
 function isManager(user) {
   if (user.email && user.email.toLowerCase() === "sudarshandesai74@gmail.com") return true;
   const authorization = window.alphaOpenAuthorization;
-  return Boolean(authorization && authorization.access && authorization.access.includes("ec"));
+  const authorizationRoles = authorization && Array.isArray(authorization.roles) ? authorization.roles : [];
+  const membershipRoles = state && state.member && Array.isArray(state.member.roles) ? state.member.roles : [];
+  return Boolean(
+    authorization && authorization.access && authorization.access.includes("ec") ||
+    authorizationRoles.includes("ec") ||
+    authorizationRoles.includes("superAdmin") ||
+    membershipRoles.includes("ec") ||
+    membershipRoles.includes("superAdmin")
+  );
 }
 function playerPair(players) {
   return (players || []).map(function (player) { return player.nameSnapshot || player.playerId; }).join(" / ");
@@ -41,8 +50,59 @@ function option(value, label, selected) {
   node.selected = Boolean(selected);
   return node;
 }
+function setCardFeedback(article, text, tone = "error") {
+  const feedback = article.querySelector("[data-save-feedback]");
+  if (!feedback) return;
+  feedback.textContent = text;
+  feedback.className = "managed-save-message " + tone;
+}
 function captainLabel(team) {
   return team.captainNameSnapshot || team.captainName || String(team.name || team.teamId).replace(/^Team\s+/i, "");
+}
+function venueFullAddress(venue) {
+  if (!venue) return null;
+  return venue.fullAddress || [
+    venue.address || venue.addressLine1 || venue.address1,
+    venue.addressLine2 || venue.address2,
+    venue.city,
+    venue.state,
+    venue.postalCode
+  ].filter(Boolean).join(", ") || null;
+}
+function rosterPlayers(teamId, currentPlayers) {
+  const players = new Map();
+  (state.rostersByTeam.get(teamId) || []).forEach(function (player) { players.set(player.playerId, player); });
+  (currentPlayers || []).forEach(function (player) {
+    if (!players.has(player.playerId)) players.set(player.playerId, {
+      playerId: player.playerId,
+      playerNameSnapshot: player.nameSnapshot || player.playerNameSnapshot || player.playerId,
+      rankNumber: player.rankNumber || player.rankSnapshot || null
+    });
+  });
+  return [...players.values()].sort(function (a, b) {
+    return Number(a.rankNumber || 99) - Number(b.rankNumber || 99);
+  });
+}
+function playerSelect(side, index, players, selectedId) {
+  const select = document.createElement("select");
+  select.dataset[side + "Player"] = String(index);
+  select.appendChild(option("", "Select player", !selectedId));
+  players.forEach(function (player) {
+    const name = player.playerNameSnapshot || player.nameSnapshot || player.playerId;
+    select.appendChild(option(player.playerId, "R" + (player.rankNumber || "-") + " · " + name + " (" + player.playerId + ")", player.playerId === selectedId));
+  });
+  return select;
+}
+function selectedPlayer(article, side, index, teamId, currentPlayers) {
+  const select = article.querySelector('[data-' + side + '-player="' + index + '"]');
+  const playerId = select && select.value;
+  const player = rosterPlayers(teamId, currentPlayers).find(function (item) { return item.playerId === playerId; });
+  if (!player) throw new Error("Select all four players. Match was not saved.");
+  return {
+    playerId: player.playerId,
+    nameSnapshot: player.playerNameSnapshot || player.nameSnapshot || player.playerId,
+    rankNumber: Number(player.rankNumber || player.rankSnapshot || 0)
+  };
 }
 function renderRecords() {
   const list = byId("matchManagementList");
@@ -59,9 +119,9 @@ function renderRecords() {
   if (!records.length) {
     list.innerHTML = '<div class="dashboard-card empty-state"><b>No matching line matches</b><p>Try another status or captain. Completed matches are hidden.</p></div>';
   } else records.forEach(function (record) { list.appendChild(renderCard(record)); });
-  const statusText = selectedStatus === "all" ? "To Be Scheduled or Scheduled" : selectedStatus === "scheduled" ? "Scheduled" : "To Be Scheduled";
+  const labels = { all: "To Be Scheduled or Scheduled", toBeScheduled: "To Be Scheduled", scheduled: "Scheduled" };
   const team = state.teams.find(function (item) { return item.teamId === selectedTeam; });
-  message(records.length + " " + statusText + " line matches" + (team ? " for Captain " + captainLabel(team) : "") + " loaded in date order. Completed matches are hidden.");
+  message(records.length + " " + (labels[selectedStatus] || selectedStatus) + " line matches" + (team ? " for Captain " + captainLabel(team) : "") + " loaded in date order. Completed matches are hidden.");
 }
 function readEnteredSets(article) {
   const sets = [];
@@ -122,6 +182,22 @@ function renderCard(record) {
   badge.className = "badge gray";
   badge.textContent = line.scheduleStatus || "toBeScheduled";
   heading.append(headingCopy, badge);
+
+  let playerGrid = null;
+  if (isManager(auth.currentUser)) {
+    title.textContent = "Line " + line.lineNumber + ": " + (record.matchup.homeTeamNameSnapshot || record.matchup.homeTeamId) + " vs " + (record.matchup.awayTeamNameSnapshot || record.matchup.awayTeamId);
+    playerGrid = document.createElement("div");
+    playerGrid.className = "managed-player-grid";
+    const homeRoster = rosterPlayers(record.matchup.homeTeamId, line.homePlayers);
+    const awayRoster = rosterPlayers(record.matchup.awayTeamId, line.awayPlayers);
+    [0, 1].forEach(function (index) {
+      const homeLabel = document.createElement("label");
+      homeLabel.append("Home player " + (index + 1), playerSelect("home", index, homeRoster, line.homePlayers && line.homePlayers[index] && line.homePlayers[index].playerId));
+      const awayLabel = document.createElement("label");
+      awayLabel.append("Away player " + (index + 1), playerSelect("away", index, awayRoster, line.awayPlayers && line.awayPlayers[index] && line.awayPlayers[index].playerId));
+      playerGrid.append(homeLabel, awayLabel);
+    });
+  }
 
   const form = document.createElement("div");
   form.className = "managed-line-form";
@@ -187,14 +263,59 @@ function renderCard(record) {
 
   const actions = document.createElement("div");
   actions.className = "approval-card-actions";
+  const saveFeedback = document.createElement("span");
+  saveFeedback.dataset.saveFeedback = "";
+  saveFeedback.className = "managed-save-message";
+  const previousFeedback = feedbackByLineId.get(line.lineMatchId);
+  if (previousFeedback) {
+    saveFeedback.textContent = previousFeedback.text;
+    saveFeedback.classList.add(previousFeedback.tone);
+  }
+  const posterButton = document.createElement("button");
+  posterButton.type = "button";
+  posterButton.className = "secondary";
+  posterButton.textContent = "Preview poster";
+  posterButton.disabled = !["scheduled", "completed"].includes(currentStatus);
+  posterButton.addEventListener("click", function () {
+    const venue = state.venues.find(function (item) { return item.venueId === line.venueId; }) || {};
+    const venueAddress = venueFullAddress(venue);
+    window.dispatchEvent(new CustomEvent("alphaopen:generate-poster", { detail: {
+      seasonName: state.season.name || state.seasonId,
+      matchupId: record.matchup.matchupId,
+      lineupId: line.lineMatchId || record.matchup.matchupId + "-L" + line.lineNumber,
+      weekLabel: record.matchup.weekId || "",
+      lineNumber: line.lineNumber,
+      homeTeam: (state.teams.find(function (item) { return item.teamId === record.matchup.homeTeamId; }) || {}).name || record.matchup.homeTeamNameSnapshot || record.matchup.homeTeamId,
+      awayTeam: (state.teams.find(function (item) { return item.teamId === record.matchup.awayTeamId; }) || {}).name || record.matchup.awayTeamNameSnapshot || record.matchup.awayTeamId,
+      homePlayers: (line.homePlayers || []).map(function (player) { return player.nameSnapshot || player.playerId; }),
+      awayPlayers: (line.awayPlayers || []).map(function (player) { return player.nameSnapshot || player.playerId; }),
+      scheduledAt: line.scheduledAt && line.scheduledAt.toDate ? line.scheduledAt.toDate().toISOString() : line.scheduledAt || null,
+      venueName: line.venueNameSnapshot || venue.venueName || venue.name || "Venue TBD",
+      venueAddress: venueAddress,
+      status: currentStatus,
+      score: (line.sets || []).filter(function (set) { return set && !(Number(set.home) === 0 && Number(set.away) === 0); }).map(function (set) { return set.home + "-" + set.away; }).join(" "),
+      homePoints: Number(line.homePoints || 0),
+      awayPoints: Number(line.awayPoints || 0)
+    }}));
+  });
   const saveButton = document.createElement("button");
   saveButton.className = "primary";
+  saveButton.dataset.saveMatch = "";
   saveButton.textContent = "Save schedule & score";
-  saveButton.addEventListener("click", function () {
-    save(article, record).catch(function (error) { message(error.message); });
+  saveButton.addEventListener("click", async function () {
+    saveButton.disabled = true;
+    setCardFeedback(article, "Saving...", "pending");
+    try {
+      await save(article, record);
+    } catch (error) {
+      saveButton.disabled = false;
+      setCardFeedback(article, error.message || "Match was not saved.", "error");
+    }
   });
-  actions.append(saveButton);
-  article.append(heading, form, score, actions);
+  actions.append(saveFeedback, posterButton, saveButton);
+  article.append(heading);
+  if (playerGrid) article.append(playerGrid);
+  article.append(form, score, actions);
   article.querySelectorAll("[data-home-set], [data-away-set], [data-venue], [data-played]").forEach(function (control) {
     control.addEventListener("input", function () { updatePreview(article); });
     control.addEventListener("change", function () { updatePreview(article); });
@@ -237,9 +358,23 @@ async function save(article, record) {
   let scoreStatus = "scheduled";
   if (finalStatus === "canceled") scoreStatus = "canceled";
   else if (result) scoreStatus = "published";
-  await updateDoc(record.ref, {
+  if (finalStatus === "completed") {
+    const homeName = record.matchup.homeTeamNameSnapshot || record.matchup.homeTeamId;
+    const awayName = record.matchup.awayTeamNameSnapshot || record.matchup.awayTeamId;
+    const scoreText = sets.map(function (set) { return set.home + "-" + set.away; }).join(" ");
+    const confirmed = window.confirm(
+      "Confirm final score?\n\n" +
+      homeName + " vs " + awayName + "\n" +
+      "Score: " + scoreText + "\n" +
+      "Points: " + result.homePoints + "-" + result.awayPoints +
+      "\n\nOnce saved, the score update button will be disabled."
+    );
+    if (!confirmed) throw new Error("Score update canceled. No changes were saved.");
+  }
+  const payload = {
     venueId: venueId || null,
     venueNameSnapshot: venueName,
+    venueAddressSnapshot: venueFullAddress(venue),
     scheduledAt: scheduledAt,
     sets: sets,
     scheduleStatus: finalStatus,
@@ -248,11 +383,46 @@ async function save(article, record) {
     awayPoints: finalStatus === "completed" ? result.awayPoints : 0,
     winnerTeamId: winnerTeamId,
     updatedAt: serverTimestamp()
-  });
+  };
+  if (isManager(auth.currentUser)) {
+    const homePlayers = [0, 1].map(function (index) {
+      return selectedPlayer(article, "home", index, record.matchup.homeTeamId, record.line.homePlayers);
+    });
+    const awayPlayers = [0, 1].map(function (index) {
+      return selectedPlayer(article, "away", index, record.matchup.awayTeamId, record.line.awayPlayers);
+    });
+    const playerIds = homePlayers.concat(awayPlayers).map(function (player) { return player.playerId; });
+    if (new Set(playerIds).size !== 4) throw new Error("All four players must be unique. Match was not saved.");
+    payload.homePlayers = homePlayers;
+    payload.awayPlayers = awayPlayers;
+  }
+  const publicRef = doc(db, "publicSeasons", state.seasonId, "matchups", record.matchup.matchupId, "lineMatches", record.line.lineMatchId);
+  const batch = writeBatch(db);
+  batch.update(record.ref, payload);
+  const publicPayload = Object.assign({}, record.line, payload);
+  batch.set(publicRef, publicPayload);
+  await batch.commit();
+  window.dispatchEvent(new CustomEvent("alphaopen:match-line-updated", {
+    detail: { seasonId: state.seasonId, matchupId: record.matchup.matchupId, lineMatchId: record.line.lineMatchId }
+  }));
+  const successText = finalStatus === "completed"
+    ? "Scores were updated."
+    : finalStatus === "scheduled"
+      ? "Match schedule saved."
+      : "Match canceled.";
+  feedbackByLineId.set(record.line.lineMatchId, { text: successText, tone: "success" });
+  if (finalStatus === "completed") {
+    Object.assign(record.line, payload);
+    setCardFeedback(article, successText, "success");
+    const saveButton = article.querySelector("[data-save-match]");
+    if (saveButton) {
+      saveButton.disabled = true;
+      saveButton.textContent = "Score updated";
+    }
+    setVisualStatus(article, "completed");
+    return;
+  }
   await load(auth.currentUser);
-  if (finalStatus === "completed") message("Match completed.");
-  else if (finalStatus === "scheduled") message("Match scheduled.");
-  else if (finalStatus === "canceled") message("Match canceled.");
 }
 async function load(user) {
   message("Loading active-season line matches...");
@@ -265,16 +435,27 @@ async function load(user) {
     getDoc(doc(seasonRef, "members", user.uid)),
     getDocs(collection(seasonRef, "teams")),
     getDocs(collection(seasonRef, "matchups")),
-    getDocs(collection(db, "venues"))
+    getDocs(collection(db, "venues")),
+    getDocs(collection(seasonRef, "rosterAssignments"))
   ]);
+  const rostersByTeam = new Map();
+  results[5].docs.forEach(function (item) {
+    const player = Object.assign({ assignmentId: item.id }, item.data());
+    if (player.status && player.status !== "active") return;
+    if (!rostersByTeam.has(player.teamId)) rostersByTeam.set(player.teamId, []);
+    rostersByTeam.get(player.teamId).push(player);
+  });
   state = {
     seasonId: seasonId,
     season: results[0].data(),
     member: results[1].data() || {},
     teams: results[2].docs.map(function (item) { return Object.assign({ teamId: item.id }, item.data()); }),
     matchups: results[3].docs.map(function (item) { return Object.assign({ matchupId: item.id }, item.data()); }),
-    venues: results[4].docs.map(function (item) { return Object.assign({ venueId: item.id }, item.data()); })
+    venues: results[4].docs.map(function (item) { return Object.assign({ venueId: item.id }, item.data()); }),
+    rostersByTeam: rostersByTeam
   };
+  const membershipRoles = Array.isArray(state.member.roles) ? state.member.roles : [];
+  if (!isManager(user) && !membershipRoles.includes("captain")) throw new Error("Only Captains, ECs, and Super Admins can update schedules and scores.");
   byId("matchManagementSeason").replaceChildren(option(seasonId, state.season.name || seasonId, true));
   byId("matchManagementRole").textContent = isManager(user) ? "EC / Super Admin" : "Captain";
   let permitted = null;
@@ -282,6 +463,11 @@ async function load(user) {
   const records = [];
   for (const matchup of state.matchups) {
     if (permitted && !permitted.has(matchup.homeTeamId) && !permitted.has(matchup.awayTeamId)) continue;
+    if (
+      matchup.lineupsPublished !== true &&
+      matchup.homeLineupStatus !== "approved" &&
+      matchup.awayLineupStatus !== "approved"
+    ) continue;
     const snapshot = await getDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
     snapshot.docs.forEach(function (item) {
       records.push({ matchup: matchup, line: Object.assign({ lineMatchId: item.id }, item.data()), ref: item.ref });

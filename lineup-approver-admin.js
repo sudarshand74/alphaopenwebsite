@@ -37,9 +37,13 @@ async function load(){
     if(!rows.length){message("Firebase returned zero season records.");return;}
     message(`${rows.length} seasons loaded. Reading registered players…`);
     await renderApprovers();
-    const users=await getDocs(collection(db,"users"));
-    players=users.docs.map(item=>({uid:item.id,...item.data()})).filter(item=>item.status==="active"&&item.playerId).sort((a,b)=>String(a.displayName||a.email).localeCompare(String(b.displayName||b.email)));
-    playerSelect.innerHTML='<option value="">Select a registered player</option>'+players.map(item=>`<option value="${esc(item.uid)}">${esc(item.displayName||item.email)} · ${esc(item.playerId)}</option>`).join("");
+    const [users,playerMaster]=await Promise.all([getDocs(collection(db,"users")),getDocs(collection(db,"players"))]);
+    const playerNames=new Map(playerMaster.docs.map(item=>[item.id,item.data().displayName||item.data().fullName||item.id]));
+    players=users.docs.map(item=>{
+      const user={uid:item.id,...item.data()};
+      return {...user,playerName:playerNames.get(user.playerId)||user.displayName||user.email};
+    }).filter(item=>item.status==="active"&&item.playerId).sort((a,b)=>String(a.playerName).localeCompare(String(b.playerName)));
+    playerSelect.innerHTML='<option value="">Select a registered player</option>'+players.map(item=>`<option value="${esc(item.uid)}">${esc(item.playerName)} · ${esc(item.playerId)}</option>`).join("");
     message(`${rows.length} seasons · ${players.length} registered players available.${removedLegacyAssignments?` Removed ${removedLegacyAssignments} invalid legacy approver records.`:""}`);
   }catch(error){
     seasonSelect.innerHTML='<option value="">Firebase load failed</option>';
@@ -54,10 +58,10 @@ async function assign(){
   const assignmentRef=doc(db,"seasons",seasonId,"approverAssignments",uid),memberRef=doc(db,"seasons",seasonId,"members",uid);
   await runTransaction(db,async transaction=>{
     const member=await transaction.get(memberRef),roles=new Set(member.data()?.roles||["player"]);roles.add("neutralApprover");
-    transaction.set(assignmentRef,{approverUid:uid,approverPlayerId:player.playerId,approverName:player.displayName||player.email,approverEmail:player.email,scopeType:"season",status:"active",effectiveFrom:serverTimestamp(),effectiveTo:null,updatedByUid:auth.currentUser.uid,updatedAt:serverTimestamp()},{merge:true});
+    transaction.set(assignmentRef,{approverUid:uid,approverPlayerId:player.playerId,approverName:player.playerName,approverEmail:player.email,scopeType:"season",status:"active",effectiveFrom:serverTimestamp(),effectiveTo:null,updatedByUid:auth.currentUser.uid,updatedAt:serverTimestamp()},{merge:true});
     transaction.set(memberRef,{uid,playerId:player.playerId,status:"active",roles:[...roles],teamIds:member.data()?.teamIds||[],updatedAt:serverTimestamp()},{merge:true});
   });
-  message(`${player.displayName||player.email} assigned as a season approver.`);await renderApprovers();
+  message(`${player.playerName} assigned as a season approver.`);await renderApprovers();
 }
 
 async function setStatus(uid,status){

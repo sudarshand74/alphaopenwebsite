@@ -4,7 +4,9 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromCache,
   getDocs,
+  getDocsFromCache,
   limit,
   orderBy,
   query,
@@ -28,40 +30,74 @@ const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
 let publishedHistorySeasons = [];
 const readCache = new Map();
+const PUBLIC_READ_TTL_MS = 5 * 60 * 1000;
+const OPERATIONAL_READ_TTL_MS = 60 * 1000;
+const CACHE_STAMP_PREFIX = "alphaopen:firestore-cache:";
+const ACTIVE_SEASON_SNAPSHOT_KEY = "alphaopen:active-season-snapshot";
 
-function cachedRead(key, loader) {
-  if (readCache.has(key)) return readCache.get(key);
+function cacheTimestamp(key) {
+  try { return Number(localStorage.getItem(CACHE_STAMP_PREFIX + key) || 0); }
+  catch { return 0; }
+}
+function markCacheFresh(key) {
+  try { localStorage.setItem(CACHE_STAMP_PREFIX + key, String(Date.now())); }
+  catch { /* Storage can be unavailable in private browsing. */ }
+}
+function cachedRead(key, loader, ttl = PUBLIC_READ_TTL_MS) {
+  const cached = readCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.request;
   const request = Promise.resolve().then(loader).catch((error) => {
     readCache.delete(key);
     throw error;
   });
-  readCache.set(key, request);
+  readCache.set(key, { request, expiresAt: Date.now() + ttl });
   return request;
+}
+async function cacheFirstRead(key, serverLoader, cacheLoader, ttl = PUBLIC_READ_TTL_MS) {
+  return cachedRead(key, async () => {
+    if (Date.now() - cacheTimestamp(key) < ttl) {
+      try { return await cacheLoader(); }
+      catch (error) { console.info(`Firestore cache miss for ${key}; refreshing from server.`, error); }
+    }
+    const value = await serverLoader();
+    markCacheFresh(key);
+    return value;
+  }, ttl);
 }
 
 function publicSeasonsOnce() {
-  return cachedRead("public-seasons", async () => {
-    const snapshot = await getDocs(collection(db, "publicSeasons"));
-    return snapshot.docs.map((item) => ({ seasonId: item.id, ref: item.ref, ...item.data() }));
-  });
+  const reference = collection(db, "publicSeasons"),
+    mapSnapshot = (snapshot) => snapshot.docs.map((item) => ({ seasonId: item.id, ref: item.ref, ...item.data() }));
+  return cacheFirstRead(
+    "public-seasons",
+    async () => mapSnapshot(await getDocs(reference)),
+    async () => mapSnapshot(await getDocsFromCache(reference)),
+  );
 }
 
 function seasonTree(seasonRef, cacheKey, includeStandings = false) {
-  return cachedRead(cacheKey, async () => {
+  const ttl = cacheKey.startsWith("operational-tree:")
+    ? OPERATIONAL_READ_TTL_MS
+    : cacheKey.startsWith("public-live:")
+      ? 15 * 1000
+      : PUBLIC_READ_TTL_MS;
+  const loadTree = async (fromCache = false) => {
+    const readDoc = fromCache ? getDocFromCache : getDoc,
+      readDocs = fromCache ? getDocsFromCache : getDocs;
     const baseReads = [
-      getDoc(seasonRef),
-      getDocs(collection(seasonRef, "teams")),
-      getDocs(collection(seasonRef, "matchups")),
-      getDocs(collection(seasonRef, "rosterAssignments")),
-      getDocs(collection(seasonRef, "weeks")),
+      readDoc(seasonRef),
+      readDocs(collection(seasonRef, "teams")),
+      readDocs(collection(seasonRef, "matchups")),
+      readDocs(collection(seasonRef, "rosterAssignments")),
+      readDocs(collection(seasonRef, "weeks")),
     ];
-    if (includeStandings) baseReads.push(getDocs(collection(seasonRef, "standings")));
+    if (includeStandings) baseReads.push(readDocs(collection(seasonRef, "standings")));
     const [seasonSnapshot, teamsSnapshot, matchupsSnapshot, rosterSnapshot, weeksSnapshot, standingsSnapshot] =
       await Promise.all(baseReads);
     if (!seasonSnapshot.exists()) throw new Error(`Season ${seasonRef.id} was not found.`);
     const matchups = matchupsSnapshot.docs.map((snapshot) => ({ matchupId: snapshot.id, ...snapshot.data() }));
     const lineGroups = await Promise.all(matchups.map(async (matchup) => {
-      const snapshot = await getDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
+      const snapshot = await readDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
       return snapshot.docs.map((line) => ({ lineMatchId: line.id, matchupId: matchup.matchupId, ...line.data() }));
     }));
     return {
@@ -73,11 +109,21 @@ function seasonTree(seasonRef, cacheKey, includeStandings = false) {
       rosterAssignments: rosterSnapshot.docs.map((snapshot) => ({ assignmentId: snapshot.id, ...snapshot.data() })),
       standings: standingsSnapshot?.docs.map((snapshot) => ({ teamId: snapshot.id, ...snapshot.data() })) || [],
     };
-  });
+  };
+  return cacheFirstRead(
+    cacheKey,
+    () => loadTree(false),
+    () => loadTree(true),
+    ttl,
+  );
 }
 
 async function loadPublicActiveSeason() {
   try {
+    try {
+      const cachedActive = JSON.parse(localStorage.getItem(ACTIVE_SEASON_SNAPSHOT_KEY) || "null");
+      if (cachedActive?.seasonId) window.alphaOpenDataUI?.applyActiveSeason(cachedActive);
+    } catch { /* Ignore malformed or unavailable browser storage. */ }
     const seasons = await publicSeasonsOnce();
     window.alphaOpenDataUI?.applyPublicSeasons(seasons);
     const today = new Date().toISOString().slice(0, 10);
@@ -102,10 +148,38 @@ async function loadPublicActiveSeason() {
       [...seasons].sort(newestFirst)[0] ||
       null;
     window.alphaOpenDataUI?.applyActiveSeason(active);
+    if (active?.seasonId) {
+      try { localStorage.setItem(ACTIVE_SEASON_SNAPSHOT_KEY, JSON.stringify(active)); }
+      catch { /* Storage can be unavailable in private browsing. */ }
+    }
+    return active;
   } catch (error) {
     console.error("Public active season lookup failed", error);
+    return null;
   }
 }
+
+async function loadActiveSeasonMatches() {
+  const active = await loadPublicActiveSeason();
+  if (!active?.seasonId) throw new Error("No active public season is configured.");
+  window.alphaOpenDataUI?.applyLeagueData(
+    await seasonTree(
+      doc(db, "publicSeasons", active.seasonId),
+      `public-live:${active.seasonId}`,
+      true,
+    ),
+  );
+}
+
+window.addEventListener("alphaopen:match-line-updated", (event) => {
+  const seasonId = event.detail?.seasonId;
+  if (!seasonId) return;
+  [`operational-tree:${seasonId}`, `public-live:${seasonId}`, `public-league:${seasonId}`, `public-tree:${seasonId}`].forEach((key) => {
+    readCache.delete(key);
+    try { localStorage.removeItem(CACHE_STAMP_PREFIX + key); }
+    catch { /* Storage can be unavailable in private browsing. */ }
+  });
+});
 async function loadPublishedHistoryData() {
   try {
     const published = await publicSeasonsOnce();
@@ -413,6 +487,9 @@ function escapeHtml(value) {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;"
   })[character]);
 }
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
 
 function primaryProfile(roles, playerId) {
   return roles.includes("superAdmin") ? "superAdmin"
@@ -440,10 +517,17 @@ async function loadRegisteredUsers() {
   const loadId = ++registeredUsersLoadId;
   registeredUsersPanel.innerHTML = '<p class="muted">Loading registered users…</p>';
   try {
-    const [usersSnapshot, seasonsSnapshot] = await withTimeout(
-      Promise.all([getDocs(collection(db, "users")), getDocs(query(collection(db, "seasons"), orderBy("year", "desc")))]),
+    const [usersSnapshot, seasonsSnapshot, playersSnapshot] = await withTimeout(
+      Promise.all([
+        getDocs(collection(db, "users")),
+        getDocs(query(collection(db, "seasons"), orderBy("year", "desc"))),
+        getDocs(collection(db, "players"))
+      ]),
       12000,
       "Firestore did not respond in time. Check your connection and retry."
+    );
+    const playerNames = new Map(
+      playersSnapshot.docs.map(item => [item.id, item.data().displayName || item.id])
     );
     seasonRecords = seasonsSnapshot.docs.map(item => ({ ...item.data(), seasonId: item.id }));
     if (loadId !== registeredUsersLoadId) return;
@@ -456,7 +540,14 @@ async function loadRegisteredUsers() {
       const user = userDocument.data();
       const baseRoles = [...(user.globalRoles || [])];
       if (user.profileType === "player" && user.playerId) baseRoles.push("player");
-      const record = { uid: userDocument.id, user, roles: [...new Set(baseRoles)], memberships: new Map(), registration: null };
+      const record = {
+        uid: userDocument.id,
+        user,
+        playerName: user.playerId ? playerNames.get(user.playerId) || "" : "",
+        roles: [...new Set(baseRoles)],
+        memberships: new Map(),
+        registration: null
+      };
       managedUsers.set(userDocument.id, record);
       return record;
     });
@@ -491,8 +582,8 @@ function renderRegisteredUsers(records, filter = "") {
     const filtered = records.filter(record => {
       const status = record.user.status || "pending";
       const profile = status === "active" ? primaryProfile(record.roles, record.user.playerId) : "pending";
-      return !term || [record.user.displayName, record.user.email, record.user.playerId, status, profileLabel(profile), ...record.roles].some(value => String(value ?? "").toLowerCase().includes(term));
-    }).sort((a, b) => (a.user.displayName || a.user.email).localeCompare(b.user.displayName || b.user.email));
+      return !term || [record.playerName, record.user.displayName, record.user.email, record.user.playerId, status, profileLabel(profile), ...record.roles].some(value => String(value ?? "").toLowerCase().includes(term));
+    }).sort((a, b) => (a.playerName || a.user.displayName || a.user.email).localeCompare(b.playerName || b.user.displayName || b.user.email));
     if (!filtered.length) {
       registeredUsersPanel.innerHTML = `<div class="empty-state compact"><b>${term ? "No matching users" : "No registered users"}</b><p>${term ? "Try a different name, email, Player ID, status, or profile." : "A registration appears after the first verified Google sign-in."}</p></div>`;
       return;
@@ -505,7 +596,10 @@ function renderRegisteredUsers(records, filter = "") {
       const actions = protectedAccount ? '<span class="badge navy">Protected account</span>' : status === "pending"
         ? `<button class="primary" data-user-action="approve" data-uid="${record.uid}">Approve</button><button class="secondary" data-user-action="reject" data-uid="${record.uid}">Reject</button>${deleteAction}`
         : `<button class="secondary" data-user-action="manage" data-uid="${record.uid}">Manage access</button>${deleteAction}`;
-      return `<div class="registered-user-row"><div><b>${escapeHtml(record.user.displayName || record.user.email)}</b><small>${escapeHtml(record.user.email)}</small><small>${record.user.playerId ? `Player ID: ${escapeHtml(record.user.playerId)}` : "No Player Master link"}</small></div><div><span class="badge ${status === "active" ? "lime" : status === "rejected" ? "orange" : "gray"}">${escapeHtml(status)}</span><small>${escapeHtml(profileLabel(profile))}</small></div><div class="registered-user-actions">${actions}</div></div>`;
+      const playerIdentity = record.user.playerId
+        ? `Player ID: ${escapeHtml(record.user.playerId)}${record.playerName ? ` · ${escapeHtml(record.playerName)}` : ""}`
+        : "No Player Master link";
+      return `<div class="registered-user-row"><div><b>${escapeHtml(record.playerName || record.user.displayName || record.user.email)}</b><small>${escapeHtml(record.user.email)}</small><small>${playerIdentity}</small></div><div><span class="badge ${status === "active" ? "lime" : status === "rejected" ? "orange" : "gray"}">${escapeHtml(status)}</span><small>${escapeHtml(profileLabel(profile))}</small></div><div class="registered-user-actions">${actions}</div></div>`;
     }).join("");
     registeredUsersPanel.querySelectorAll("[data-user-action]").forEach(button => button.addEventListener("click", () => handleUserAction(button.dataset.userAction, button.dataset.uid)));
 }
@@ -537,14 +631,29 @@ async function deleteUserProfile(record) {
     ]);
     const refs = [doc(db, "users", record.uid), doc(db, "registrationRequests", record.uid)];
     notificationsSnapshot.docs.forEach(notification => refs.push(notification.ref));
-    if (record.user.playerId) refs.push(doc(db, "playerAccountLinks", record.user.playerId));
+    const accountLinkRef = record.user.playerId
+      ? doc(db, "playerAccountLinks", record.user.playerId)
+      : null;
     seasonsSnapshot.docs.forEach(season => {
       refs.push(doc(db, "seasons", season.id, "members", record.uid));
       refs.push(doc(db, "seasons", season.id, "approverAssignments", `season_${record.uid}`));
     });
     await runTransaction(db, async transaction => {
-      const snapshots = await Promise.all(refs.map(reference => transaction.get(reference)));
-      snapshots.forEach((snapshot, index) => { if (snapshot.exists()) transaction.delete(refs[index]); });
+      const snapshots = await Promise.all([
+        ...refs.map(reference => transaction.get(reference)),
+        ...(accountLinkRef ? [transaction.get(accountLinkRef)] : [])
+      ]);
+      snapshots.slice(0, refs.length).forEach((snapshot, index) => {
+        if (snapshot.exists()) transaction.delete(refs[index]);
+      });
+      const accountLinkSnapshot = accountLinkRef ? snapshots[refs.length] : null;
+      if (
+        accountLinkSnapshot?.exists() &&
+        accountLinkSnapshot.data().uid === record.uid &&
+        accountLinkSnapshot.data().status === "active"
+      ) {
+        transaction.delete(accountLinkRef);
+      }
     });
     managedUsers.delete(record.uid);
     window.alphaOpenAuthUI.showMessage(`${record.user.displayName || record.user.email} profile deleted`);
@@ -570,17 +679,36 @@ async function approveRegistration(record) {
     const assignedProfileType = "player";
     const userRef = doc(db, "users", record.uid);
     const requestRef = doc(db, "registrationRequests", record.uid);
+    const accountLinkRef = doc(db, "playerAccountLinks", playerId);
+    let completedEmailTransfer = false;
     await runTransaction(db, async transaction => {
-      const [userSnapshot, requestSnapshot] = await Promise.all([
-        transaction.get(userRef), transaction.get(requestRef)
+      const [userSnapshot, requestSnapshot, accountLinkSnapshot] = await Promise.all([
+        transaction.get(userRef), transaction.get(requestRef), transaction.get(accountLinkRef)
       ]);
       if (!userSnapshot.exists()) throw new Error("The registered user no longer exists.");
+      const previousLink = accountLinkSnapshot.exists() ? accountLinkSnapshot.data() : {};
+      const isEmailTransfer =
+        previousLink.transferStatus === "awaitingRegistration" &&
+        normalizeEmail(previousLink.pendingNewEmail) === normalizedEmail;
+      completedEmailTransfer = isEmailTransfer;
+      const restoredGlobalRoles = isEmailTransfer
+        ? (previousLink.pendingGlobalRoles || []).filter(role => role !== "superAdmin")
+        : (userSnapshot.data().globalRoles || []);
       transaction.update(userRef, {
         status: "active",
         profileType: assignedProfileType,
         playerId,
+        globalRoles: restoredGlobalRoles,
+        playerEmailNormalized: normalizedEmail,
         updatedAt: serverTimestamp()
       });
+      transaction.set(doc(db, "playerPrivate", playerId), {
+        accountUid: record.uid,
+        accountStatus: "active",
+        emailNormalized: normalizedEmail,
+        updatedByUid: currentUser.uid,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       transaction.set(requestRef, {
         ...(requestSnapshot.exists() ? {} : { uid: record.uid, email: record.user.email, displayName: record.user.displayName || record.user.email, photoUrl: record.user.photoUrl || null, requestedAt: serverTimestamp() }),
         status: "approved",
@@ -591,13 +719,57 @@ async function approveRegistration(record) {
         assignedProfileType
       }, { merge: true });
       if (playerId) {
-        transaction.set(doc(db, "playerAccountLinks", playerId), {
+        transaction.set(accountLinkRef, {
           playerId, uid: record.uid, emailAtApproval: record.user.email, status: "active", linkMethod: "exactEmail",
-          approvedByUid: currentUser.uid, approvedAt: serverTimestamp(), revokedByUid: null, revokedAt: null, reason: null
+          approvedByUid: currentUser.uid, approvedAt: serverTimestamp(), revokedByUid: null, revokedAt: null, reason: null,
+          transferStatus: isEmailTransfer ? "completed" : null,
+          pendingNewEmail: null,
+          pendingGlobalRoles: [],
+          pendingSeasonAccess: [],
+          pendingApproverAccess: [],
+          transferCompletedAt: isEmailTransfer ? serverTimestamp() : null,
+          transferCompletedByUid: isEmailTransfer ? currentUser.uid : null
+        }, { merge: true });
+      }
+      if (isEmailTransfer) {
+        (previousLink.pendingSeasonAccess || []).forEach(access => {
+          if (!access.seasonId) return;
+          transaction.set(doc(db, "seasons", access.seasonId, "members", record.uid), {
+            uid: record.uid,
+            playerId,
+            roles: access.roles || ["player"],
+            teamIds: access.teamIds || [],
+            status: "active",
+            effectiveFrom: serverTimestamp(),
+            effectiveTo: null,
+            assignedByUid: currentUser.uid,
+            assignedAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        });
+        (previousLink.pendingApproverAccess || []).forEach(access => {
+          if (!access.seasonId) return;
+          transaction.set(doc(db, "seasons", access.seasonId, "approverAssignments", record.uid), {
+            approverUid: record.uid,
+            backupApproverUid: null,
+            scopeType: access.scopeType || "season",
+            weekId: access.weekId || null,
+            matchupId: access.matchupId || null,
+            priority: Number(access.priority) || 1,
+            status: "active",
+            effectiveFrom: serverTimestamp(),
+            effectiveTo: null,
+            assignedByUid: currentUser.uid,
+            assignedAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          }, { merge: true });
         });
       }
     });
-    window.alphaOpenAuthUI.showMessage(`${record.user.displayName || record.user.email} linked to ${playerId} and approved as Player. Use Manage access for active-season roles.`);
+    window.alphaOpenAuthUI.showMessage(
+      `${record.user.displayName || record.user.email} linked to ${playerId} and approved.` +
+      (completedEmailTransfer ? " Preserved season access was restored." : " Use Manage access for active-season roles."),
+    );
     await loadRegisteredUsers();
   } catch (error) {
     console.error("Registration approval failed", error);
@@ -785,6 +957,10 @@ async function loadForRoute(route, user = auth.currentUser) {
     await (user ? loadOperationalFallHistoryData() : loadPublicFallHistoryData());
     return;
   }
+  if (route === "matches") {
+    await loadActiveSeasonMatches();
+    return;
+  }
   if (route === "schedule") {
     await loadPublicLeagueData();
     return;
@@ -810,6 +986,27 @@ window.addEventListener("alphaopen:route-changed", (event) => {
     console.error("Route data load failed", error),
   );
 });
+
+window.addEventListener("alphaopen:refresh-matches", async () => {
+  try {
+    for (const key of [...readCache.keys()])
+      if (key.startsWith("operational-tree:") || key.startsWith("public-live:"))
+        readCache.delete(key);
+    await loadActiveSeasonMatches();
+    window.dispatchEvent(new CustomEvent("alphaopen:matches-refreshed", { detail: { ok: true } }));
+  } catch (error) {
+    console.error("Matches refresh failed", error);
+    window.dispatchEvent(new CustomEvent("alphaopen:matches-refreshed", {
+      detail: { ok: false, message: error.message || "Please try again." }
+    }));
+  }
+});
+
+// Active-season identity is public and should not wait for Firebase Auth to
+// finish restoring a user session.
+loadPublicActiveSeason().catch((error) =>
+  console.error("Initial public season preload failed", error),
+);
 
 window.addEventListener("alphaopen:admin-panel-changed", () => {
   startAdminLoads(auth.currentUser);
