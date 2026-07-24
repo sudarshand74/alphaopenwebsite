@@ -171,6 +171,26 @@ async function loadActiveSeasonMatches() {
   );
 }
 
+async function loadPendingApprovalCount(user, authorization = window.alphaOpenAuthorization) {
+  if (user && !authorization) return;
+  const canReview = authorization?.role === "Super Admin" || authorization?.access?.includes("approver");
+  if (!user || !canReview) {
+    window.alphaOpenDataUI?.applyPendingApprovalCount(null);
+    return;
+  }
+  const control = await getDoc(SEASON_CONTROL_REF);
+  const seasonId = authorization?.activeSeasonId || control.data()?.activeSeasonId;
+  if (!seasonId) {
+    window.alphaOpenDataUI?.applyPendingApprovalCount(0);
+    return;
+  }
+  const snapshot = await getDocs(collection(db, "seasons", seasonId, "matchups"));
+  const count = window.alphaOpenCountSubmittedLineups(
+    snapshot.docs.map((item) => item.data()),
+  );
+  window.alphaOpenDataUI?.applyPendingApprovalCount(count);
+}
+
 window.addEventListener("alphaopen:match-line-updated", (event) => {
   const seasonId = event.detail?.seasonId;
   if (!seasonId) return;
@@ -922,7 +942,13 @@ function startAdminLoads(user) {
   }
 }
 
-window.addEventListener("alphaopen:profile-ready", () => startAdminLoads(auth.currentUser));
+window.addEventListener("alphaopen:profile-ready", () => {
+  startAdminLoads(auth.currentUser);
+  loadPendingApprovalCount(auth.currentUser).catch((error) => {
+    console.error("Pending lineup approval count failed", error);
+    window.alphaOpenDataUI?.applyPendingApprovalCount(null);
+  });
+});
 
 window.addEventListener("alphaopen:update-spring-line",async event=>{
   const reply=(ok,message="")=>window.dispatchEvent(new CustomEvent("alphaopen:spring-line-updated",{detail:{ok,message}}));
@@ -950,6 +976,7 @@ function currentRoute() {
 async function loadForRoute(route, user = auth.currentUser) {
   if (route === "home") {
     await loadPublicActiveSeason();
+    await loadPendingApprovalCount(user);
     return;
   }
   if (route === "fall2026" || route === "season-dashboard") {
@@ -985,6 +1012,13 @@ window.addEventListener("alphaopen:route-changed", (event) => {
   loadForRoute(event.detail?.route || currentRoute()).catch((error) =>
     console.error("Route data load failed", error),
   );
+});
+
+window.addEventListener("alphaopen:authorization-changed", (event) => {
+  loadPendingApprovalCount(event.detail?.user, event.detail?.authorization).catch((error) => {
+    console.error("Pending lineup approval count failed", error);
+    window.alphaOpenDataUI?.applyPendingApprovalCount(null);
+  });
 });
 
 window.addEventListener("alphaopen:refresh-matches", async () => {

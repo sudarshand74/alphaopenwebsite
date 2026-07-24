@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=67">
+  <link rel="stylesheet" href="styles.css?v=71">
   <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
   <style>.quick-actions{grid-template-columns:1fr}.managed-player-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 22px 0}.managed-player-grid label{display:grid;gap:6px;font-size:.75rem;font-weight:850}.managed-player-grid select{width:100%;border:1px solid #cbd4de;border-radius:9px;background:#fff;padding:10px}.badge.red{background:#fee2e2;color:#991b1b}.match-detail{display:grid;gap:10px;padding:18px 0;border-top:1px solid var(--line);font-size:.82rem}.match-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--blue);font-size:.72rem;font-weight:900;text-transform:uppercase}.match-detail-title b{font-size:.98rem}.match-detail-identifiers,.match-detail-meta{display:flex;flex-wrap:wrap;gap:5px 20px;color:var(--muted);font-size:.72rem}.match-detail-identifiers b,.match-detail-meta b{color:var(--ink)}.match-detail-team{display:grid;gap:3px;padding:3px 0}.match-detail-team strong{font-size:.9rem}.match-detail-versus{color:var(--muted);font-size:.7rem;font-weight:900}.match-detail-result,.match-detail-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 24px}.match-detail-result{padding-top:4px;font-size:.88rem}.match-detail-status{justify-content:space-between}.match-detail-status strong{color:var(--blue)}.history-card .match-detail{border-bottom:2px solid var(--navy)}.history-card .match-detail+.match-detail{border-top:0}.selected-history-player{border-radius:4px;background:#dbeafe;color:#0d2f64;padding:2px 4px;font-weight:900}.match-detail .fall-admin-links{justify-self:start}@media(max-width:760px){.managed-player-grid{grid-template-columns:1fr}.match-detail{gap:9px}.match-detail-head{align-items:flex-start}.match-detail-head .badge{flex:none}.match-detail-identifiers,.match-detail-meta{display:grid;gap:5px}.match-detail-result,.match-detail-status{align-items:flex-start}}</style>
   <style>#springSeasonStats{grid-template-columns:repeat(3,1fr)}.journey-date-row{min-height:34px;background:#f5f8fb;color:#506078;font-size:.66rem;font-weight:800}.journey-date-row>b{text-align:left;color:#1758a5;text-transform:uppercase}.journey-week-cell{display:grid;gap:3px;justify-items:center}.journey-week-cell>b{font-size:.84rem}.journey-week-cell>small{max-width:68px;color:#667386;font-size:.61rem;line-height:1.15;white-space:normal}.journey-match-link{width:100%;min-height:46px;border:0;border-radius:8px;background:transparent;color:inherit;padding:4px}.journey-match-link:hover,.journey-match-link:focus-visible{background:#e9f1fb;color:#1758a5}.playoff-match-link{border:0;background:transparent;color:#1758a5;padding:0;text-align:left;font-size:.61rem;font-weight:800;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere}.spring-roster-grid{grid-template-columns:1fr}.team-player-dashboard{overflow-x:auto;padding:0 18px 16px;border-top:1px solid #dce2e9}.team-player-stat-row{display:grid;grid-template-columns:48px minmax(190px,1.6fr) repeat(7,minmax(48px,.55fr)) 62px 58px 62px;align-items:center;gap:7px;min-width:920px;min-height:47px;border-bottom:1px solid #dce2e9;font-size:.76rem;text-align:center}.team-player-stat-head{min-height:40px;color:#667386;font-size:.62rem;font-weight:900;text-transform:uppercase}.team-player-stat-head>span:nth-child(2){text-align:left}.team-player-name{display:flex;align-items:center;gap:6px;text-align:left;min-width:0}.team-player-name small{color:#667386;text-decoration:line-through}.team-player-name i{color:#f47c20;font-style:normal;font-weight:900}.team-player-name em{margin-left:auto;border-radius:999px;background:#fff0e5;color:#a74b0d;padding:3px 6px;font-size:.52rem;font-style:normal;font-weight:850;text-transform:uppercase}.player-week-result{width:28px;height:25px;display:grid;place-items:center;margin:auto;border-radius:6px;font-size:.66rem;font-weight:900}.player-week-result.win{background:#dcfce7;color:#166534}.player-week-result.loss{background:#fee2e2;color:#991b1b}.player-week-result.empty{color:#9aa4b1}.team-player-stat-row>strong{font-size:.82rem}@media(max-width:760px){#springSeasonStats{grid-template-columns:1fr}.team-player-dashboard{padding-inline:10px}}</style>
@@ -42,6 +42,7 @@
       <button data-route="home" class="active">Home</button>
       <button data-route="fall2026">Fall 2026</button>
       <button data-route="matches">Matches</button>
+      <button data-route="ao">About AO</button>
       <details class="nav-menu"><summary>History</summary><div><button data-route="schedule">Spring 2026</button><button data-route="history">Player History</button></div></details>
       <details class="nav-menu" data-nav-roles="Captain"><summary>Captain</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="match-management">Update Schedule and Score</button></div></details>
       <details class="nav-menu" data-nav-roles="EC,Neutral Approver"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access-any="approver,ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button></div></details>
@@ -55,6 +56,7 @@
     <button data-route="home">Home</button>
     <button data-route="fall2026">Fall 2026</button>
     <button data-route="matches">Matches</button>
+    <button data-route="ao">About AO</button>
     <div class="drawer-group"><span>History</span><button data-route="schedule">Spring 2026</button><button data-route="history">Player History</button></div>
     <div class="drawer-group" data-nav-roles="Captain"><span>Captain</span><button data-route="lineup">Submit Lineup</button><button data-route="match-management">Update Schedule and Score</button></div>
     <div class="drawer-group" data-nav-roles="EC,Neutral Approver"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access-any="approver,ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button></div>
@@ -200,6 +202,15 @@
       </section></div>
     </section>
 
+    <section class="view content-wrap page-view ao-page" data-view="ao">
+      <div class="page-heading ao-page-heading"><div><span class="kicker">AlphaOpen</span><h1>About AO</h1><p>Our history, current season, past seasons, and answers to frequently asked questions.</p></div><button class="secondary" type="button" id="printAoFaqs">Print FAQs</button></div>
+      <div id="aoPublicMessage" class="info-box">Loading AlphaOpen information…</div>
+      <section class="ao-public-section" aria-labelledby="aoHistoryHeading"><div class="section-heading"><span class="kicker">Our story</span><h2 id="aoHistoryHeading">History</h2></div><div id="aoHistoryList" class="ao-content-list"></div></section>
+      <section class="ao-public-section" aria-labelledby="aoCurrentHeading"><div class="section-heading"><span class="kicker">Playing now</span><h2 id="aoCurrentHeading">Current Season</h2></div><div id="aoCurrentSeasonList" class="ao-content-list"></div></section>
+      <section class="ao-public-section" aria-labelledby="aoPastHeading"><div class="section-heading"><span class="kicker">Season archive</span><h2 id="aoPastHeading">Past Seasons</h2></div><div id="aoPastSeasonsList" class="ao-content-list ao-past-grid"></div></section>
+      <section class="ao-public-section ao-faq-print-area" aria-labelledby="aoFaqHeading"><div class="section-heading ao-faq-heading"><div><span class="kicker">Helpful answers</span><h2 id="aoFaqHeading">Frequently Asked Questions</h2></div><button class="secondary compact-button" type="button" id="printAoFaqsInline">Print FAQs</button></div><div id="aoFaqList" class="ao-faq-list"></div></section>
+    </section>
+
     <section class="view content-wrap page-view" data-view="admin" data-super-admin>
       <div class="page-heading"><div><span class="kicker">League administration</span><h1>Admin control room</h1><p>Choose a management area to maintain AlphaOpen records and access.</p></div></div>
       <nav class="admin-subnav admin-grouped-nav" aria-label="Administration sections">
@@ -209,6 +220,7 @@
           <button type="button" data-admin-panel="users">User Management</button>
           <button type="button" data-admin-panel="identity-audit">Identity Reconciliation</button>
           <button type="button" data-admin-panel="venues">Venue Master</button>
+          <button type="button" data-admin-panel="ao-content">AO Content &amp; FAQ</button>
         </section>
         <section class="admin-nav-group" aria-labelledby="adminSeasonHeading">
           <h2 id="adminSeasonHeading">Season</h2>
@@ -269,6 +281,54 @@
           <div class="card-top"><div><span class="kicker">Venue Management</span><h2>Venue Master</h2><p class="muted">Maintain venue IDs, names, addresses, courts, and active status.</p></div><div class="card-actions"><button class="secondary compact-button" id="refreshVenues" type="button">Refresh</button><span class="badge navy" id="venueMasterCount">0 venues</span></div></div>
           <div class="master-search"><input id="venueMasterSearch" type="search" placeholder="Search by Venue ID, name, address, city, or status" aria-label="Search Venue Master"></div>
           <div id="venueMasterList" class="venue-master-list"><p class="muted">Loading Venue Master…</p></div>
+        </section>
+      </div>
+
+      <div class="admin-section" data-admin-section="ao-content" hidden>
+        <section class="dashboard-card ao-admin-card" data-super-admin>
+          <div class="card-top"><div><span class="kicker">About AO Management</span><h2>History &amp; Seasons</h2><p class="muted">Create the public History, Current Season, and Past Seasons content.</p></div><span class="badge navy">Super Admin</span></div>
+          <form id="aoContentForm" class="ao-admin-form">
+            <input id="aoContentId" type="hidden">
+            <label>Section<select id="aoContentSection" required><option value="history">History</option><option value="currentSeason">Current Season</option><option value="pastSeason">Past Season</option></select></label>
+            <label>Title<input id="aoContentTitle" maxlength="140" required></label>
+            <label>Season ID<input id="aoContentSeasonId" maxlength="80" placeholder="Optional"></label>
+            <label>Season year<input id="aoContentSeasonYear" type="number" min="2009" max="2100"></label>
+            <label>Display order<input id="aoContentOrder" type="number" min="0" max="999" value="1" required></label>
+            <label>Status<select id="aoContentStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <label class="wide">Summary<textarea id="aoContentSummary" rows="2" maxlength="500"></textarea></label>
+            <label class="wide">Content<textarea id="aoContentBody" rows="5" maxlength="5000" required></textarea></label>
+            <div class="form-actions wide"><button class="secondary" type="button" id="cancelAoContentEdit">Clear</button><button class="primary" type="submit">Save AO content</button></div>
+          </form>
+          <div id="aoContentAdminMessage" class="info-box">Add a History, Current Season, or Past Season record.</div>
+          <div id="aoContentAdminList" class="ao-admin-list"></div>
+        </section>
+
+        <section class="dashboard-card ao-admin-card" data-super-admin>
+          <div class="card-top"><div><span class="kicker">FAQ Management</span><h2>FAQ Categories</h2><p class="muted">Categories are dynamic and control public grouping and print order.</p></div><span class="badge navy">Super Admin</span></div>
+          <form id="aoCategoryForm" class="ao-admin-form compact">
+            <input id="aoCategoryId" type="hidden">
+            <label>Category name<input id="aoCategoryName" maxlength="100" required></label>
+            <label>Display order<input id="aoCategoryOrder" type="number" min="0" max="999" value="1" required></label>
+            <label>Status<select id="aoCategoryStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <div class="form-actions"><button class="secondary" type="button" id="cancelAoCategoryEdit">Clear</button><button class="primary" type="submit">Save category</button></div>
+          </form>
+          <div id="aoCategoryAdminMessage" class="info-box">Add as many FAQ categories as needed.</div>
+          <div id="aoCategoryAdminList" class="ao-admin-list"></div>
+        </section>
+
+        <section class="dashboard-card ao-admin-card" data-super-admin>
+          <div class="card-top"><div><span class="kicker">FAQ Management</span><h2>Questions &amp; Answers</h2><p class="muted">Only active FAQs in active categories appear publicly.</p></div><span class="badge navy">Super Admin</span></div>
+          <form id="aoFaqForm" class="ao-admin-form">
+            <input id="aoFaqId" type="hidden">
+            <label>Category<select id="aoFaqCategory" required><option value="">Add a category first</option></select></label>
+            <label>Display order<input id="aoFaqOrder" type="number" min="0" max="999" value="1" required></label>
+            <label>Status<select id="aoFaqStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <label class="wide">Question<input id="aoFaqQuestion" maxlength="300" required></label>
+            <label class="wide">Answer<textarea id="aoFaqAnswer" rows="5" maxlength="5000" required></textarea></label>
+            <div class="form-actions wide"><button class="secondary" type="button" id="cancelAoFaqEdit">Clear</button><button class="primary" type="submit">Save FAQ</button></div>
+          </form>
+          <div id="aoFaqAdminMessage" class="info-box">Create questions and arrange them within a category.</div>
+          <div id="aoFaqAdminList" class="ao-admin-list"></div>
         </section>
       </div>
 
@@ -358,12 +418,13 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=100"></script>
+  <script src="app.js?v=106"></script>
   <script src="lineup-bootstrap.js?v=14"></script>
-  <script src="approval-bootstrap.js?v=8"></script>
+  <script src="approval-bootstrap.js?v=10"></script>
   <script src="match-management-bootstrap.js?v=23"></script>
   <script src="poster-generator.js?v=2"></script>
-  <script type="module" src="runtime-loader.js?v=39"></script>
+  <script type="module" src="ao-content.js?v=1"></script>
+  <script type="module" src="runtime-loader.js?v=43"></script>
   <script src="pwa.js?v=26"></script>
   <dialog id="resetSeasonDialog"><form id="resetSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Destructive operation</span><h2>Reset season data</h2></div><button type="button" id="closeResetSeason" aria-label="Close">×</button></div><p class="muted">This keeps the Season Master and all global users/players, but permanently removes every operational and public child record for the selected season.</p><div class="info-box" id="resetSeasonScope"></div><label class="wide">Type the confirmation phrase<input id="resetSeasonConfirmation" autocomplete="off" spellcheck="false"></label><label class="check-row"><input id="resetSeasonAcknowledgement" type="checkbox"> I understand that teams, memberships, rosters, schedules, lineups, scores, standings, approvers, audits and published season data will be deleted.</label><div class="info-box" id="resetSeasonMessage">No data has been changed.</div><div class="form-actions"><button type="button" class="secondary" id="cancelResetSeason">Cancel</button><button type="submit" class="primary danger-button" id="confirmResetSeason" disabled>Delete season data</button></div></form></dialog>
 </body>
