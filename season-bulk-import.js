@@ -211,7 +211,7 @@ async function prepare(file) {
       errors.push(`${m.matchupId} has an invalid date.`);
   }
   const [playerSnap, linkSnap] = await Promise.all([
-      getDocs(collection(db, "playerPrivate")),
+      getDocs(collection(db, "players")),
       getDocs(collection(db, "playerAccountLinks")),
     ]),
     players = new Map(
@@ -566,8 +566,7 @@ async function exportEntireDatabase() {
     };
     const globalCollections = [
       ["Users", "users"],
-      ["Players Public", "players"],
-      ["Player Private", "playerPrivate"],
+      ["Player Master", "players"],
       ["Email Index", "playerEmailIndex"],
       ["Account Links", "playerAccountLinks"],
       ["Player Link Requests", "playerLinkRequests"],

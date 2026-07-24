@@ -88,7 +88,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v186"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v190"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -176,7 +176,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=47'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=50'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
@@ -190,8 +190,8 @@ assert(seasonReset.includes("verification.references.length"),"Season reset must
 assert(firestoreRules.includes("Super Admin season reset")&&firestoreRules.includes("allow delete: if isSuperAdmin()"),"Super Admin recursive season-delete rule is missing");
 assert(seasonBulkImport.includes("/assets/AlphaOpen_Season_Reload_Template.xlsx"),"Admin template download is not attached to the season reload workbook");
 assert(serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Season reload workbook is missing from the app shell");
-for (const collectionName of ["players","playerPrivate","playerEmailIndex","users","playerAccountLinks","registrationRequests","seasons"]) assert(identityReconciliation.includes(`"${collectionName}"`), `Identity audit must scan ${collectionName}`);
-for (const repair of ["syncPublicPlayer","syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
+for (const collectionName of ["players","playerEmailIndex","users","playerAccountLinks","registrationRequests","seasons"]) assert(identityReconciliation.includes(`"${collectionName}"`), `Identity audit must scan ${collectionName}`);
+for (const repair of ["syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
 for (const repair of ["syncRosterIdentity","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);
 for (const finding of ["ROSTER_PLAYER_ID_NAME_CONFLICT","LINEUP_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PLAYER_ID_NAME_CONFLICT"]) assert(identityReconciliation.includes(finding), `Expanded identity audit finding is missing: ${finding}`);
 for (const finding of ["PLAYER_OBSOLETE_FIELDS","CAPTAIN_PLAYER_ID_NAME_CONFLICT","TEAM_LEGACY_CAPTAIN_FIELDS"]) assert(identityReconciliation.includes(finding), `Migration readiness finding is missing: ${finding}`);

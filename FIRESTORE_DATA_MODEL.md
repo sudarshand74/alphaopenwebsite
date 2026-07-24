@@ -38,7 +38,6 @@ users/{uid}
   notifications/{notificationId}
 
 players/{playerId}
-playerPrivate/{playerId}
 playerEmailIndex/{encodedNormalizedEmail}
 systemCounters/players
 playerAccountLinks/{playerId}
@@ -109,21 +108,10 @@ Rules:
 
 ### 4.2 `players/{playerId}`
 
-Guest-safe player identity. Only fields approved for public display belong here.
-
-```text
-playerId: string
-displayName: string
-status: "active" | "inactive"
-publicProfileEnabled: boolean
-photoUrl: string | null
-createdAt: Timestamp
-updatedAt: Timestamp
-```
-
-### 4.3 `playerPrivate/{playerId}`
-
-EC-controlled private master record.
+Canonical Player Master. This is the sole source of player identity, contact,
+ranking, waiver, and account-link information. It is not a guest-readable
+collection. Super Admin has full access, an active-season EC may list it for
+roster operations, and a signed-in player may read only their own record.
 
 ```text
 playerId: string
@@ -136,13 +124,14 @@ tShirtSize: string | null
 globalRank: number | null
 waiverStatus: string | null
 internalNotes: string | null
+accountUid: string | null
 createdByUid: string
 createdAt: Timestamp
 updatedByUid: string
 updatedAt: Timestamp
 ```
 
-### 4.4 `playerAccountLinks/{playerId}`
+### 4.3 `playerAccountLinks/{playerId}`
 
 The approved one-to-one connection between a master player and Google account.
 
@@ -161,7 +150,7 @@ reason: string | null
 
 The application must prevent more than one active player link per UID and more than one active UID per Player ID unless a recorded Super Admin exception exists. `playerEmailIndex` enforces one normalized email per Player ID, and `systemCounters/players.nextNumber` assigns permanent sequential IDs beginning at `P1001`.
 
-### 4.5 `playerLinkRequests/{requestId}`
+### 4.4 `playerLinkRequests/{requestId}`
 
 ```text
 requestingUid: string
@@ -175,7 +164,7 @@ createdAt: Timestamp
 decidedAt: Timestamp | null
 ```
 
-### 4.6 `registrationRequests/{uid}`
+### 4.5 `registrationRequests/{uid}`
 
 Created automatically after a person's first verified Google authentication. The document ID is the Firebase UID.
 
@@ -655,7 +644,7 @@ Cloud Functions deployment requires a billing-enabled Firebase project. Developm
 Import sample and production data in this order:
 
 1. `venues` and `venuePrivate`
-2. `players` and `playerPrivate`
+2. `players`
 3. `seasons` and `ruleVersions`
 4. `members`
 5. `teams`

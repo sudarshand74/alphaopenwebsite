@@ -159,7 +159,7 @@ function showRegistrationBlocked(message) {
 registrationBlockedDialog.addEventListener("cancel", event => event.preventDefault());
 
 async function ensureBootstrapAdminPlayerLink(user, userRef, common) {
-  const playerRef = doc(db, "playerPrivate", BOOTSTRAP_ADMIN_PLAYER_ID);
+  const playerRef = doc(db, "players", BOOTSTRAP_ADMIN_PLAYER_ID);
   const linkRef = doc(db, "playerAccountLinks", BOOTSTRAP_ADMIN_PLAYER_ID);
   await runTransaction(db, async transaction => {
     const [userSnapshot, playerSnapshot, linkSnapshot] = await Promise.all([

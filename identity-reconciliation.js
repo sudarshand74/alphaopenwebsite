@@ -24,6 +24,10 @@ const parseList = value => Array.isArray(value) ? value : [];
 let auditState = null;
 let auditRunning = false;
 let auditReadOnly = false;
+const RETIRED_PLAYER_FIELDS = new Set([
+  "displayName", "photoUrl", "publicProfileEnabled", "globalScore",
+  "emergencyContact", "accountStatus"
+]);
 
 function isSuperAdmin() {
   const authorization = window.alphaOpenAuthorization;
@@ -41,6 +45,80 @@ function issue(type, severity, title, detail, context = {}, repair = null) {
 async function readCollection(path, ...segments) {
   const snapshot = await getDocs(collection(db, path, ...segments));
   return snapshot.docs.map(item => ({ id: item.id, ref: item.ref, ...item.data() }));
+}
+
+function canonicalPlayerRecord(playerId, privateRecord) {
+  return Object.fromEntries(Object.entries({
+    ...privateRecord,
+    playerId,
+    fullName: privateRecord.fullName ||
+      [privateRecord.firstName, privateRecord.lastName].filter(Boolean).join(" "),
+    status: privateRecord.status || "active"
+  }).filter(([key]) => key !== "id" && key !== "ref" && !RETIRED_PLAYER_FIELDS.has(key)));
+}
+
+async function consolidatePlayerMaster() {
+  if (!isSuperAdmin()) return;
+  const button = $("#consolidatePlayerMaster");
+  const summary = $("#identityAuditSummary");
+  button.disabled = true;
+  summary.innerHTML = "<b>Validating Player Master…</b><span>No records have changed.</span>";
+  try {
+    const [players, privatePlayers, emailIndexes] = await Promise.all([
+      readCollection("players"), readCollection("players"), readCollection("playerEmailIndex")
+    ]);
+    const playersById = new Map(players.map(record => [record.id, record]));
+    const privateById = new Map(privatePlayers.map(record => [record.id, record]));
+    const indexesByPlayerId = new Map(emailIndexes.map(record => [record.playerId, record]));
+    const errors = [];
+    if (players.length !== privatePlayers.length)
+      errors.push(`Player Master read counts differ: ${players.length} / ${privatePlayers.length}.`);
+    players.forEach(record => {
+      if (!privateById.has(record.id)) errors.push(`${record.id} is missing from Player Master.`);
+    });
+    privatePlayers.forEach(record => {
+      const email = normalizeEmail(record.emailNormalized);
+      const index = indexesByPlayerId.get(record.id);
+      if (!playersById.has(record.id)) errors.push(`${record.id} is missing from players.`);
+      if (!email) errors.push(`${record.id} has no normalized email.`);
+      if (!index || normalizeEmail(index.emailNormalized) !== email)
+        errors.push(`${record.id} does not match playerEmailIndex.`);
+    });
+    const uniqueEmails = new Set(privatePlayers.map(record => normalizeEmail(record.emailNormalized)));
+    if (uniqueEmails.size !== privatePlayers.length) errors.push("Player Master contains duplicate emails.");
+    if (errors.length) throw new Error(`Migration stopped before writing: ${errors.slice(0, 8).join(" ")}`);
+    if (!window.confirm(
+      `Consolidate ${privatePlayers.length} verified player records into players/{playerId}?\n\n` +
+      "This copies the private Player Master fields, retains accountUid, and removes retired fields. " +
+      "The source collection is not deleted by this step."
+    )) return;
+    const batch = writeBatch(db);
+    privatePlayers.forEach(record => {
+      batch.set(doc(db, "players", record.id), {
+        ...canonicalPlayerRecord(record.id, record),
+        migratedFromPlayerPrivateAt: serverTimestamp(),
+        migratedByUid: auth.currentUser.uid
+      });
+    });
+    await batch.commit();
+    const verifiedPlayers = await readCollection("players");
+    const verifiedById = new Map(verifiedPlayers.map(record => [record.id, record]));
+    const verificationErrors = privatePlayers.filter(record => {
+      const target = verifiedById.get(record.id);
+      return !target ||
+        normalizeEmail(target.emailNormalized) !== normalizeEmail(record.emailNormalized) ||
+        target.fullName !== canonicalPlayerRecord(record.id, record).fullName ||
+        [...RETIRED_PLAYER_FIELDS].some(field => Object.prototype.hasOwnProperty.call(target, field));
+    });
+    if (verificationErrors.length)
+      throw new Error(`Write completed, but verification failed for ${verificationErrors.slice(0, 8).map(record => record.id).join(", ")}.`);
+    summary.innerHTML = `<b>${verifiedPlayers.length} canonical player records verified</b><span>Player data is consolidated in players/{playerId}.</span>`;
+  } catch (error) {
+    console.error("Player Master consolidation failed", error);
+    summary.innerHTML = `<b>Player Master consolidation stopped</b><span>${esc(error.message || "No records were changed.")} Session UID: ${esc(auth.currentUser?.uid || "unavailable")}.</span>`;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 const normalizeName = value => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -93,8 +171,8 @@ async function reconcileHistoricalPlayerId(event) {
   message.textContent = "Checking Player Master and season references…";
   try {
     const [oldMaster, newMaster] = await Promise.all([
-      getDoc(doc(db, "playerPrivate", oldPlayerId)),
-      getDoc(doc(db, "playerPrivate", newPlayerId))
+      getDoc(doc(db, "players", oldPlayerId)),
+      getDoc(doc(db, "players", newPlayerId))
     ]);
     if (!newMaster.exists()) throw new Error(`${newPlayerId} does not exist in Player Master.`);
     const canonicalName = newMaster.data()?.fullName ||
@@ -211,9 +289,8 @@ async function readMatchupIdentityTree(root, seasonId) {
 }
 
 async function collectAudit() {
-  const [players, privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
+  const [privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
     readCollection("players"),
-    readCollection("playerPrivate"),
     readCollection("playerEmailIndex"),
     readCollection("users"),
     readCollection("playerAccountLinks"),
@@ -232,7 +309,6 @@ async function collectAudit() {
       season, members, teams, rosterAssignments, weeks, matchups
     };
   }));
-  const publicById = new Map(players.map(record => [record.id, record]));
   const privateById = new Map(privatePlayers.map(record => [record.id, record]));
   const indexByEmail = new Map(emailIndexes.map(record => [normalizeEmail(record.emailNormalized), record]));
   const userByUid = new Map(users.map(record => [record.id, record]));
@@ -246,34 +322,16 @@ async function collectAudit() {
   links.filter(record => record.status === "active").forEach(record => addMapList(linksByUid, record.uid, record));
 
   const issues = [];
-  const allPlayerIds = new Set([...publicById.keys(), ...privateById.keys()]);
+  const allPlayerIds = new Set(privateById.keys());
   allPlayerIds.forEach(playerId => {
-    const publicRecord = publicById.get(playerId);
     const privateRecord = privateById.get(playerId);
-    if (!privateRecord) {
-      issues.push(issue("PRIVATE_MISSING", "error", `${playerId}: private master missing`,
-        "The public Player Master record has no playerPrivate source record.", { playerId }));
-      return;
-    }
-    const obsoleteFields = ["globalScore", "emergencyContact", "accountUid", "accountStatus"]
+    const obsoleteFields = ["globalScore", "emergencyContact", "accountStatus"]
       .filter(field => Object.prototype.hasOwnProperty.call(privateRecord, field));
     if (obsoleteFields.length)
       issues.push(issue("PLAYER_OBSOLETE_FIELDS", "info",
         `${playerId}: fields scheduled for migration`,
         `Player Master still contains ${obsoleteFields.join(", ")}. The audit is read-only; no fields were removed.`,
         { playerId, fields: obsoleteFields.join(",") }));
-    if (!publicRecord) {
-      issues.push(issue("PUBLIC_MISSING", "warning", `${playerId}: public profile missing`,
-        "The private master exists, but the players mirror is missing.", { playerId }, "syncPublicPlayer"));
-    } else {
-      const differs = String(publicRecord.displayName || "").trim() !== String(privateRecord.fullName || "").trim() ||
-        String(publicRecord.status || "") !== String(privateRecord.status || "") ||
-        publicRecord.playerId !== playerId;
-      if (differs)
-        issues.push(issue("PUBLIC_MISMATCH", "warning", `${playerId}: public profile differs`,
-          `Expected ${privateRecord.fullName || playerId} / ${privateRecord.status || "unknown"} from Player Master.`,
-          { playerId }, "syncPublicPlayer"));
-    }
     const email = normalizeEmail(privateRecord.emailNormalized);
     if (!email) {
       issues.push(issue("EMAIL_MISSING", "error", `${playerId}: email missing`,
@@ -337,9 +395,9 @@ async function collectAudit() {
       issues.push(issue("REGISTRATION_MISMATCH", "warning", `${playerId}: registration differs`,
         `registrationRequests/${user.id} does not identify ${playerId}.`,
         { uid: user.id, playerId }, userEmail === playerEmail && uniqueEmailUser ? "syncAccountTree" : null));
-    if (privateRecord.accountUid !== user.id || privateRecord.accountStatus !== "active")
+    if (privateRecord.accountUid !== user.id)
       issues.push(issue("PRIVATE_ACCOUNT_MISMATCH", "warning", `${playerId}: Player Master account link differs`,
-        `playerPrivate/${playerId} stores ${privateRecord.accountUid || "no UID"} (${privateRecord.accountStatus || "no status"}).`,
+        `players/${playerId} stores ${privateRecord.accountUid || "no UID"}.`,
         { uid: user.id, playerId }, userEmail === playerEmail && uniqueEmailUser ? "syncPrivateAccount" : null));
   });
 
@@ -378,7 +436,7 @@ async function collectAudit() {
         if (!master) {
           issues.push(issue("CAPTAIN_UNKNOWN_PLAYER", "error",
             `${tree.season.id} · ${team.name || team.id}: captain is missing from Player Master`,
-            `${playerId} does not exist in playerPrivate.`,
+            `${playerId} does not exist in players.`,
             { seasonId: tree.season.id, teamId: team.id, playerId }));
           return;
         }
@@ -526,7 +584,7 @@ async function collectAudit() {
   return {
     scannedAt: new Date(),
     counts: {
-      players: players.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
+      players: privatePlayers.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
       users: users.length, accountLinks: links.length, seasons: seasons.length,
       teams: seasonTrees.reduce((sum, tree) => sum + tree.teams.length, 0),
       members: seasonTrees.reduce((sum, tree) => sum + tree.members.length, 0),
@@ -535,25 +593,9 @@ async function collectAudit() {
       lineMatches: seasonTrees.reduce((sum, tree) => sum + tree.matchups.reduce((inner, matchup) => inner + matchup.lineMatches.length, 0), 0)
     },
     issues,
-    maps: { publicById, privateById, userByUid, linkByPlayer, registrationByUid },
+    maps: { privateById, userByUid, linkByPlayer, registrationByUid },
     seasonTrees
   };
-}
-
-async function syncPublicPlayer(context) {
-  const record = auditState.maps.privateById.get(context.playerId);
-  if (!record) throw new Error("Private Player Master record no longer exists.");
-  await runTransaction(db, async transaction => {
-    const target = doc(db, "players", context.playerId);
-    const snapshot = await transaction.get(target);
-    transaction.set(target, {
-      playerId: context.playerId,
-      displayName: record.fullName || [record.firstName, record.lastName].filter(Boolean).join(" "),
-      status: record.status || "active",
-      publicProfileEnabled: snapshot.exists() ? snapshot.data().publicProfileEnabled === true : false,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-  });
 }
 
 async function syncEmailIndex(context) {
@@ -580,7 +622,7 @@ async function syncAccountTree(context) {
     throw new Error("Login email does not match Player Master. Use the email-transfer workflow.");
   const seasons = auditState.seasonTrees.map(tree => tree.season.id);
   const userRef = doc(db, "users", context.uid), linkRef = doc(db, "playerAccountLinks", context.playerId);
-  const privateRef = doc(db, "playerPrivate", context.playerId);
+  const privateRef = doc(db, "players", context.playerId);
   const registrationRef = doc(db, "registrationRequests", context.uid);
   await runTransaction(db, async transaction => {
     const [userSnapshot, linkSnapshot, registrationSnapshot, ...memberSnapshots] = await Promise.all([
@@ -602,7 +644,7 @@ async function syncAccountTree(context) {
       revokedByUid: null, revokedAt: null, reason: "Reconciled by Super Admin"
     }, { merge: true });
     transaction.set(privateRef, {
-      accountUid: context.uid, accountStatus: "active",
+      accountUid: context.uid,
       updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
     }, { merge: true });
     if (registrationSnapshot.exists())
@@ -627,14 +669,13 @@ async function syncPrivateAccount(context) {
   if (!link || link.status !== "active" || link.uid !== context.uid)
     throw new Error("The active player account link does not match this UID. Reconcile the account link first.");
   await runTransaction(db, async transaction => {
-    const privateRef = doc(db, "playerPrivate", context.playerId);
+    const privateRef = doc(db, "players", context.playerId);
     const snapshot = await transaction.get(privateRef);
     if (!snapshot.exists()) throw new Error("Player Master record no longer exists.");
     if (normalizeEmail(snapshot.data().emailNormalized) !== normalizeEmail(user.email))
       throw new Error("Player Master email changed; repair stopped.");
     transaction.set(privateRef, {
       accountUid: context.uid,
-      accountStatus: "active",
       updatedByUid: auth.currentUser.uid,
       updatedAt: serverTimestamp()
     }, { merge: true });
@@ -644,7 +685,7 @@ async function syncPrivateAccount(context) {
 async function syncMembershipIdentity(context) {
   const memberRef = doc(db, "seasons", context.seasonId, "members", context.uid);
   const userRef = doc(db, "users", context.uid);
-  const privateRef = doc(db, "playerPrivate", context.playerId);
+  const privateRef = doc(db, "players", context.playerId);
   const linkRef = doc(db, "playerAccountLinks", context.playerId);
   await runTransaction(db, async transaction => {
     const [memberSnapshot, userSnapshot, privateSnapshot, linkSnapshot] = await Promise.all([
@@ -780,7 +821,7 @@ async function syncLineMatchPlayerIdentity(context) {
 }
 
 const repairs = {
-  syncPublicPlayer, syncEmailIndex, syncAccountTree, syncPrivateAccount,
+  syncEmailIndex, syncAccountTree, syncPrivateAccount,
   syncMembershipIdentity, syncCaptainAccess, syncRosterIdentity,
   syncLineupPlayerIdentity, syncLineMatchPlayerIdentity
 };

@@ -83,7 +83,7 @@ async function exportTeamRoster() {
       getDocs(collection(db, "seasons", seasonId, "teams")),
       getDocs(collection(db, "seasons", seasonId, "rosterAssignments")),
       getDocs(collection(db, "seasons", seasonId, "rosterSlots")),
-      getDocs(collection(db, "playerPrivate")),
+      getDocs(collection(db, "players")),
       (xlsxModule ||= import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs")),
     ]);
     const teams = teamSnapshot.docs.map((item) => ({ teamId: item.id, ...item.data() })),
@@ -151,7 +151,7 @@ function openDialog() {
 }
 async function loadPlayers() {
   if (players.length) return;
-  const snapshot = await getDocs(collection(db, "playerPrivate"));
+  const snapshot = await getDocs(collection(db, "players"));
   players = snapshot.docs
     .map((item) => ({ playerId: item.id, ...item.data() }))
     .filter((item) => item.status !== "inactive")

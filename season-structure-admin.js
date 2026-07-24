@@ -16,7 +16,7 @@ const timestamp=id=>Timestamp.fromDate(new Date($(id).value));
 let seasons=[],players=[],links=new Map(),venues=[],teamAdminTeams=[],scheduleTeams=[],weeks=[],matchups=[];
 
 async function loadReferenceData(){
-  const [seasonSnap,playerSnap,linkSnap,venueSnap]=await Promise.all([getDocs(collection(db,"seasons")),getDocs(collection(db,"playerPrivate")),getDocs(collection(db,"playerAccountLinks")),getDocs(collection(db,"venues"))]);
+  const [seasonSnap,playerSnap,linkSnap,venueSnap]=await Promise.all([getDocs(collection(db,"seasons")),getDocs(collection(db,"players")),getDocs(collection(db,"playerAccountLinks")),getDocs(collection(db,"venues"))]);
   seasons=seasonSnap.docs.map(item=>({seasonId:item.id,...item.data()})).sort((a,b)=>Number(b.year||0)-Number(a.year||0)||String(b.term||"").localeCompare(String(a.term||"")));
   players=playerSnap.docs.map(item=>({playerId:item.id,...item.data()})).filter(item=>item.status!=="inactive").sort((a,b)=>nameOf(a).localeCompare(nameOf(b)));
   links=new Map(linkSnap.docs.map(item=>[item.id,{playerId:item.id,...item.data()}]));

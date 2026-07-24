@@ -697,7 +697,7 @@ async function approveRegistration(record) {
   }
   try {
     const normalizedEmail = record.user.email.trim().toLowerCase();
-    const playerMatches = await getDocs(query(collection(db, "playerPrivate"), where("emailNormalized", "==", normalizedEmail), limit(2)));
+    const playerMatches = await getDocs(query(collection(db, "players"), where("emailNormalized", "==", normalizedEmail), limit(2)));
     if (playerMatches.size > 1) throw new Error("Multiple Player Master records match this email. Resolve the duplicates before approval.");
     if (playerMatches.empty) throw new Error("Cannot approve this registration: the Google email is not in Player Master. Add the player first, then retry approval.");
     const playerId = playerMatches.docs[0].id;
@@ -727,9 +727,8 @@ async function approveRegistration(record) {
         playerEmailNormalized: normalizedEmail,
         updatedAt: serverTimestamp()
       });
-      transaction.set(doc(db, "playerPrivate", playerId), {
+      transaction.set(doc(db, "players", playerId), {
         accountUid: record.uid,
-        accountStatus: "active",
         emailNormalized: normalizedEmail,
         updatedByUid: currentUser.uid,
         updatedAt: serverTimestamp()

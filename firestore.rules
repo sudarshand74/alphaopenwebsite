@@ -10,17 +10,17 @@ service cloud.firestore {
       return /databases/$(database)/documents/users/$(uid);
     }
 
-    function playerPrivatePath(playerId) {
-      return /databases/$(database)/documents/playerPrivate/$(playerId);
+    function playerPath(playerId) {
+      return /databases/$(database)/documents/players/$(playerId);
     }
 
     function playerMatchesAuthenticatedEmail(playerId) {
       return request.auth.token.email_verified == true
         && playerId is string
-        && exists(playerPrivatePath(playerId))
-        && get(playerPrivatePath(playerId)).data.emailNormalized.lower() == request.auth.token.email.lower()
-        && get(playerPrivatePath(playerId)).data.status is string
-        && get(playerPrivatePath(playerId)).data.status.lower() == 'active';
+        && exists(playerPath(playerId))
+        && get(playerPath(playerId)).data.emailNormalized.lower() == request.auth.token.email.lower()
+        && get(playerPath(playerId)).data.status is string
+        && get(playerPath(playerId)).data.status.lower() == 'active';
     }
 
     function hasStoredSuperAdminRole() {
@@ -42,11 +42,18 @@ service cloud.firestore {
     function isSuperAdmin() {
       return signedIn()
         && (
-          request.auth.token.superAdmin == true
+          request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353'
+          || (
+            'superAdmin' in request.auth.token
+            && request.auth.token.superAdmin == true
+          )
           || hasStoredSuperAdminRole()
           || (
-            request.auth.token.email_verified == true
-            && request.auth.token.email == 'sudarshandesai74@gmail.com'
+            'email_verified' in request.auth.token
+            && 'email' in request.auth.token
+            && request.auth.token.email_verified == true
+            && request.auth.token.email is string
+            && request.auth.token.email.lower() == 'sudarshandesai74@gmail.com'
           )
         );
     }
@@ -77,6 +84,16 @@ service cloud.firestore {
 
     function isSeasonEC(seasonId) {
       return isSuperAdmin() || hasSeasonRole(seasonId, 'ec');
+    }
+
+    function isActiveSeasonEC() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/systemConfig/seasonControl)
+        && get(/databases/$(database)/documents/systemConfig/seasonControl).data.activeSeasonId is string
+        && hasSeasonRole(
+          get(/databases/$(database)/documents/systemConfig/seasonControl).data.activeSeasonId,
+          'ec'
+        );
     }
 
     function isCaptainForTeam(seasonId, teamId) {
@@ -174,14 +191,21 @@ service cloud.firestore {
     }
 
     match /players/{playerId} {
-      allow read: if isSuperAdmin()
-        || signedIn()
-        || (resource.data.status == 'active' && resource.data.publicProfileEnabled == true);
-      allow write: if isSuperAdmin();
-    }
-
-    match /playerPrivate/{playerId} {
-      allow read, write: if isSuperAdmin();
+      allow get: if isSuperAdmin()
+        || (signedIn() && resource.data.accountUid == request.auth.uid)
+        || (
+          signedIn()
+          && 'email_verified' in request.auth.token
+          && 'email' in request.auth.token
+          && request.auth.token.email_verified == true
+          && resource.data.emailNormalized is string
+          && resource.data.emailNormalized.lower() == request.auth.token.email.lower()
+        );
+      allow list: if isSuperAdmin()
+        || request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353'
+        || isActiveSeasonEC();
+      allow write: if isSuperAdmin()
+        || (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353');
     }
 
     match /playerEmailIndex/{emailKey} {

@@ -103,7 +103,7 @@ async function loadPlayers() {
   if (!isAdmin()) return;
   playerPanel.innerHTML = '<p class="muted">Loading Player Master…</p>';
   try {
-    const snapshot = await getDocs(collection(db, "playerPrivate"));
+    const snapshot = await getDocs(collection(db, "players"));
     playerCache = snapshot.docs.map(item => ({ playerId: item.id, ...item.data() }))
       .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
     renderPlayers($("#playerMasterSearch").value);
@@ -140,17 +140,14 @@ async function createPlayer(candidate, allowMatchingName = false) {
     if (emailSnapshot.exists()) throw new Error(`Email is already assigned to ${emailSnapshot.data().playerId}.`);
     let nextNumber = Math.max(counterSnapshot.exists() ? Number(counterSnapshot.data().nextNumber) || 1001 : highestExisting + 1, 1001);
     let playerId = `P${nextNumber}`;
-    let privateRef = doc(db, "playerPrivate", playerId);
-    let publicRef = doc(db, "players", playerId);
-    while ((await transaction.get(privateRef)).exists()) {
+    let playerRef = doc(db, "players", playerId);
+    while ((await transaction.get(playerRef)).exists()) {
       nextNumber += 1;
       playerId = `P${nextNumber}`;
-      privateRef = doc(db, "playerPrivate", playerId);
-      publicRef = doc(db, "players", playerId);
+      playerRef = doc(db, "players", playerId);
     }
     const shared = { playerId, status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-    transaction.set(publicRef, { ...shared, displayName: fullName, publicProfileEnabled: false, photoUrl: null });
-    transaction.set(privateRef, {
+    transaction.set(playerRef, {
       ...shared, firstName, lastName, fullName, emailNormalized: email, phone: String(candidate.phone || "").trim() || null,
       tShirtSize: String(candidate.tShirtSize || "").trim().toUpperCase() || null,
       globalRank: candidate.globalRank ? Number(candidate.globalRank) : null, waiverStatus: null,
@@ -273,8 +270,7 @@ async function transferPlayerEmail(event) {
         approverRefs.push(approverRef);
       }
     }
-    const privateRef = doc(db, "playerPrivate", transfer.playerId);
-    const publicRef = doc(db, "players", transfer.playerId);
+    const playerRef = doc(db, "players", transfer.playerId);
     const oldIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(transfer.oldEmail));
     const newIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(transfer.newEmail));
     const userRef = linkedUser.ref;
@@ -282,7 +278,7 @@ async function transferPlayerEmail(event) {
     const accountLinkRef = doc(db, "playerAccountLinks", transfer.playerId);
     await runTransaction(db, async (transaction) => {
       const references = [
-        privateRef,
+        playerRef,
         oldIndexRef,
         newIndexRef,
         userRef,
@@ -293,14 +289,14 @@ async function transferPlayerEmail(event) {
       ];
       const snapshots = await Promise.all(references.map((reference) => transaction.get(reference)));
       const [
-        privateSnapshot,
+        playerSnapshot,
         oldIndexSnapshot,
         newIndexSnapshot,
         userSnapshot,
         registrationSnapshot,
         accountLinkSnapshot,
       ] = snapshots;
-      if (!privateSnapshot.exists()) throw new Error("Player Master record no longer exists.");
+      if (!playerSnapshot.exists()) throw new Error("Player Master record no longer exists.");
       if (!userSnapshot.exists() || userSnapshot.data().playerId !== transfer.playerId) {
         throw new Error("The old user account is no longer linked to this Player ID.");
       }
@@ -311,7 +307,7 @@ async function transferPlayerEmail(event) {
         throw new Error("The approved account link belongs to a different Firebase UID.");
       }
       const candidate = transfer.candidate;
-      transaction.update(privateRef, {
+      transaction.update(playerRef, {
         firstName: candidate.firstName,
         lastName: candidate.lastName,
         fullName: candidate.fullName,
@@ -320,15 +316,9 @@ async function transferPlayerEmail(event) {
         tShirtSize: candidate.tShirtSize || null,
         globalRank: candidate.globalRank ? Number(candidate.globalRank) : null,
         accountUid: null,
-        accountStatus: "awaitingRegistration",
         updatedByUid: auth.currentUser.uid,
         updatedAt: serverTimestamp(),
       });
-      transaction.set(publicRef, {
-        playerId: transfer.playerId,
-        displayName: candidate.fullName,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
       transaction.set(newIndexRef, {
         emailNormalized: transfer.newEmail,
         playerId: transfer.playerId,
@@ -438,8 +428,7 @@ async function submitEditPlayer(event) {
   if (duplicateName && !window.confirm(`${duplicateName.playerId} has the same Full Name. Save only if these are different people. Continue?`)) return;
 
   const oldEmail = normalizeEmail(existing.emailNormalized);
-  const privateRef = doc(db, "playerPrivate", playerId);
-  const publicRef = doc(db, "players", playerId);
+  const playerRef = doc(db, "players", playerId);
   const oldIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(oldEmail));
   const newIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(candidate.email));
   try {
@@ -464,32 +453,29 @@ async function submitEditPlayer(event) {
     }
     const accountLinkRef = doc(db, "playerAccountLinks", playerId);
     await runTransaction(db, async transaction => {
-      const [privateSnapshot, oldIndexSnapshot, newIndexSnapshot, accountLinkSnapshot] = await Promise.all([
-        transaction.get(privateRef), transaction.get(oldIndexRef), transaction.get(newIndexRef), transaction.get(accountLinkRef)
+      const [playerSnapshot, oldIndexSnapshot, newIndexSnapshot, accountLinkSnapshot] = await Promise.all([
+        transaction.get(playerRef), transaction.get(oldIndexRef), transaction.get(newIndexRef), transaction.get(accountLinkRef)
       ]);
-      if (!privateSnapshot.exists()) throw new Error("Player Master record no longer exists.");
+      if (!playerSnapshot.exists()) throw new Error("Player Master record no longer exists.");
       if (newIndexSnapshot.exists() && newIndexSnapshot.data().playerId !== playerId) throw new Error(`Email is already assigned to ${newIndexSnapshot.data().playerId}.`);
-      transaction.update(privateRef, {
+      transaction.update(playerRef, {
         firstName: candidate.firstName, lastName: candidate.lastName, fullName: candidate.fullName,
         emailNormalized: candidate.email, phone: candidate.phone || null,
         tShirtSize: candidate.tShirtSize || null, globalRank: candidate.globalRank ? Number(candidate.globalRank) : null,
         accountUid: accountLinkSnapshot.exists() ? accountLinkSnapshot.data().uid : linkedUser?.id || null,
-        accountStatus: linkedUser?.data().status || accountLinkSnapshot.data()?.status || "unlinked",
         updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
       });
-      transaction.set(publicRef, { playerId, displayName: candidate.fullName, updatedAt: serverTimestamp() }, { merge: true });
       transaction.set(newIndexRef, { emailNormalized: candidate.email, playerId, status: "active", updatedAt: serverTimestamp(), updatedByUid: auth.currentUser.uid }, { merge: true });
       if (oldEmail !== candidate.email && oldIndexSnapshot.exists()) transaction.delete(oldIndexRef);
       if (linkedUser) transaction.set(linkedUser.ref, { playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
       registrationSnapshot.docs.forEach(request => transaction.set(request.ref, { matchedPlayerId: playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true }));
       if (accountLinkSnapshot.exists()) transaction.set(accountLinkRef, { playerId, emailAtApproval: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
     });
-    const [verifiedPrivate, verifiedPublic, verifiedIndex, verifiedOldIndex, verifiedLink] = await Promise.all([
-      getDoc(privateRef), getDoc(publicRef), getDoc(newIndexRef), oldEmail === candidate.email ? Promise.resolve(null) : getDoc(oldIndexRef), getDoc(accountLinkRef)
+    const [verifiedPlayer, verifiedIndex, verifiedOldIndex, verifiedLink] = await Promise.all([
+      getDoc(playerRef), getDoc(newIndexRef), oldEmail === candidate.email ? Promise.resolve(null) : getDoc(oldIndexRef), getDoc(accountLinkRef)
     ]);
     const verificationErrors = [];
-    if (normalizeEmail(verifiedPrivate.data()?.emailNormalized) !== candidate.email) verificationErrors.push("Player Master email");
-    if (verifiedPublic.data()?.displayName !== candidate.fullName) verificationErrors.push("public display name");
+    if (normalizeEmail(verifiedPlayer.data()?.emailNormalized) !== candidate.email) verificationErrors.push("Player Master email");
     if (verifiedIndex.data()?.playerId !== playerId || normalizeEmail(verifiedIndex.data()?.emailNormalized) !== candidate.email) verificationErrors.push("email index");
     if (verifiedOldIndex?.exists()) verificationErrors.push("old email index removal");
     if (linkedUser && normalizeEmail((await getDoc(linkedUser.ref)).data()?.playerEmailNormalized) !== candidate.email) verificationErrors.push("linked user");

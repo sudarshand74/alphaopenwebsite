@@ -16,6 +16,7 @@
       ".firebase/**",
       "**/.*",
       "**/node_modules/**",
+      "scripts/**",
       "outputs/**",
       ".artifact_runtime/**"
     ],
