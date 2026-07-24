@@ -22,10 +22,22 @@ let historyDataLoaded = false;
 let springSeasonData = null;
 let fallSeasonData = null;
 let springLineEditIndex = new Map();
+let pendingApprovalLineupCount;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 let currentAccountKey = "guest";
+
+function countSubmittedLineups(records = []) {
+  return records.reduce(
+    (count, matchup) =>
+      count +
+      (String(matchup.homeLineupStatus || "").toLowerCase() === "submitted" ? 1 : 0) +
+      (String(matchup.awayLineupStatus || "").toLowerCase() === "submitted" ? 1 : 0),
+    0,
+  );
+}
+window.alphaOpenCountSubmittedLineups = countSubmittedLineups;
 
 function allowed(element, account) {
   const navRoles = (element.dataset.navRoles || "")
@@ -164,17 +176,19 @@ function renderWorkspace(account) {
   if (account.role !== "Super Admin" && account.access.includes("captain"))
     actions.push(["lineup", "Build & Submit Lineup", "Run SOR checks"]);
   if (account.role === "Super Admin" || account.access.includes("approver")) {
-    const pendingLineupCount = matchups.reduce(
-      (count, matchup) =>
-        count +
-        (String(matchup.homeLineupStatus || "").toLowerCase() === "submitted" ? 1 : 0) +
-        (String(matchup.awayLineupStatus || "").toLowerCase() === "submitted" ? 1 : 0),
-      0,
-    );
+    const countIsReady = Number.isFinite(pendingApprovalLineupCount);
+    const pendingLineupCount = countIsReady ? pendingApprovalLineupCount : 0;
+    const pendingLineupMessage = pendingApprovalLineupCount === undefined
+      ? "Checking lineups awaiting your review/approval..."
+      : pendingApprovalLineupCount === null
+        ? "Pending lineup count is unavailable. Open the review queue to retry."
+        : `${pendingLineupCount} ${pendingLineupCount === 1 ? "lineup is" : "lineups are"} awaiting your review/approval`;
     actions.push([
       "approvals",
-      "Review and Approve Lineup",
-      `${pendingLineupCount} ${pendingLineupCount === 1 ? "lineup is" : "lineups are"} awaiting your review/approval`,
+      "Review/Approve Lineups",
+      pendingLineupMessage,
+      "",
+      countIsReady && pendingLineupCount > 0 ? "pending-approval-alert" : "",
     ]);
   }
   if (account.role === "Super Admin")
@@ -1986,6 +2000,10 @@ window.alphaOpenDataUI = {
     activeWorkspaceSeason = season || null;
     renderWorkspace(accounts[currentAccountKey]);
   },
+  applyPendingApprovalCount(count) {
+    pendingApprovalLineupCount = count !== null && Number.isFinite(Number(count)) ? Number(count) : null;
+    renderWorkspace(accounts[currentAccountKey]);
+  },
   applyLeagueData(data) {
     leagueSeason = data.season || null;
     teamsById = new Map((data.teams || []).map((team) => [team.teamId, team]));
@@ -2099,6 +2117,9 @@ window.alphaOpenAuthUI = {
     };
     accounts.firebaseUser = authorizedAccount;
     setAccount("firebaseUser", announce);
+    window.dispatchEvent(new CustomEvent("alphaopen:authorization-changed", {
+      detail: { user, authorization },
+    }));
     $("#authStatus").textContent =
       authorization.status === "active"
         ? "Signed in"
@@ -2107,6 +2128,7 @@ window.alphaOpenAuthUI = {
   },
   applyGuest(announce = false) {
     window.alphaOpenAuthorization = null;
+    pendingApprovalLineupCount = undefined;
     delete accounts.firebaseUser;
     setAccount("guest", announce);
     $("#authStatus").textContent = "Guest access";

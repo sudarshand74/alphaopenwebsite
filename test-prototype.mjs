@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 
 const html = await fs.readFile("index.html","utf8");
-const js = await fs.readFile("app.js","utf8");
+const js = (await fs.readFile("app.js","utf8")).replace(/\r\n/g, "\n");
 const css = await fs.readFile("styles.css","utf8");
 const manifest = JSON.parse(await fs.readFile("manifest.webmanifest","utf8"));
 const serviceWorker = await fs.readFile("service-worker.js","utf8");
@@ -24,8 +25,9 @@ const rosterAdminShared = await fs.readFile("roster-admin-v3.js","utf8");
 const matchManagementModule = await fs.readFile("match-management.js","utf8");
 const matchManagement = `${matchManagementModule}${js}`;
 const posterGenerator = await fs.readFile("poster-generator.js","utf8");
+const aoContent = await fs.readFile("ao-content.js","utf8");
 
-for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule })) {
+for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule, aoContent })) {
   assert(source.includes('from "./firebase-client.js?v=3"'),`${name} must use the shared Firebase client`);
   assert(!source.includes("getFirestore("),`${name} must not reinitialize Firestore with different options`);
 }
@@ -87,7 +89,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v175"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v183"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -124,7 +126,7 @@ assert(lineupSubmit.includes("is submitted, awaiting approval."),"Submitted line
 assert(lineupSubmit.includes('byId("submitLineup").disabled = true;')&&lineupSubmit.includes("submissionConfirmation(matchup, teamId, true)"),"Successful submission must disable the button and show confirmation");
 assert(js.includes("assignedTeams.length")&&js.includes("Your captain account is active for"),"Captain workspace must reflect the active-season team assignment");
 assert(js.includes("team.captainPlayerIds.includes(account.playerId)"),"Captain workspace must recognize Player ID team assignments");
-assert(js.includes('if (account.role === "Super Admin")\n    actions.push(["admin", "Season admin"'),"Season admin home action must be limited to Super Admin");
+assert(/if \(account\.role === "Super Admin"\)\r?\n\s+actions\.push\(\["admin", "Season admin"/.test(js),"Season admin home action must be limited to Super Admin");
 assert(html.includes('id="workspaceIdentity"'),"Signed-in workspace identity line is missing");
 assert(js.includes("`Welcome, ${account.name}`"),"Workspace must show the full Player Master name");
 assert(js.includes("Player ID: ${account.playerId}")&&js.includes("Email: ${account.email}"),"Workspace must show linked Player ID and login email");
@@ -175,7 +177,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=40'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=44'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
@@ -274,11 +276,40 @@ assert(firebaseData.includes("registeredUserRecords"),"User Management search is
 assert(firestoreRules.includes("isBootstrapAdminEmail(resource.data.email)"),"Protected account rules guard is missing");
 assert(firebaseData.includes("saveManagedUser"),"Registered-user role management is missing");
 assert(firebaseData.includes('"approverAssignments"'),"Neutral Approver assignment is missing");
-assert(js.includes('"Review and Approve Lineup"'), "Neutral Approver Home action is missing");
+assert(html.includes('data-view="ao"') && html.includes(">About AO<"), "Public About AO page or navigation is missing");
+for (const collectionName of ["aoContent", "aoFaqCategories", "aoFaqs"]) {
+  assert(firestoreRules.includes(`match /${collectionName}/`), `Firestore rules are missing ${collectionName}`);
+  assert(aoContent.includes(`"${collectionName}"`), `About AO module is missing ${collectionName}`);
+}
+assert(html.includes('data-admin-panel="ao-content"'), "AO Content & FAQ Admin panel is missing");
+assert(aoContent.includes('where("status", "==", "active")'), "Public About AO reads must request active records only");
+assert(html.includes("Only active FAQs in active categories"), "FAQ active-category guidance is missing");
+assert(aoContent.includes("window.print()"), "Categorized FAQ printing is missing");
+assert(aoContent.includes("Move or delete every FAQ in this category"), "Non-empty FAQ categories must be protected from deletion");
+assert(js.includes('"Review/Approve Lineups"'), "Neutral Approver Home action is missing");
 assert(js.includes("awaiting your review/approval"), "Neutral Approver pending-lineup count is missing");
 assert(js.includes('account.role === "Super Admin" || account.access.includes("approver")'), "Lineup review Home action must support Super Admin and secondary Neutral Approver access");
-assert(lineupApprove.includes("async function rejectLineup"), "Lineup rejection workflow is missing");
+assert(firebaseData.includes("async function loadPendingApprovalCount"), "Home approval count must load from authenticated active-season matchups");
+assert(js.includes('String(matchup.homeLineupStatus || "").toLowerCase() === "submitted"')&&js.includes('String(matchup.awayLineupStatus || "").toLowerCase() === "submitted"')&&lineupApprove.includes('matchup.homeLineupStatus==="submitted"')&&lineupApprove.includes('matchup.awayLineupStatus==="submitted"'), "Home and approval queue pending criteria must match");
+assert(js.includes("applyPendingApprovalCount(count)"), "Authenticated pending approval count is not connected to the Home screen");
+const countFunctionSource = js.match(/function countSubmittedLineups\(records = \[\]\) \{[\s\S]*?^}/m)?.[0];
+assert(countFunctionSource, "Shared pending-lineup count function is missing");
+const countSubmittedLineups = vm.runInNewContext(`(${countFunctionSource})`);
+assert.equal(countSubmittedLineups([{ homeLineupStatus: "submitted", awayLineupStatus: "submitted" }]), 2, "Two submitted team lineups must count as two");
+assert.equal(countSubmittedLineups([{ homeLineupStatus: "submitted", awayLineupStatus: "draft" }, { homeLineupStatus: "approved", awayLineupStatus: "SUBMITTED" }]), 2, "Submitted team lineups must count across multiple matchups");
+assert.equal(countSubmittedLineups([{ homeLineupStatus: "approved", awayLineupStatus: "rejected" }]), 0, "Decided lineups must not remain pending");
+assert(firebaseData.includes("window.alphaOpenCountSubmittedLineups"), "Home Firebase loading must use the shared tested count function");
+assert(firebaseData.includes('if (route === "home")')&&firebaseData.includes("await loadPendingApprovalCount(user)"), "Opening Home must refresh the operational approval count");
+assert(js.includes("Checking lineups awaiting your review/approval")&&js.includes("Pending lineup count is unavailable"), "Home must not show a false zero before authenticated loading completes");
+assert(js.includes('"pending-approval-alert"')&&css.includes(".pending-approval-alert small"), "Positive approval counts must display a red Home alert");
+assert(css.includes(".approval-lineup-comparison{grid-template-columns:1fr}"), "Pending team lineups must stack vertically");
+assert(lineupApprove.includes("async function rejectLineups"), "Lineup rejection workflow is missing");
 assert(lineupApprove.includes('status:"rejected"'), "Rejected lineup status is not persisted");
+assert(lineupApprove.includes("Please provide the reason for rejecting these lineups"), "Lineup rejection must require an approver reason");
+assert(lineupApprove.includes("window.confirm"), "Lineup approval and rejection decisions must require confirmation");
+assert(lineupApprove.includes('"Lineup Approved"')&&lineupApprove.includes('"Lineup Rejected"'), "Approval cards must show the final decision");
+assert(lineupApprove.includes('status==="pending"||status==="complete"'), "Approval and rejection buttons must disable after a decision");
+assert(lineupApprove.includes("pending.forEach(record=>queue.appendChild(renderCard(record)))"), "Every pending matchup must render in the approval queue");
 assert(lineupSubmit.includes("Lineup rejected:"), "Submitters cannot see the lineup rejection reason");
 assert(lineupSubmit.includes("rejectionReason: null"), "Resubmission must clear the prior rejection");
 assert(firestoreRules.includes("'rejectionReason', 'rejectedByUid', 'rejectedAt'"), "Lineup rejection fields are not allowed by Firestore rules");

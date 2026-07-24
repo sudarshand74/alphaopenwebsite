@@ -256,6 +256,24 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    match /aoContent/{contentId} {
+      allow get: if resource.data.status == 'active' || isSuperAdmin();
+      allow list: if isSuperAdmin() || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /aoFaqCategories/{categoryId} {
+      allow get: if resource.data.status == 'active' || isSuperAdmin();
+      allow list: if isSuperAdmin() || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /aoFaqs/{faqId} {
+      allow get: if resource.data.status == 'active' || isSuperAdmin();
+      allow list: if isSuperAdmin() || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin();
+    }
+
     match /seasons/{seasonId} {
       allow read: if isSuperAdmin() || isSeasonMember(seasonId);
       allow write: if isSuperAdmin();
@@ -380,7 +398,7 @@ service cloud.firestore {
           allow update: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
             && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'rejected', 'submitted']
             && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'submitted', 'rejected', 'approved']
-            && (request.resource.data.status not in ['approved', 'rejected'] || isSeasonApprover(seasonId) || isSuperAdmin())
+            && (!(request.resource.data.status in ['approved', 'rejected']) || isSeasonApprover(seasonId) || isSuperAdmin())
             && validSubmittedLineup()
             && request.resource.data.teamId == teamId
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
