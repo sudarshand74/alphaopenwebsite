@@ -199,10 +199,8 @@ async function saveRecord(article, record, button) {
   };
   button.disabled = true;
   const batch = writeBatch(db);
-  const privateRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineMatches", line.lineMatchId);
-  const publicRef = doc(db, "publicSeasons", state.seasonId, "matchups", matchup.matchupId, "lineMatches", line.lineMatchId);
-  batch.set(privateRef, payload, { merge: true });
-  batch.set(publicRef, payload, { merge: true });
+  const canonicalRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineMatches", line.lineMatchId);
+  batch.set(canonicalRef, payload, { merge: true });
   const siblingLines = state.records.filter((item) => item.matchup.matchupId === matchup.matchupId).map((item) => item.line.lineMatchId === line.lineMatchId ? { ...item.line, ...payload } : item.line);
   const completedLineCount = siblingLines.filter((item) => item.scheduleStatus === "completed").length;
   const canceledLineCount = siblingLines.filter((item) => item.scheduleStatus === "canceled").length;
@@ -216,7 +214,6 @@ async function saveRecord(article, record, button) {
     updatedAt: serverTimestamp(),
   };
   batch.set(doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId), parentPayload, { merge: true });
-  batch.set(doc(db, "publicSeasons", state.seasonId, "matchups", matchup.matchupId), parentPayload, { merge: true });
   await batch.commit();
   message(scheduleStatus === "completed" ? "Lineup and score updated. Match completed." : scheduleStatus === "scheduled" ? "Lineup updated. Match scheduled." : "Lineup updated. Match remains To Be Scheduled.");
   await load(auth.currentUser);

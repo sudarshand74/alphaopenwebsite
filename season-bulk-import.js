@@ -276,7 +276,7 @@ async function commitBatchOperations(operations) {
 }
 async function collectExisting(seasonId) {
   const deletions = [];
-  for (const root of ["seasons", "publicSeasons"]) {
+  for (const root of ["seasons"]) {
     for (const name of [
       "teams",
       "rosterSlots",
@@ -351,11 +351,6 @@ async function processImport(event) {
     operations.push({ type: "set", ref: seasonRef, data: seasonData });
     operations.push({
       type: "set",
-      ref: doc(db, "publicSeasons", season.seasonId),
-      data: seasonData,
-    });
-    operations.push({
-      type: "set",
       ref: doc(seasonRef, "ruleVersions", "v1"),
       data: {
         version: 1,
@@ -382,7 +377,6 @@ async function processImport(event) {
         updatedAt: now,
       };
       push("seasons", ["teams", captain.teamId], team);
-      push("publicSeasons", ["teams", captain.teamId], team);
       if (captain.uid) {
         const memberRef = doc(
             db,
@@ -436,7 +430,6 @@ async function processImport(event) {
           updatedAt: now,
         };
       push("seasons", ["rosterAssignments", assignmentId], assignment);
-      push("publicSeasons", ["rosterAssignments", assignmentId], assignment);
       push("seasons", ["rosterSlots", slot.slotId], slot);
     }
     const weeks = new Map();
@@ -455,7 +448,6 @@ async function processImport(event) {
         });
     for (const week of weeks.values()) {
       push("seasons", ["weeks", week.weekId], week);
-      push("publicSeasons", ["weeks", week.weekId], week);
     }
     for (const row of schedule) {
       const home = teamById.get(row.homeTeamId),
@@ -486,7 +478,6 @@ async function processImport(event) {
           updatedAt: now,
         };
       push("seasons", ["matchups", row.matchupId], matchup);
-      push("publicSeasons", ["matchups", row.matchupId], matchup);
     }
     operations.push({
       type: "set",

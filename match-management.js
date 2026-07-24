@@ -387,11 +387,8 @@ async function save(article, record) {
     payload.homePlayers = homePlayers;
     payload.awayPlayers = awayPlayers;
   }
-  const publicRef = doc(db, "publicSeasons", state.seasonId, "matchups", record.matchup.matchupId, "lineMatches", record.line.lineMatchId);
   const batch = writeBatch(db);
   batch.update(record.ref, payload);
-  const publicPayload = Object.assign({}, record.line, payload);
-  batch.set(publicRef, publicPayload);
   await batch.commit();
   window.dispatchEvent(new CustomEvent("alphaopen:match-line-updated", {
     detail: { seasonId: state.seasonId, matchupId: record.matchup.matchupId, lineMatchId: record.line.lineMatchId }

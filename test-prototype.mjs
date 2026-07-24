@@ -55,8 +55,7 @@ for (const heading of ["Master Data","Season","Operations"]) assert(html.include
 for (const label of ["Player Master","User Management","Venue Master","Setup Season","Season Teams","Matchup Schedule","Lineup Approvers","Submit Lineup","Approve Lineup","Update Lineup","Update Schedule &amp; Score"]) assert(html.includes(`>${label}<`),`Missing grouped Admin item: ${label}`);
 assert(seasonStructureAdmin.includes('collection(db,"seasons",seasonId,"teams")'),"Season team management must use Firebase season teams");
 assert(seasonStructureAdmin.includes('collection(db,"seasons",seasonId,"matchups")'),"Season matchup management must use Firebase season matchups");
-assert(seasonStructureAdmin.includes('doc(db,"publicSeasons",seasonId,"teams",teamId)'),"Season team updates must refresh public records");
-assert(seasonStructureAdmin.includes('doc(db,"publicSeasons",seasonId,"matchups",matchupId)'),"Season matchup updates must refresh public records");
+assert(!seasonStructureAdmin.includes('"publicSeasons"'),"Season structure updates must write only canonical season records");
 
 const routes = [...html.matchAll(/data-route="([^"]+)"/g)].map(match=>match[1]);
 const views = new Set([...html.matchAll(/data-view="([^"]+)"/g)].map(match=>match[1]));
@@ -80,8 +79,8 @@ assert(js.includes("dataset.accessAny"),"Any-of role access handling is missing"
 
 assert(!js.includes("const matchups = ["),"Hardcoded matchup data must not remain in app.js");
 assert(!js.includes("historyByAccount"),"Hardcoded player history must not remain in app.js");
-assert(firebaseData.includes('collection(db, "publicSeasons")'),"Public league data must load from Firebase");
-assert(firebaseData.includes('if (route === "matches")')&&firebaseData.includes("loadActiveSeasonMatches"),"Matches route must load the active public season");
+assert(firebaseData.includes('collection(db, "seasons")'),"Canonical season data must load from Firebase");
+assert(firebaseData.includes('if (route === "matches")')&&firebaseData.includes("loadActiveSeasonMatches"),"Matches route must load the active canonical season");
 assert(firebaseData.includes('collection(seasonRef, "matchups")'),"Firebase matchup collection loading is missing");
 assert(firebaseData.includes('"lineMatches"'),"Firebase line-match loading is missing");
 assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includes("initialLineup"),"Hardcoded prototype identities or lineups remain");
@@ -89,27 +88,27 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v184"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v185"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
 assert(posterGenerator.includes("navigator.clipboard")&&posterGenerator.includes("ClipboardItem"),"Copy Image support is missing");
 assert(posterGenerator.includes("canvas.toBlob")&&posterGenerator.includes("Download PNG"),"Poster PNG generation is missing");
-assert(!matchManagement.includes("delete publicPayload.lineMatchId"),"Published line match must exactly mirror its operational record");
+assert(!matchManagement.includes("publicSeasons"),"Match Management must write only canonical line-match records");
 assert(matchManagement.includes("Confirm final score?")&&matchManagement.includes("window.confirm"),"Completed scores must require confirmation");
 assert(matchManagement.includes("Scores were updated.")&&matchManagement.includes('textContent = "Score updated"'),"Saved-score feedback and disabled-button state are missing");
 assert(matchManagement.includes('if (finalStatus === "completed")')&&matchManagement.includes("return;"),"Completed score save must remain on the current page");
 assert(lineupSubmit.includes("memberRoles.includes(\"ec\")")&&lineupSubmit.includes("globalRoles.includes(\"superAdmin\")"),"Lineup manager access must resolve from authoritative Firebase roles");
 assert(lineupSubmit.includes("state.matchups.flatMap")&&!lineupSubmit.includes("const eligible = state.matchups.filter"),"Lineup week options must include every configured regular-season matchup");
 for (const field of ["venueAddressSnapshot","updatedAt"]) assert(firestoreRules.includes(`'${field}'`), `Captain schedule rule is missing ${field}`);
-assert(firestoreRules.includes("isMatchupTeamCaptain(seasonId, matchupId)")&&firestoreRules.includes("existsAfter"),"Captain public line-match publication rule is missing");
-assert(html.includes('data-view="matches"')&&html.includes('id="matchesPage"'),"Public Matches page is missing");
+assert(firestoreRules.includes("match /lineMatches/{lineMatchId}")&&firestoreRules.includes("isMatchupTeamCaptain(seasonId, matchupId)"),"Canonical captain line-match rule is missing");
+assert(html.includes('data-view="matches"')&&html.includes('id="matchesPage"'),"Matches page is missing");
 assert(html.includes('id="matchesSeasonLabel"')&&js.includes("seasonLabel.textContent = `Season:"),"Matches page must display the active season name");
 assert(html.includes('data-route="home">Home</button><button type="button" class="secondary compact-button" id="refreshMatches"'),"Matches page Home button is missing");
 assert(
-  firebaseData.includes('doc(db, "publicSeasons", active.seasonId)') &&
-    !firebaseData.includes('const source = auth.currentUser ? "seasons" : "publicSeasons"'),
-  "Matches page must use the public active-season tree for every role",
+  firebaseData.includes('doc(db, "seasons", active.seasonId)') &&
+    !firebaseData.includes('doc(db, "publicSeasons", active.seasonId)'),
+  "Matches page must use the canonical active-season tree",
 );
 for (const section of ["Today’s Matches","Upcoming Matches","Completed Matches"]) assert(js.includes(section),`Missing public Matches section: ${section}`);
 for (const column of ["Week–Line","Home Team Players","Away Team Players","Date & Time","Home Team Pts","Away Team Pts"]) assert(matchManagement.includes(column),`Missing Match Management table column: ${column}`);
@@ -177,7 +176,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=45'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=46'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
@@ -193,7 +192,8 @@ assert(seasonBulkImport.includes("/assets/AlphaOpen_Season_Reload_Template.xlsx"
 assert(serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Season reload workbook is missing from the app shell");
 for (const collectionName of ["players","playerPrivate","playerEmailIndex","users","playerAccountLinks","registrationRequests","seasons"]) assert(identityReconciliation.includes(`"${collectionName}"`), `Identity audit must scan ${collectionName}`);
 for (const repair of ["syncPublicPlayer","syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
-for (const repair of ["syncRosterIdentity","syncPublicRosterAssignment","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity","syncPublicLineMatchIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);
+for (const repair of ["syncRosterIdentity","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);
+for (const retiredRepair of ["syncPublicRosterAssignment","syncPublicLineMatchIdentity"]) assert(!identityReconciliation.includes(`async function ${retiredRepair}`), `Legacy season publication repair must be disabled: ${retiredRepair}`);
 for (const finding of ["ROSTER_PLAYER_ID_NAME_CONFLICT","ROSTER_PUBLIC_PARITY_MISMATCH","LINEUP_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PUBLIC_PARITY_MISMATCH"]) assert(identityReconciliation.includes(finding), `Expanded identity audit finding is missing: ${finding}`);
 for (const finding of ["PUBLIC_ONLY_SEASON","PUBLIC_ONLY_TEAM","PUBLIC_ONLY_WEEK","PUBLIC_ONLY_ROSTER","PUBLIC_ONLY_MATCHUP","PUBLIC_ONLY_LINE_MATCH","PLAYER_OBSOLETE_FIELDS","CAPTAIN_PLAYER_ID_NAME_CONFLICT","TEAM_LEGACY_CAPTAIN_FIELDS"]) assert(identityReconciliation.includes(finding), `Migration readiness finding is missing: ${finding}`);
 assert(identityReconciliation.includes("Migration-readiness mode disables every repair action."),"Migration readiness audit must be read-only");
@@ -207,7 +207,7 @@ assert(identityReconciliation.includes('authorization?.roles?.includes("superAdm
 assert(firebaseAuth.includes("canonicalPlayerName"),"Sign-in must resolve the Player Master name");
 assert(firebaseAuth.includes("playerName: userData.displayName"),"Authorization must carry the canonical player name");
 assert(js.includes("authorization.playerName || user.displayName"),"Header must prefer the Player Master name over the Google name");
-assert(js.includes("const assignedLabels")&&js.includes("...memberTeamIds"),"Captain workspace must use authenticated membership team IDs before public team data loads");
+assert(js.includes("const assignedLabels")&&js.includes("...memberTeamIds"),"Captain workspace must use authenticated membership team IDs before canonical team data loads");
 assert(js.includes("past-season-action"),"Past season must render as the separated final Home action");
 assert(html.includes('id="refreshMatches"'),"Matches refresh button is missing");
 assert(js.includes('new CustomEvent("alphaopen:refresh-matches")'),"Matches refresh request is missing");

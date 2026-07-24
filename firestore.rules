@@ -275,7 +275,7 @@ service cloud.firestore {
     }
 
     match /seasons/{seasonId} {
-      allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+      allow read: if isActiveUser();
       allow write: if isSuperAdmin();
 
       match /ruleVersions/{ruleVersionId} {
@@ -291,22 +291,22 @@ service cloud.firestore {
       }
 
       match /teams/{teamId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId);
       }
 
       match /rosterSlots/{slotId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId);
       }
 
       match /rosterAssignments/{assignmentId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId);
       }
 
       match /weeks/{weekId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId);
       }
 
@@ -315,7 +315,7 @@ service cloud.firestore {
       }
 
       match /matchups/{matchupId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId)
           || (isSeasonApprover(seasonId)
             && resource.data.homeTeamId == request.resource.data.homeTeamId
@@ -427,7 +427,7 @@ service cloud.firestore {
         }
 
         match /lineMatches/{lineMatchId} {
-          allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+          allow read: if isActiveUser();
           // Approval creates the operational records. Super Admin and EC may
           // correct players; captains remain limited to schedule and scores.
           allow create: if isSeasonEC(seasonId) || isSeasonApprover(seasonId);
@@ -514,22 +514,22 @@ service cloud.firestore {
       }
 
       match /standings/{teamId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if false;
       }
 
       match /standingsSnapshots/{snapshotId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if false;
       }
 
       match /playoffBrackets/{bracketId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId);
       }
 
       match /announcements/{announcementId} {
-        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
+        allow read: if isActiveUser();
         allow write: if isSeasonEC(seasonId);
       }
 
@@ -545,28 +545,21 @@ service cloud.firestore {
       }
     }
 
-    // Guest-readable publication tree. Writes come only from a trusted
-    // publisher or the bootstrap Super Admin.
+    // Legacy publication tree retained temporarily for migration audit and
+    // cleanup. The application no longer reads or writes this tree.
     match /publicSeasons/{seasonId} {
-      allow read: if true;
-      allow write: if isSuperAdmin();
+      allow read, write: if isSuperAdmin();
 
       match /matchups/{matchupId}/lineMatches/{lineMatchId} {
-        allow read: if true;
-        allow create, update: if
-          (isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId))
-          && existsAfter(/databases/$(database)/documents/seasons/$(seasonId)/matchups/$(matchupId)/lineMatches/$(lineMatchId))
-          && request.resource.data == getAfter(/databases/$(database)/documents/seasons/$(seasonId)/matchups/$(matchupId)/lineMatches/$(lineMatchId)).data;
-        allow delete: if false;
+        allow read, write: if isSuperAdmin();
       }
 
       match /rosterAssignments/{assignmentId} {
-        allow read: if true;
-        allow write: if isSeasonEC(seasonId);
+        allow read, write: if isSuperAdmin();
       }
 
       match /{document=**} {
-        allow read: if true;
+        allow read: if isSuperAdmin();
         allow write: if isSuperAdmin();
       }
     }

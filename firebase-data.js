@@ -65,11 +65,11 @@ async function cacheFirstRead(key, serverLoader, cacheLoader, ttl = PUBLIC_READ_
   }, ttl);
 }
 
-function publicSeasonsOnce() {
-  const reference = collection(db, "publicSeasons"),
+function seasonsOnce() {
+  const reference = collection(db, "seasons"),
     mapSnapshot = (snapshot) => snapshot.docs.map((item) => ({ seasonId: item.id, ref: item.ref, ...item.data() }));
   return cacheFirstRead(
-    "public-seasons",
+    "canonical-seasons",
     async () => mapSnapshot(await getDocs(reference)),
     async () => mapSnapshot(await getDocsFromCache(reference)),
   );
@@ -78,7 +78,7 @@ function publicSeasonsOnce() {
 function seasonTree(seasonRef, cacheKey, includeStandings = false) {
   const ttl = cacheKey.startsWith("operational-tree:")
     ? OPERATIONAL_READ_TTL_MS
-    : cacheKey.startsWith("public-live:")
+    : cacheKey.startsWith("canonical-live:")
       ? 15 * 1000
       : PUBLIC_READ_TTL_MS;
   const loadTree = async (fromCache = false) => {
@@ -120,11 +120,16 @@ function seasonTree(seasonRef, cacheKey, includeStandings = false) {
 
 async function loadPublicActiveSeason() {
   try {
+    if (!auth.currentUser) {
+      window.alphaOpenDataUI?.applyPublicSeasons([]);
+      window.alphaOpenDataUI?.applyActiveSeason(null);
+      return null;
+    }
     try {
       const cachedActive = JSON.parse(localStorage.getItem(ACTIVE_SEASON_SNAPSHOT_KEY) || "null");
       if (cachedActive?.seasonId) window.alphaOpenDataUI?.applyActiveSeason(cachedActive);
     } catch { /* Ignore malformed or unavailable browser storage. */ }
-    const seasons = await publicSeasonsOnce();
+    const seasons = await seasonsOnce();
     window.alphaOpenDataUI?.applyPublicSeasons(seasons);
     const today = new Date().toISOString().slice(0, 10);
     const newestFirst = (a, b) =>
@@ -161,11 +166,11 @@ async function loadPublicActiveSeason() {
 
 async function loadActiveSeasonMatches() {
   const active = await loadPublicActiveSeason();
-  if (!active?.seasonId) throw new Error("No active public season is configured.");
+  if (!active?.seasonId) throw new Error("No active season is configured.");
   window.alphaOpenDataUI?.applyLeagueData(
     await seasonTree(
-      doc(db, "publicSeasons", active.seasonId),
-      `public-live:${active.seasonId}`,
+      doc(db, "seasons", active.seasonId),
+      `canonical-live:${active.seasonId}`,
       true,
     ),
   );
@@ -194,7 +199,7 @@ async function loadPendingApprovalCount(user, authorization = window.alphaOpenAu
 window.addEventListener("alphaopen:match-line-updated", (event) => {
   const seasonId = event.detail?.seasonId;
   if (!seasonId) return;
-  [`operational-tree:${seasonId}`, `public-live:${seasonId}`, `public-league:${seasonId}`, `public-tree:${seasonId}`].forEach((key) => {
+  [`operational-tree:${seasonId}`, `canonical-live:${seasonId}`, `canonical-league:${seasonId}`, `canonical-tree:${seasonId}`].forEach((key) => {
     readCache.delete(key);
     try { localStorage.removeItem(CACHE_STAMP_PREFIX + key); }
     catch { /* Storage can be unavailable in private browsing. */ }
@@ -202,7 +207,7 @@ window.addEventListener("alphaopen:match-line-updated", (event) => {
 });
 async function loadPublishedHistoryData() {
   try {
-    const published = await publicSeasonsOnce();
+    const published = await seasonsOnce();
     const seasons = await Promise.all(
       published.map((season) => seasonTree(season.ref, `public-tree:${season.seasonId}`)),
     );
@@ -230,7 +235,7 @@ async function loadOperationalFallHistoryData() {
 
 async function loadPublicFallHistoryData() {
   try {
-    const fall = await seasonTree(doc(db, "publicSeasons", "AO-F-2026"), "public-tree:AO-F-2026");
+    const fall = await seasonTree(doc(db, "seasons", "AO-F-2026"), "canonical-tree:AO-F-2026");
     window.alphaOpenDataUI?.applyHistoryData([
       ...publishedHistorySeasons.filter((item) => item.season?.seasonId !== "AO-F-2026"),
       fall,
@@ -243,7 +248,7 @@ async function loadPublicFallHistoryData() {
 async function loadPublicLeagueData() {
   try {
     window.alphaOpenDataUI?.applyLeagueData(
-      await seasonTree(doc(db, "publicSeasons", "AO-S-2026"), "public-league:AO-S-2026", true),
+      await seasonTree(doc(db, "seasons", "AO-S-2026"), "canonical-league:AO-S-2026", true),
     );
   } catch (error) {
     console.error("Public Firebase league data load failed",error);
@@ -956,14 +961,14 @@ window.addEventListener("alphaopen:update-spring-line",async event=>{
     const user=auth.currentUser;if(!user)throw new Error("Super Admin sign-in is required.");
     const item=event.detail||{},seasonId="AO-S-2026";
     if(!item.matchupId||!item.lineMatchId)throw new Error("The Spring line record is missing its ID.");
-    const operationalMatch=doc(db,"seasons",seasonId,"matchups",item.matchupId),publicMatch=doc(db,"publicSeasons",seasonId,"matchups",item.matchupId);
-    const operationalLine=doc(operationalMatch,"lineMatches",item.lineMatchId),publicLine=doc(publicMatch,"lineMatches",item.lineMatchId);
+    const operationalMatch=doc(db,"seasons",seasonId,"matchups",item.matchupId);
+    const operationalLine=doc(operationalMatch,"lineMatches",item.lineMatchId);
     await runTransaction(db,async transaction=>{
-      const [oldOperational,oldPublic,operationalParent,publicParent]=await Promise.all([transaction.get(operationalLine),transaction.get(publicLine),transaction.get(operationalMatch),transaction.get(publicMatch)]);
-      if(!oldOperational.exists()||!oldPublic.exists())throw new Error("The operational or public line record was not found.");
+      const [oldOperational,operationalParent]=await Promise.all([transaction.get(operationalLine),transaction.get(operationalMatch)]);
+      if(!oldOperational.exists())throw new Error("The canonical line record was not found.");
       const playedAt=item.scheduledAt?new Date(item.scheduledAt):null,payload={homePlayers:item.homePlayers,awayPlayers:item.awayPlayers,scheduledAt:playedAt,venueNameSnapshot:item.venueNameSnapshot,sets:item.sets,homePoints:item.homePoints,awayPoints:item.awayPoints,winnerTeamId:item.winnerTeamId,scoreStatus:"published",scheduleStatus:"completed",updatedAt:serverTimestamp()};
-      transaction.update(operationalLine,payload);transaction.update(publicLine,payload);
-      [[operationalParent,operationalMatch,oldOperational],[publicParent,publicMatch,oldPublic]].forEach(([parentSnap,parentRef,oldLine])=>{if(!parentSnap.exists())return;const parent=parentSnap.data(),old=oldLine.data();transaction.update(parentRef,{homeTeamPoints:Number(parent.homeTeamPoints||0)-Number(old.homePoints||0)+Number(item.homePoints||0),awayTeamPoints:Number(parent.awayTeamPoints||0)-Number(old.awayPoints||0)+Number(item.awayPoints||0),updatedAt:serverTimestamp()});});
+      transaction.update(operationalLine,payload);
+      if(operationalParent.exists()){const parent=operationalParent.data(),old=oldOperational.data();transaction.update(operationalMatch,{homeTeamPoints:Number(parent.homeTeamPoints||0)-Number(old.homePoints||0)+Number(item.homePoints||0),awayTeamPoints:Number(parent.awayTeamPoints||0)-Number(old.awayPoints||0)+Number(item.awayPoints||0),updatedAt:serverTimestamp()});}
     });
     reply(true);
   } catch(error) { console.error("Spring line update failed",error);reply(false,error.message||"The lineup and score could not be saved."); }
@@ -974,6 +979,15 @@ function currentRoute() {
 }
 
 async function loadForRoute(route, user = auth.currentUser) {
+  if (!user && ["home", "fall2026", "season-dashboard", "matches", "schedule", "history"].includes(route)) {
+    window.alphaOpenDataUI?.applyPublicSeasons([]);
+    window.alphaOpenDataUI?.applyActiveSeason(null);
+    window.alphaOpenDataUI?.applyLeagueData({
+      season: null, teams: [], standings: [], matchups: [], lineMatches: [],
+    });
+    window.alphaOpenDataUI?.applyHistoryData([]);
+    return;
+  }
   if (route === "home") {
     await loadPublicActiveSeason();
     await loadPendingApprovalCount(user);
@@ -1024,7 +1038,7 @@ window.addEventListener("alphaopen:authorization-changed", (event) => {
 window.addEventListener("alphaopen:refresh-matches", async () => {
   try {
     for (const key of [...readCache.keys()])
-      if (key.startsWith("operational-tree:") || key.startsWith("public-live:"))
+      if (key.startsWith("operational-tree:") || key.startsWith("canonical-live:"))
         readCache.delete(key);
     await loadActiveSeasonMatches();
     window.dispatchEvent(new CustomEvent("alphaopen:matches-refreshed", { detail: { ok: true } }));
@@ -1035,12 +1049,6 @@ window.addEventListener("alphaopen:refresh-matches", async () => {
     }));
   }
 });
-
-// Active-season identity is public and should not wait for Firebase Auth to
-// finish restoring a user session.
-loadPublicActiveSeason().catch((error) =>
-  console.error("Initial public season preload failed", error),
-);
 
 window.addEventListener("alphaopen:admin-panel-changed", () => {
   startAdminLoads(auth.currentUser);

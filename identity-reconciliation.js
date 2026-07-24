@@ -798,7 +798,6 @@ async function syncCaptainAccess(context) {
     throw new Error("Captain needs one active account link before access can be synchronized.");
   const memberRef = doc(db, "seasons", context.seasonId, "members", link.uid);
   const teamRef = doc(db, "seasons", context.seasonId, "teams", context.teamId);
-  const publicTeamRef = doc(db, "publicSeasons", context.seasonId, "teams", context.teamId);
   const batch = writeBatch(db);
   const memberSnapshot = await getDoc(memberRef), member = memberSnapshot.data() || {};
   const roles = [...new Set([...parseList(member.roles), "player", "captain"])];
@@ -812,11 +811,6 @@ async function syncCaptainAccess(context) {
     captainNameSnapshot: user.displayName || team.captainNameSnapshot || context.playerId,
     updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
   }, { merge: true });
-  batch.set(publicTeamRef, {
-    captainPlayerIds: [context.playerId],
-    captainNameSnapshot: user.displayName || team.captainNameSnapshot || context.playerId,
-    updatedAt: serverTimestamp()
-  }, { merge: true });
   await batch.commit();
 }
 
@@ -824,11 +818,8 @@ async function syncRosterIdentity(context) {
   if (!context.targetPlayerId || !context.targetName)
     throw new Error("The correct Player Master identity could not be resolved.");
   const operationalRef = doc(db, "seasons", context.seasonId, "rosterAssignments", context.assignmentId);
-  const publicRef = doc(db, "publicSeasons", context.seasonId, "rosterAssignments", context.assignmentId);
   await runTransaction(db, async transaction => {
-    const [operationalSnapshot, publicSnapshot] = await Promise.all([
-      transaction.get(operationalRef), transaction.get(publicRef)
-    ]);
+    const operationalSnapshot = await transaction.get(operationalRef);
     if (!operationalSnapshot.exists()) throw new Error("The roster assignment no longer exists.");
     const current = operationalSnapshot.data();
     if ((current.playerId || "") !== (context.sourcePlayerId || "") ||
@@ -851,24 +842,7 @@ async function syncRosterIdentity(context) {
       correction.replacementPlayerNameSnapshot = context.targetName;
     }
     transaction.set(operationalRef, correction, { merge: true });
-    transaction.set(publicRef, {
-      ...correction,
-      publishedAt: serverTimestamp()
-    }, { merge: true });
   });
-}
-
-async function syncPublicRosterAssignment(context) {
-  const tree = auditState.seasonTrees.find(item => item.season.id === context.seasonId);
-  const source = tree?.rosterAssignments.find(item => item.id === context.assignmentId);
-  if (!source) throw new Error("The operational roster assignment no longer exists.");
-  await setDoc(doc(db, "publicSeasons", context.seasonId, "rosterAssignments", context.assignmentId), {
-    assignmentId: context.assignmentId,
-    seasonId: context.seasonId,
-    ...rosterIdentityFields(source),
-    updatedAt: serverTimestamp(),
-    updatedByUid: auth.currentUser.uid
-  }, { merge: true });
 }
 
 async function syncLineupPlayerIdentity(context) {
@@ -900,11 +874,8 @@ async function syncLineMatchPlayerIdentity(context) {
   if (!context.targetPlayerId || !context.targetName)
     throw new Error("The correct Player Master identity could not be resolved.");
   const operationalRef = doc(db, "seasons", context.seasonId, "matchups", context.matchupId, "lineMatches", context.lineMatchId);
-  const publicRef = doc(db, "publicSeasons", context.seasonId, "matchups", context.matchupId, "lineMatches", context.lineMatchId);
   await runTransaction(db, async transaction => {
-    const [operationalSnapshot, publicSnapshot] = await Promise.all([
-      transaction.get(operationalRef), transaction.get(publicRef)
-    ]);
+    const operationalSnapshot = await transaction.get(operationalRef);
     if (!operationalSnapshot.exists()) throw new Error("The operational line match no longer exists.");
     const field = `${context.side}Players`;
     const players = parseList(operationalSnapshot.data()[field]).map(player => ({ ...player }));
@@ -924,32 +895,13 @@ async function syncLineMatchPlayerIdentity(context) {
       updatedAt: serverTimestamp()
     };
     transaction.set(operationalRef, correction, { merge: true });
-    transaction.set(publicRef, correction, { merge: true });
   });
-}
-
-async function syncPublicLineMatchIdentity(context) {
-  const tree = auditState.seasonTrees.find(item => item.season.id === context.seasonId);
-  const matchup = tree?.matchups.find(item => item.matchup.id === context.matchupId);
-  const source = matchup?.lineMatches.find(item => item.id === context.lineMatchId);
-  if (!source) throw new Error("The operational line match no longer exists.");
-  await setDoc(
-    doc(db, "publicSeasons", context.seasonId, "matchups", context.matchupId, "lineMatches", context.lineMatchId),
-    {
-      homePlayers: parseList(source.homePlayers),
-      awayPlayers: parseList(source.awayPlayers),
-      updatedAt: serverTimestamp(),
-      updatedByUid: auth.currentUser.uid
-    },
-    { merge: true }
-  );
 }
 
 const repairs = {
   syncPublicPlayer, syncEmailIndex, syncAccountTree, syncPrivateAccount,
   syncMembershipIdentity, syncCaptainAccess, syncRosterIdentity,
-  syncPublicRosterAssignment, syncLineupPlayerIdentity,
-  syncLineMatchPlayerIdentity, syncPublicLineMatchIdentity
+  syncLineupPlayerIdentity, syncLineMatchPlayerIdentity
 };
 
 function renderAudit() {

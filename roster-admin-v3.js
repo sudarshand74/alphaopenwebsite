@@ -311,15 +311,8 @@ form?.addEventListener("submit", async (event) => {
       doc(db, "seasons", seasonId, "rosterAssignments", historyId),
       history,
     );
-    batch.set(
-      doc(db, "publicSeasons", seasonId, "rosterAssignments", historyId),
-      history,
-    );
   }
   batch.set(doc(db, "seasons", seasonId, "rosterAssignments", id), data, {
-    merge: true,
-  });
-  batch.set(doc(db, "publicSeasons", seasonId, "rosterAssignments", id), data, {
     merge: true,
   });
   $("#saveRosterReplacement").disabled = true;

@@ -1,7 +1,7 @@
 # AlphaOpen Firestore Data Model
 
 Status: Final design for MVP implementation  
-Version: 1.0  
+Version: 1.1
 Firebase project: `alphaopen-development-2026`
 
 ## 1. Design decisions
@@ -9,7 +9,7 @@ Firebase project: `alphaopen-development-2026`
 1. Firebase Authentication UID is the permanent account key. Player ID is the permanent Player Master key; normalized email is a unique deduplication index and may change without changing player history.
 2. Existing AlphaOpen canonical IDs remain unchanged and become Firestore document IDs wherever practical.
 3. Master people and venues are global. Competition records are owned by a season.
-4. Public and private data use separate documents because Firestore security rules cannot hide individual fields in a readable document.
+4. Each season has one canonical tree. Persona-based Firestore rules control access to canonical collections and restricted workflow subcollections; no manually synchronized publication tree is maintained.
 5. Current state is stored for fast screens; immutable revisions and audit events preserve history.
 6. Scores, standings, participation totals, and validation results are derived by trusted application code. Captains cannot directly write official calculated values.
 7. Timestamps are Firestore `Timestamp` values in UTC. A season stores its IANA timezone, such as `America/New_York`, for display and deadline calculation.
@@ -73,15 +73,9 @@ seasons/{seasonId}
   announcements/{announcementId}
   auditEvents/{eventId}
 
-publicSeasons/{seasonId}
-  teams/{teamId}
-  matchups/{matchupId}
-  lineMatches/{lineMatchId}
-  standings/{teamId}
-  announcements/{announcementId}
 ```
 
-`publicSeasons` is a publication view. Unauthenticated visitors read only this tree plus approved public `players` and `venues` documents. Private operational records are never made public.
+`seasons` is the sole season source of truth. Active authenticated users may read season masters and approved competition records. Draft lineups, reviews, account memberships, requests, and audit records retain narrower Captain, Neutral Approver, EC, or Super Admin rules. Unauthenticated guests do not read season records.
 
 ## 4. Global collections
 
@@ -568,19 +562,7 @@ calculatedAt: Timestamp
 sourceVersion: number
 ```
 
-`standingsSnapshots` stores immutable standings at publication milestones. Published summaries are copied to `publicSeasons/{seasonId}`.
-
-Only published information is copied to the public tree:
-
-- Season overview and rules version intended for guests
-- Team names and captains when approved for publication
-- Upcoming schedules
-- Approved lineups after their publication time
-- Confirmed results
-- Standings and playoff bracket
-- Public announcements
-
-No email, phone, private note, availability, draft lineup, dispute, or audit content is copied.
+`standingsSnapshots` stores immutable standings at publication milestones. No second publication copy is created. Approved schedules, results, standings, playoff brackets, and announcements remain in their canonical season collections, while draft lineups, disputes, availability, and audit content remain protected by their more restrictive subcollection rules.
 
 ## 12. Notifications and audit
 
