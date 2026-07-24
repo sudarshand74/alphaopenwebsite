@@ -191,7 +191,8 @@ service cloud.firestore {
     }
 
     match /players/{playerId} {
-      allow get: if isSuperAdmin()
+      allow get: if (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353')
+        || isSuperAdmin()
         || (signedIn() && resource.data.accountUid == request.auth.uid)
         || (
           signedIn()
@@ -201,11 +202,11 @@ service cloud.firestore {
           && resource.data.emailNormalized is string
           && resource.data.emailNormalized.lower() == request.auth.token.email.lower()
         );
-      allow list: if isSuperAdmin()
-        || request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353'
+      allow list: if (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353')
+        || isSuperAdmin()
         || isActiveSeasonEC();
-      allow write: if isSuperAdmin()
-        || (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353');
+      allow write: if (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353')
+        || isSuperAdmin();
     }
 
     match /playerEmailIndex/{emailKey} {

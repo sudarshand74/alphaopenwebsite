@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=3";
+import { auth, db } from "./firebase-client.js?v=4";
 import { bumpPlayerMasterVersion } from "./player-identity.js?v=1";
 
 const ADMIN_EMAIL = "sudarshandesai74@gmail.com";

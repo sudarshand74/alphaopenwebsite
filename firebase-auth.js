@@ -1,8 +1,6 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import {
   GoogleAuthProvider,
   browserSessionPersistence,
-  getAuth,
   inMemoryPersistence,
   onAuthStateChanged,
   setPersistence,
@@ -12,26 +10,14 @@ import {
 import {
   doc,
   getDoc,
-  getFirestore,
   runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  storageBucket: "alphaopen-development-2026.firebasestorage.app",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722"
-};
-
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+import { auth, db } from "./firebase-client.js?v=4";
+export { auth, db };
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
@@ -290,6 +276,7 @@ onAuthStateChanged(auth, async user => {
 
   ui.setStatus("Securing your AlphaOpen profile…");
   try {
+    await user.getIdTokenResult(true);
     const userData = await ensureUserProfile(user);
     const authorization = await authorizationFor(user, userData);
     window.alphaOpenProfileReady = { uid: user.uid, status: "ready" };

@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=3";
+import { auth, db } from "./firebase-client.js?v=4";
 import { loadCanonicalPlayers } from "./player-identity.js?v=1";
 
 const byId=id=>document.getElementById(id);

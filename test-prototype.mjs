@@ -28,10 +28,10 @@ const posterGenerator = await fs.readFile("poster-generator.js","utf8");
 const aoContent = await fs.readFile("ao-content.js","utf8");
 
 for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule, aoContent })) {
-  assert(source.includes('from "./firebase-client.js?v=3"'),`${name} must use the shared Firebase client`);
+  assert(source.includes('from "./firebase-client.js?v=4"'),`${name} must use the shared Firebase client`);
   assert(!source.includes("getFirestore("),`${name} must not reinitialize Firestore with different options`);
 }
-assert(runtimeLoader.includes('await import("./firebase-client.js?v=3")'),"Runtime must preload the identical shared Firebase client URL");
+assert(runtimeLoader.includes('await import("./firebase-client.js?v=4")'),"Runtime must preload the identical shared Firebase client URL");
 for (const staleVersion of ["firebase-client.js?v=1", "firebase-client.js?v=2"]) {
   assert(!`${runtimeLoader}${lineupSubmit}${lineupApprove}${lineupUpdate}${rosterAdminShared}${playerAdmin}${matchManagementModule}`.includes(staleVersion),`Mixed shared Firebase client version remains: ${staleVersion}`);
 }
@@ -88,7 +88,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v190"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v198"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -145,7 +145,7 @@ assert(serviceWorker.includes("caches.match"),"Service worker must serve cached 
 assert(serviceWorker.includes("isAppCode"),"App code must use the update-safe caching path");
 assert(pwa.includes("beforeinstallprompt"),"Missing install experience");
 assert(pwa.includes("serviceWorker.register"),"Missing service-worker registration");
-assert(firebaseAuth.includes("initializeApp(firebaseConfig)"),"Firebase app is not initialized");
+assert(firebaseAuth.includes('from "./firebase-client.js?v=4"'),"Firebase Auth must share the initialized Firebase client");
 assert(firebaseAuth.includes("onAuthStateChanged"),"Firebase auth observer is missing");
 assert(firebaseAuth.includes("signInWithPopup"),"Desktop Google sign-in is missing");
 assert(!firebaseAuth.includes("signInWithRedirect"),"Safari-incompatible cross-domain redirect flow must not be used");
@@ -176,7 +176,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=50'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=58'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
@@ -226,7 +226,7 @@ assert(js.includes('new CustomEvent("alphaopen:route-changed"'),"Route changes m
 assert(firebaseData.includes("function cachedRead"),"Shared Firebase request deduplication is missing");
 assert(firebaseData.includes("async function loadForRoute"),"Route-aware Firebase loader is missing");
 assert(!firebaseData.trimEnd().endsWith("loadPublishedHistoryData();"),"All-season history must not load unconditionally at startup");
-assert(firebaseClient.includes("persistentLocalCache")&&firebaseClient.includes("persistentMultipleTabManager"),"Persistent multi-tab Firestore caching is missing");
+assert(firebaseClient.includes("memoryLocalCache"),"In-memory Firestore caching is missing");
 assert(firebaseClient.includes("connectFirestoreEmulator")&&runtimeLoader.includes('get("firebase")==="emulator"'),"Local Firebase Emulator mode is missing");
 assert(firebaseAuth.includes("isProtectedAdmin") && firebaseAuth.includes("protectedAdminFallback"),"Protected Super Admin fallback is missing");
 assert(firebaseAuth.includes('profileType: isBootstrapAdmin ? "superAdmin" : "player"'),"Pending registrations must receive Player profile type");

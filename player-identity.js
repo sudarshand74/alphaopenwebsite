@@ -7,7 +7,7 @@ import {
   serverTimestamp,
   setDoc,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { db } from "./firebase-client.js?v=3";
+import { db } from "./firebase-client.js?v=4";
 
 const VERSION_REF = doc(db, "publicConfig", "playerMaster");
 const CACHE_KEY = "alphaopen:canonical-players:v1";

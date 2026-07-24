@@ -12,7 +12,7 @@ import {
   where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=3";
+import { auth, db } from "./firebase-client.js?v=4";
 
 const byId = (id) => document.getElementById(id);
 const CONTENT = "aoContent";

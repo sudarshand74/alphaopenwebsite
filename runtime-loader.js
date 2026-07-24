@@ -1,5 +1,5 @@
 const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LOCAL_HOSTS.has(location.hostname),useFirebaseEmulator=isLocalDevelopment&&new URLSearchParams(location.search).get("firebase")==="emulator";
-const coreModules=["./firebase-auth.js?v=35","./firebase-data.js?v=60"];
+const coreModules=["./firebase-auth.js?v=43","./firebase-data.js?v=60"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
 const adminModuleForPanel={players:"./player-admin.js?v=34","identity-audit":"./identity-reconciliation.js?v=14",rosters:"./roster-admin-v3.js?v=9",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=11","season-teams":"./season-structure-admin.js?v=3","season-matchups":"./season-structure-admin.js?v=3","lineup-approvers":"./lineup-approver-admin.js?v=4"};
@@ -12,7 +12,7 @@ function loadRouteFeature(route){
 }
 
 if(!isLocalDevelopment||useFirebaseEmulator){
-  await import("./firebase-client.js?v=3");
+  await import("./firebase-client.js?v=4");
   const results=await Promise.allSettled(coreModules.map(path=>import(path)));
   results.forEach((result,index)=>{if(result.status==="rejected")console.error(`AlphaOpen module failed: ${coreModules[index]}`,result.reason);});
   const currentRoute=()=>location.hash.slice(1)||"home";
