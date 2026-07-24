@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import "./season-reset.js?v=2";
 const config = {
     projectId: "alphaopen-development-2026",
     appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
@@ -88,73 +89,12 @@ function rows(XLSX, workbook, name) {
     .filter((row) => Object.values(row).some((v) => clean(v)));
 }
 async function downloadTemplate() {
-  const XLSX = await loadXlsx(),
-    book = XLSX.utils.book_new(),
-    add = (name, data) =>
-      XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(data), name);
-  add("Instructions", [
-    {
-      Step: 1,
-      Instruction: "Complete every required sheet; do not rename headers.",
-    },
-    {
-      Step: 2,
-      Instruction: "Player IDs and emails must match Firebase Player Master.",
-    },
-    {
-      Step: 3,
-      Instruction: "Validate in Admin before confirming replacement.",
-    },
-  ]);
-  add("Season", [
-    {
-      "Season ID": "AO-F-2027",
-      "Season Name": "AlphaOpen Fall 2027",
-      Term: "fall",
-      Year: 2027,
-      Timezone: "America/New_York",
-      "Start Date": "2027-08-02",
-      "End Date": "2027-11-14",
-      Status: "draft",
-      Teams: 8,
-      "Roster Ranks Per Team": 14,
-      "Regular Weeks": 7,
-      "Lines Per Matchup": 5,
-      "Players Per Line": 2,
-    },
-  ]);
-  add("Captains", [
-    {
-      "Team ID": "AO-F-2027-T1",
-      "Team Name": "Team CaptainName",
-      "Captain Player ID": "P1001",
-      "Captain Email": "captain@example.com",
-    },
-  ]);
-  add("Team Roster", [
-    {
-      "Team ID": "AO-F-2027-T1",
-      Rank: 1,
-      "Player ID": "P1001",
-      "Player Email": "captain@example.com",
-    },
-  ]);
-  add("Weekly Schedule", [
-    {
-      "Week ID": "W1",
-      "Week Name": "Week 1",
-      "Matchup ID": "AO-F-2027-W1-M1",
-      "Home Team ID": "AO-F-2027-T1",
-      "Away Team ID": "AO-F-2027-T2",
-      "Week Start Date": "2027-08-02",
-      "Play By Date": "2027-08-16",
-      "Lineup Submission Date": "2027-08-06",
-      Status: "pendingSubmission",
-    },
-  ]);
-  XLSX.writeFileXLSX(book, "AlphaOpen_Season_Bulk_Upload_Template.xlsx", {
-    cellDates: true,
-  });
+  const link = document.createElement("a");
+  link.href = "/assets/AlphaOpen_Season_Reload_Template.xlsx";
+  link.download = "AlphaOpen_Season_Reload_Template.xlsx";
+  document.body.append(link);
+  link.click();
+  link.remove();
 }
 async function prepare(file) {
   if (!isAdmin())

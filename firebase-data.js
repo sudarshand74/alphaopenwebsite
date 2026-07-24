@@ -470,7 +470,7 @@ async function loadSeasons() {
     seasonRecords = snapshot.docs.map(item => ({ ...item.data(), seasonId: item.id }));
     seasonList.innerHTML = seasonRecords.map(season => {
       const active = season.status === "active";
-      return `<div class="season-admin-row"><div><b>${escapeHtml(season.name)}</b><small>${escapeHtml(season.seasonId)} · ${escapeHtml(season.startDate)} to ${escapeHtml(season.endDate)}</small></div><span class="badge ${active ? "lime" : "navy"}">${escapeHtml(season.status)}</span><strong>${season.teamCount} teams</strong><button class="secondary compact-button" type="button" data-edit-season="${escapeHtml(season.seasonId)}">Edit</button></div>`;
+      return `<div class="season-admin-row"><div><b>${escapeHtml(season.name)}</b><small>${escapeHtml(season.seasonId)} · ${escapeHtml(season.startDate)} to ${escapeHtml(season.endDate)}</small></div><span class="badge ${active ? "lime" : "navy"}">${escapeHtml(season.status)}</span><strong>${season.teamCount} teams</strong><div class="card-actions"><button class="secondary compact-button" type="button" data-edit-season="${escapeHtml(season.seasonId)}">Edit</button><button class="secondary compact-button danger-button" type="button" data-reset-season="${escapeHtml(season.seasonId)}" data-reset-season-name="${escapeHtml(season.name)}">Reset data</button></div></div>`;
     }).join("");
     seasonList.querySelectorAll("[data-edit-season]").forEach(button => button.addEventListener("click", () => {
       const season = seasonRecords.find(item => item.seasonId === button.dataset.editSeason);

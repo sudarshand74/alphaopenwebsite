@@ -18,8 +18,21 @@ const seasonOperations = await fs.readFile("season-operations.js","utf8");
 const seasonStructureAdmin = await fs.readFile("season-structure-admin.js","utf8");
 const firestoreRules = await fs.readFile("firestore.rules","utf8");
 const lineupSubmit = await fs.readFile("lineup-submit.js","utf8");
-const matchManagement = `${await fs.readFile("match-management.js","utf8")}${js}`;
+const lineupApprove = await fs.readFile("lineup-approve.js","utf8");
+const lineupUpdate = await fs.readFile("lineup-update.js","utf8");
+const rosterAdminShared = await fs.readFile("roster-admin-v3.js","utf8");
+const matchManagementModule = await fs.readFile("match-management.js","utf8");
+const matchManagement = `${matchManagementModule}${js}`;
 const posterGenerator = await fs.readFile("poster-generator.js","utf8");
+
+for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule })) {
+  assert(source.includes('from "./firebase-client.js?v=3"'),`${name} must use the shared Firebase client`);
+  assert(!source.includes("getFirestore("),`${name} must not reinitialize Firestore with different options`);
+}
+assert(runtimeLoader.includes('await import("./firebase-client.js?v=3")'),"Runtime must preload the identical shared Firebase client URL");
+for (const staleVersion of ["firebase-client.js?v=1", "firebase-client.js?v=2"]) {
+  assert(!`${runtimeLoader}${lineupSubmit}${lineupApprove}${lineupUpdate}${rosterAdminShared}${playerAdmin}${matchManagementModule}`.includes(staleVersion),`Mixed shared Firebase client version remains: ${staleVersion}`);
+}
 
 for (const token of ["Â","â","Ã"]) assert(!`${html}${js}${css}`.includes(token),`Mojibake token found: ${token}`);
 for (const id of ["authStatus","profileName","profileRole","springRosterTeams","springSeasonResults","springWeekFilter","springTeamFilter","standingsRows","historyRows","lineupRows","approvalQueue","rosterRows","signInDialog","registrationBlockedDialog","registrationBlockedMessage","acknowledgeRegistrationBlocked","createSeasonDialog","createSeasonForm","seasonDialogTitle","seasonStatus","seasonAdminList","playerMasterCard","playerMasterPanel","playerMasterSearch","venueManagementPanel","venueMasterSearch","venueMasterList","editVenueDialog","editVenueForm","editVenueId","editVenueName","editVenueStatus","userManagementSearch","addPlayerDialog","importPlayersDialog","editPlayerDialog","editPlayerId","editPlayerEmail","playerImportFile","openRegisteredUsers","registeredUsersCard","registeredUsersPanel","refreshRegisteredUsers","manageUserDialog","manageActiveSeasonLabel","managedPastSeasons","scoreDialog","seasonTeamsSeason","seasonTeamsList","seasonTeamDialog","seasonMatchupsSeason","seasonMatchupsList","seasonMatchupDialog"]) assert(html.includes(`id="${id}"`),`Missing #${id}`);
@@ -74,7 +87,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v167"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v174"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -162,12 +175,27 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=34'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=39'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
+const seasonReset = await fs.readFile("season-reset.js","utf8");
+assert(html.includes('id="resetSeasonDialog"')&&html.includes('id="resetSeasonConfirmation"'),"Season reset confirmation UI is missing");
+assert(seasonReset.includes("DELETE ${target.seasonId}")&&seasonReset.includes("resetSeasonAcknowledgement"),"Season reset requires typed and checked confirmation");
+for (const collectionName of ["teams","members","rosterAssignments","weeks","matchups","approverAssignments","standings","lineups","lineupReviews","lineMatches","revisions","scheduleProposals","scoreSubmissions","scoreDecisions"]) assert(seasonReset.includes(`"${collectionName}"`),`Season reset scope is missing ${collectionName}`);
+assert(seasonReset.includes('for (let start = 0; start < references.length; start += 400)'),"Season reset must use controlled Firestore batches");
+assert(seasonReset.includes("remaining.references.length"),"Season reset must verify that no scoped records remain");
+assert(firestoreRules.includes("Super Admin season reset")&&firestoreRules.includes("allow delete: if isSuperAdmin()"),"Super Admin recursive season-delete rule is missing");
+assert(seasonBulkImport.includes("/assets/AlphaOpen_Season_Reload_Template.xlsx"),"Admin template download is not attached to the season reload workbook");
+assert(serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Season reload workbook is missing from the app shell");
 for (const collectionName of ["players","playerPrivate","playerEmailIndex","users","playerAccountLinks","registrationRequests","seasons"]) assert(identityReconciliation.includes(`"${collectionName}"`), `Identity audit must scan ${collectionName}`);
 for (const repair of ["syncPublicPlayer","syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
+for (const repair of ["syncRosterIdentity","syncPublicRosterAssignment","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity","syncPublicLineMatchIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);
+for (const finding of ["ROSTER_PLAYER_ID_NAME_CONFLICT","ROSTER_PUBLIC_PARITY_MISMATCH","LINEUP_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PUBLIC_PARITY_MISMATCH"]) assert(identityReconciliation.includes(finding), `Expanded identity audit finding is missing: ${finding}`);
+assert(identityReconciliation.includes('readCollection("seasons", season.id, "rosterAssignments")'),"Identity audit must scan operational roster assignments");
+assert(identityReconciliation.includes('readCollection("publicSeasons", season.id, "rosterAssignments")'),"Identity audit must scan published roster assignments");
+assert(identityReconciliation.includes('readMatchupIdentityTree("seasons", season.id)'),"Identity audit must scan operational lineups and line matches");
+assert(identityReconciliation.includes('readMatchupIdentityTree("publicSeasons", season.id)'),"Identity audit must scan published line matches");
 assert(identityReconciliation.includes("window.confirm"),"Identity repairs must require explicit confirmation");
 assert(!identityReconciliation.includes("sudarshandesai74@gmail.com"),"Identity tool must not hardcode a Super Admin email");
 assert(identityReconciliation.includes('authorization?.roles?.includes("superAdmin")'),"Identity tool must use authoritative role authorization");
@@ -244,6 +272,15 @@ assert(firebaseData.includes("registeredUserRecords"),"User Management search is
 assert(firestoreRules.includes("isBootstrapAdminEmail(resource.data.email)"),"Protected account rules guard is missing");
 assert(firebaseData.includes("saveManagedUser"),"Registered-user role management is missing");
 assert(firebaseData.includes('"approverAssignments"'),"Neutral Approver assignment is missing");
+assert(js.includes('"Review and Approve Lineup"'), "Neutral Approver Home action is missing");
+assert(js.includes("awaiting your review/approval"), "Neutral Approver pending-lineup count is missing");
+assert(js.includes('account.role === "Super Admin" || account.access.includes("approver")'), "Lineup review Home action must support Super Admin and secondary Neutral Approver access");
+assert(lineupApprove.includes("async function rejectLineup"), "Lineup rejection workflow is missing");
+assert(lineupApprove.includes('status:"rejected"'), "Rejected lineup status is not persisted");
+assert(lineupSubmit.includes("Lineup rejected:"), "Submitters cannot see the lineup rejection reason");
+assert(lineupSubmit.includes("rejectionReason: null"), "Resubmission must clear the prior rejection");
+assert(firestoreRules.includes("'rejectionReason', 'rejectedByUid', 'rejectedAt'"), "Lineup rejection fields are not allowed by Firestore rules");
+assert(firestoreRules.includes("'changesRequested', 'rejected', 'submitted'"), "Rejected lineups cannot be resubmitted");
 
 const ranks = [[1,3],[2,5],[6,7],[8,9],[11,14]];
 const sor = ranks.map(pair=>pair[0]+pair[1]);

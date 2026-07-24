@@ -163,8 +163,20 @@ function renderWorkspace(account) {
   ];
   if (account.role !== "Super Admin" && account.access.includes("captain"))
     actions.push(["lineup", "Build & Submit Lineup", "Run SOR checks"]);
-  if (account.role !== "Super Admin" && account.access.includes("approver"))
-    actions.push(["approvals", "Review lineups", "Publish both together"]);
+  if (account.role === "Super Admin" || account.access.includes("approver")) {
+    const pendingLineupCount = matchups.reduce(
+      (count, matchup) =>
+        count +
+        (String(matchup.homeLineupStatus || "").toLowerCase() === "submitted" ? 1 : 0) +
+        (String(matchup.awayLineupStatus || "").toLowerCase() === "submitted" ? 1 : 0),
+      0,
+    );
+    actions.push([
+      "approvals",
+      "Review and Approve Lineup",
+      `${pendingLineupCount} ${pendingLineupCount === 1 ? "lineup is" : "lineups are"} awaiting your review/approval`,
+    ]);
+  }
   if (account.role === "Super Admin")
     actions.push(["admin", "Season admin", "Manage people and data"]);
   if (account.access.includes("player"))

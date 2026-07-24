@@ -1,18 +1,8 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=3";
+import { validatePlayerIds } from "./player-identity.js?v=1";
 
-const firebaseConfig = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  storageBucket: "alphaopen-development-2026.firebasestorage.app",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722"
-};
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 const byId = id => document.getElementById(id);
 let state = null;
 let validation = null;
@@ -182,7 +172,9 @@ async function resolveContext() {
   submissionConfirmation(matchup, teamId, String(lineupData?.status || "").toLowerCase() === "submitted");
   status(lockedLineupStatus(lineupData?.status)
     ? "Lineup approved. It is shown read-only and cannot be changed."
-    : "Status: " + (lineupData ? lineupData.status : "New draft") + ".");
+    : String(lineupData?.status || "").toLowerCase() === "rejected"
+      ? "Lineup rejected: " + (lineupData.rejectionReason || "Changes are required before resubmission.") + " Update, validate, and resubmit it."
+      : "Status: " + (lineupData ? lineupData.status : "New draft") + ".");
 }
 function renderLines(existing, readOnly = false) {
   const teamId = byId("lineupTeam").value;
@@ -242,12 +234,19 @@ async function save(nextStatus) {
   const matchup = selectedMatchup(); const teamId = byId("lineupTeam").value; const user = auth.currentUser;
   if (!matchup || !teamId) throw new Error("Select a valid week and team matchup.");
   if (!canManageTeam(user, teamId)) throw new Error("You are not authorized to submit a lineup for " + teamName(teamId) + " because you are not that team's captain.");
+  const selectedLines = lines();
+  const selectedIds = selectedLines.flatMap(line => [line.player1Id, line.player2Id]);
+  const canonicalPlayers = await validatePlayerIds(selectedIds);
+  selectedLines.forEach(line => {
+    line.player1Name = canonicalPlayers.get(line.player1Id).displayName;
+    line.player2Name = canonicalPlayers.get(line.player2Id).displayName;
+  });
   const lineupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineups", teamId);
   const matchupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId);
   await runTransaction(db, async transaction => {
     const current = await transaction.get(lineupRef);
     if (current.exists() && lockedLineupStatus(current.data().status)) throw new Error("This lineup has been approved and cannot be changed.");
-    transaction.set(lineupRef, { seasonId: state.seasonId, matchupId: matchup.matchupId, teamId, status: nextStatus, revisionNumber: Number(current.data() && current.data().revisionNumber || 0) + 1, ruleVersionId: state.season.activeRuleVersionId || "v1", lines: lines(), validation: nextStatus === "draft" ? null : validation, submittedByUid: nextStatus === "submitted" ? user.uid : current.data() && current.data().submittedByUid || null, submittedAt: nextStatus === "submitted" ? serverTimestamp() : current.data() && current.data().submittedAt || null, updatedByUid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
+    transaction.set(lineupRef, { seasonId: state.seasonId, matchupId: matchup.matchupId, teamId, status: nextStatus, revisionNumber: Number(current.data() && current.data().revisionNumber || 0) + 1, ruleVersionId: state.season.activeRuleVersionId || "v1", lines: selectedLines, validation: nextStatus === "draft" ? null : validation, submittedByUid: nextStatus === "submitted" ? user.uid : current.data() && current.data().submittedByUid || null, submittedAt: nextStatus === "submitted" ? serverTimestamp() : current.data() && current.data().submittedAt || null, rejectionReason: null, rejectedByUid: null, rejectedAt: null, updatedByUid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
     const lineupStatusField = matchup.homeTeamId === teamId ? "homeLineupStatus" : "awayLineupStatus";
     transaction.update(matchupRef, { [lineupStatusField]: nextStatus === "submitted" ? "submitted" : "draft", updatedAt: serverTimestamp() });
   });

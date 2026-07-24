@@ -1,33 +1,17 @@
 import {
-  getApp,
-  getApps,
-  initializeApp,
-} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import {
-  getAuth,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
   collection,
   doc,
   getDocs,
-  getFirestore,
   serverTimestamp,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=3";
+import { canonicalPlayerName, validatePlayerIds } from "./player-identity.js?v=1";
 
-const config = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  storageBucket: "alphaopen-development-2026.firebasestorage.app",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722",
-};
-const app = getApps().length ? getApp() : initializeApp(config),
-  auth = getAuth(app),
-  db = getFirestore(app),
-  ADMIN = "sudarshandesai74@gmail.com";
+const ADMIN = "sudarshandesai74@gmail.com";
 const $ = (value) => document.querySelector(value),
   seasonSelect = $("#rosterAdminSeason"),
   panel = $("#rosterAdminTeams"),
@@ -184,7 +168,7 @@ async function loadPlayers() {
 }
 
 function historyHtml(history) {
-  return `<div class="roster-replaced-players">${history.length ? history.map((item) => `<div class="roster-replaced-player">${esc(item.playerId || "Unknown ID")} · ${esc(item.playerNameSnapshot || nameOf(playerById.get(item.playerId)))}</div>`).join("") : '<span class="roster-no-history">None</span>'}</div>`;
+  return `<div class="roster-replaced-players">${history.length ? history.map((item) => `<div class="roster-replaced-player">${esc(item.playerId || "Unknown ID")} · ${esc(nameOf(playerById.get(item.playerId)) || item.playerNameSnapshot)}</div>`).join("") : '<span class="roster-no-history">None</span>'}</div>`;
 }
 async function loadRoster() {
   if (!isAdmin() || !seasonSelect.value) return;
@@ -241,7 +225,7 @@ async function loadRoster() {
                 status: "unassigned",
               };
             assignmentsById.set(id, item);
-            return `<div class="roster-admin-row"><span>R${rank}</span><div class="roster-current-player">${current ? `<b>${esc(current.playerId)} · ${esc(current.playerNameSnapshot || nameOf(playerById.get(current.playerId)))}</b><small>Active player</small>` : `<b class="roster-empty-rank">No player assigned</b><small>Rank ${rank} is available</small>`}</div>${historyHtml((historyByRank.get(key) || []).sort((a, b) => String(a.replacedAt || a.assignmentId).localeCompare(String(b.replacedAt || b.assignmentId))))}<button type="button" class="secondary compact-button" data-manage-assignment="${esc(id)}">Manage rank</button></div>`;
+            return `<div class="roster-admin-row"><span>R${rank}</span><div class="roster-current-player">${current ? `<b>${esc(current.playerId)} · ${esc(nameOf(playerById.get(current.playerId)) || current.playerNameSnapshot)}</b><small>Active player</small>` : `<b class="roster-empty-rank">No player assigned</b><small>Rank ${rank} is available</small>`}</div>${historyHtml((historyByRank.get(key) || []).sort((a, b) => String(a.replacedAt || a.assignmentId).localeCompare(String(b.replacedAt || b.assignmentId))))}<button type="button" class="secondary compact-button" data-manage-assignment="${esc(id)}">Manage rank</button></div>`;
           })
           .join("");
         return `<details class="roster-admin-team" ${index === 0 ? "open" : ""}><summary><div><b>${esc(team.name || team.teamId)}</b><small>Captain · ${esc(team.captainNameSnapshot || "Not recorded")}</small></div><span class="badge navy">14 ranks</span></summary><div><div class="roster-admin-row roster-admin-head"><span>Rank</span><span>Active Player ID &amp; Name</span><span>Replaced Player IDs &amp; Names</span><span>Action</span></div>${rows}</div></details>`;
@@ -282,8 +266,9 @@ form?.addEventListener("submit", async (event) => {
     next = playerById.get(playerSelect.value),
     seasonId = seasonSelect.value;
   if (!assignment || !next) return;
+  await validatePlayerIds([next.playerId]);
   const preserve = assignment.status === "active" && recordReplacement.checked,
-    nextName = nameOf(next),
+    nextName = await canonicalPlayerName(next.playerId),
     batch = writeBatch(db),
     id = canonicalId(seasonId, assignment.teamId, assignment.rankNumber),
     data = {

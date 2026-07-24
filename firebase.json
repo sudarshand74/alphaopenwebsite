@@ -9,7 +9,6 @@
       "FIRESTORE_DATA_MODEL.md",
       "test-prototype.mjs",
       "firebase-debug.log*",
-      "**/*.xlsx",
       "**/*.ndjson",
       ".git",
       ".git/**",

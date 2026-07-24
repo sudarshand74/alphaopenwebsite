@@ -1,20 +1,9 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=3";
 import { calculateMatchScore } from "./score-rules.js?v=1";
+import { loadCanonicalPlayers } from "./player-identity.js?v=1";
 
-const config = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722"
-};
-let app;
-if (getApps().length) app = getApp();
-else app = initializeApp(config);
-const auth = getAuth(app);
-const db = getFirestore(app);
 let state;
 const feedbackByLineId = new Map();
 
@@ -98,9 +87,11 @@ function selectedPlayer(article, side, index, teamId, currentPlayers) {
   const playerId = select && select.value;
   const player = rosterPlayers(teamId, currentPlayers).find(function (item) { return item.playerId === playerId; });
   if (!player) throw new Error("Select all four players. Match was not saved.");
+  const canonical = state.canonicalPlayers.get(player.playerId);
+  if (!canonical) throw new Error(`${player.playerId} does not exist in Player Master. Match was not saved.`);
   return {
     playerId: player.playerId,
-    nameSnapshot: player.playerNameSnapshot || player.nameSnapshot || player.playerId,
+    nameSnapshot: canonical.displayName,
     rankNumber: Number(player.rankNumber || player.rankSnapshot || 0)
   };
 }
@@ -436,7 +427,8 @@ async function load(user) {
     getDocs(collection(seasonRef, "teams")),
     getDocs(collection(seasonRef, "matchups")),
     getDocs(collection(db, "venues")),
-    getDocs(collection(seasonRef, "rosterAssignments"))
+    getDocs(collection(seasonRef, "rosterAssignments")),
+    loadCanonicalPlayers()
   ]);
   const rostersByTeam = new Map();
   results[5].docs.forEach(function (item) {
@@ -452,7 +444,8 @@ async function load(user) {
     teams: results[2].docs.map(function (item) { return Object.assign({ teamId: item.id }, item.data()); }),
     matchups: results[3].docs.map(function (item) { return Object.assign({ matchupId: item.id }, item.data()); }),
     venues: results[4].docs.map(function (item) { return Object.assign({ venueId: item.id }, item.data()); }),
-    rostersByTeam: rostersByTeam
+    rostersByTeam: rostersByTeam,
+    canonicalPlayers: results[6]
   };
   const membershipRoles = Array.isArray(state.member.roles) ? state.member.roles : [];
   if (!isManager(user) && !membershipRoles.includes("captain")) throw new Error("Only Captains, ECs, and Super Admins can update schedules and scores.");

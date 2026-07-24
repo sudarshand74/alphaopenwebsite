@@ -1,19 +1,8 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=3";
+import { bumpPlayerMasterVersion } from "./player-identity.js?v=1";
 
-const firebaseConfig = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  storageBucket: "alphaopen-development-2026.firebasestorage.app",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722"
-};
-
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 const ADMIN_EMAIL = "sudarshandesai74@gmail.com";
 const $ = selector => document.querySelector(selector);
 const addDialog = $("#addPlayerDialog");
@@ -183,6 +172,7 @@ async function submitAddPlayer(event) {
   try {
     $("#savePlayer").disabled = true;
     const playerId = await createPlayer(candidate, allowMatchingName);
+    await bumpPlayerMasterVersion();
     closeDialog(addDialog); addForm.reset(); await loadPlayers();
     window.alphaOpenAuthUI.showMessage(`${playerId} created for ${candidate.fullName}`);
   } catch (error) { message.textContent = error.message; }
@@ -508,6 +498,7 @@ async function submitEditPlayer(event) {
     }
     if (verifiedLink.exists() && normalizeEmail(verifiedLink.data()?.emailAtApproval) !== candidate.email) verificationErrors.push("account link");
     if (verificationErrors.length) throw new Error(`Player saved, but identity verification failed for: ${verificationErrors.join(", ")}.`);
+    await bumpPlayerMasterVersion();
     closeDialog(editDialog); await loadPlayers();
     window.alphaOpenAuthUI.showMessage(`${playerId} updated and all linked identity records verified`);
   } catch (error) { message.textContent = error.message; }
@@ -561,6 +552,7 @@ async function commitExcel(event) {
     } catch (error) { skipped.push(`${candidate.fullName}: ${error.message}`); }
   }
   preparedImport = [];
+  if (created) await bumpPlayerMasterVersion();
   importSummary.textContent = `${created} players created${skipped.length ? ` · ${skipped.length} skipped due to concurrent duplicates` : ""}.`;
   await loadPlayers();
   window.alphaOpenAuthUI.showMessage(`${created} Player Master records created`);

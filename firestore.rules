@@ -249,6 +249,13 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Guest-safe projection metadata. Clients read one small version document
+    // before deciding whether the locally cached public Player Master is stale.
+    match /publicConfig/{documentId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+
     match /seasons/{seasonId} {
       allow read: if isSuperAdmin() || isSeasonMember(seasonId);
       allow write: if isSuperAdmin();
@@ -371,15 +378,17 @@ service cloud.firestore {
             && request.resource.data.status in ['draft', 'systemValidated', 'submitted']
             && validSubmittedLineup();
           allow update: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
-            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'submitted']
-            && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'submitted', 'approved']
-            && (request.resource.data.status != 'approved' || isSeasonApprover(seasonId) || isSuperAdmin())
+            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'rejected', 'submitted']
+            && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'submitted', 'rejected', 'approved']
+            && (request.resource.data.status not in ['approved', 'rejected'] || isSeasonApprover(seasonId) || isSuperAdmin())
             && validSubmittedLineup()
             && request.resource.data.teamId == teamId
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'status', 'revisionNumber', 'ruleVersionId', 'lines',
               'validation', 'submittedByUid', 'submittedAt',
-              'approvedByUid', 'approvedAt', 'updatedByUid', 'updatedAt'
+              'approvedByUid', 'approvedAt',
+              'rejectionReason', 'rejectedByUid', 'rejectedAt',
+              'updatedByUid', 'updatedAt'
             ]);
           allow delete: if false;
 
@@ -509,6 +518,12 @@ service cloud.firestore {
       match /auditEvents/{eventId} {
         allow read: if isSeasonEC(seasonId);
         allow write: if false;
+      }
+
+      // Super Admin season reset: permits deletion of known and future
+      // season-scoped descendants while preserving the Season Master itself.
+      match /{document=**} {
+        allow delete: if isSuperAdmin();
       }
     }
 

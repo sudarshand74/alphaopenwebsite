@@ -2,7 +2,7 @@ import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebase
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
   collection, doc, getDoc, getDocs, getFirestore, runTransaction,
-  serverTimestamp, writeBatch
+  serverTimestamp, setDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
 const config = {
@@ -143,6 +143,79 @@ function addMapList(map, key, value) {
   map.get(key).push(value);
 }
 
+function masterName(record) {
+  return String(
+    record?.fullName ||
+    record?.displayName ||
+    [record?.firstName, record?.lastName].filter(Boolean).join(" ") ||
+    ""
+  ).trim().replace(/\s+/g, " ");
+}
+
+function uniquePlayerIdForName(privatePlayers, name) {
+  const normalized = normalizeName(name);
+  if (!normalized) return "";
+  const matches = privatePlayers.filter(record => normalizeName(masterName(record)) === normalized);
+  return matches.length === 1 ? matches[0].id : "";
+}
+
+function rosterIdentityFields(record) {
+  return {
+    playerId: record?.playerId || "",
+    playerNameSnapshot: String(record?.playerNameSnapshot || "").trim(),
+    originalPlayerId: record?.originalPlayerId || "",
+    originalPlayerNameSnapshot: String(record?.originalPlayerNameSnapshot || "").trim(),
+    replacementPlayerId: record?.replacementPlayerId || "",
+    replacementPlayerNameSnapshot: String(record?.replacementPlayerNameSnapshot || "").trim(),
+    status: record?.status || "",
+    assignmentType: record?.assignmentType || "",
+    teamId: record?.teamId || "",
+    rankNumber: Number(record?.rankNumber || 0)
+  };
+}
+
+function rosterParityDiffers(operational, published) {
+  if (!published) return true;
+  return JSON.stringify(rosterIdentityFields(operational)) !== JSON.stringify(rosterIdentityFields(published));
+}
+
+function playerReferenceFinding(privateById, privatePlayers, playerId, storedName) {
+  const master = privateById.get(playerId);
+  const canonicalName = masterName(master);
+  const nameMatchedPlayerId = uniquePlayerIdForName(privatePlayers, storedName);
+  if (!master) {
+    return {
+      kind: "unknown",
+      canonicalName: "",
+      targetPlayerId: nameMatchedPlayerId,
+      targetName: masterName(privateById.get(nameMatchedPlayerId))
+    };
+  }
+  if (storedName && normalizeName(storedName) !== normalizeName(canonicalName)) {
+    const pointsElsewhere = Boolean(nameMatchedPlayerId && nameMatchedPlayerId !== playerId);
+    return {
+      kind: pointsElsewhere ? "wrongId" : "staleName",
+      canonicalName,
+      targetPlayerId: pointsElsewhere ? nameMatchedPlayerId : playerId,
+      targetName: pointsElsewhere ? masterName(privateById.get(nameMatchedPlayerId)) : canonicalName
+    };
+  }
+  return { kind: "ok", canonicalName, targetPlayerId: playerId, targetName: canonicalName };
+}
+
+async function readMatchupIdentityTree(root, seasonId) {
+  const matchups = await readCollection(root, seasonId, "matchups");
+  const records = await Promise.all(matchups.map(async matchup => {
+    const base = [root, seasonId, "matchups", matchup.id];
+    const [lineups, lineMatches] = await Promise.all([
+      root === "seasons" ? readCollection(...base, "lineups") : Promise.resolve([]),
+      readCollection(...base, "lineMatches")
+    ]);
+    return { matchup, lineups, lineMatches };
+  }));
+  return records;
+}
+
 async function collectAudit() {
   const [players, privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
     readCollection("players"),
@@ -154,11 +227,18 @@ async function collectAudit() {
     readCollection("seasons")
   ]);
   const seasonTrees = await Promise.all(seasons.map(async season => {
-    const [members, teams] = await Promise.all([
+    const [members, teams, rosterAssignments, publicRosterAssignments, matchups, publicMatchups] = await Promise.all([
       readCollection("seasons", season.id, "members"),
-      readCollection("seasons", season.id, "teams")
+      readCollection("seasons", season.id, "teams"),
+      readCollection("seasons", season.id, "rosterAssignments"),
+      readCollection("publicSeasons", season.id, "rosterAssignments"),
+      readMatchupIdentityTree("seasons", season.id),
+      readMatchupIdentityTree("publicSeasons", season.id)
     ]);
-    return { season, members, teams };
+    return {
+      season, members, teams, rosterAssignments, publicRosterAssignments,
+      matchups, publicMatchups
+    };
   }));
   const publicById = new Map(players.map(record => [record.id, record]));
   const privateById = new Map(privatePlayers.map(record => [record.id, record]));
@@ -299,6 +379,157 @@ async function collectAudit() {
             { seasonId: tree.season.id, teamId: team.id, playerId, uid: link.uid }, "syncCaptainAccess"));
       });
     });
+
+    const publicRosterById = new Map(tree.publicRosterAssignments.map(record => [record.id, record]));
+    const activeRankKeys = new Map();
+    const activePlayerKeys = new Map();
+    tree.rosterAssignments.forEach(assignment => {
+      const assignmentId = assignment.id;
+      const identity = playerReferenceFinding(
+        privateById, privatePlayers, assignment.playerId, assignment.playerNameSnapshot
+      );
+      const context = {
+        seasonId: tree.season.id,
+        assignmentId,
+        sourcePlayerId: assignment.playerId || "",
+        storedName: assignment.playerNameSnapshot || "",
+        targetPlayerId: identity.targetPlayerId || "",
+        targetName: identity.targetName || ""
+      };
+      if (identity.kind === "unknown") {
+        issues.push(issue("ROSTER_UNKNOWN_PLAYER", "error",
+          `${tree.season.id} · roster ${assignmentId}: unknown Player ID`,
+          `${assignment.playerId || "No Player ID"} is not in Player Master${identity.targetPlayerId ? `; the stored name uniquely belongs to ${identity.targetPlayerId}` : ""}.`,
+          context, identity.targetPlayerId ? "syncRosterIdentity" : null));
+      } else if (identity.kind === "wrongId") {
+        issues.push(issue("ROSTER_PLAYER_ID_NAME_CONFLICT", "error",
+          `${tree.season.id} · ${assignment.teamId || "unknown team"} R${Number(assignment.rankNumber || 0)}: Player ID/name conflict`,
+          `${assignment.playerId} belongs to ${identity.canonicalName}; the stored roster name ${assignment.playerNameSnapshot} uniquely belongs to ${identity.targetPlayerId}.`,
+          context, "syncRosterIdentity"));
+      } else if (identity.kind === "staleName") {
+        issues.push(issue("ROSTER_NAME_SNAPSHOT_MISMATCH", "warning",
+          `${tree.season.id} · roster ${assignmentId}: name snapshot differs`,
+          `${assignment.playerId} is ${identity.canonicalName} in Player Master, not ${assignment.playerNameSnapshot || "a blank name"}.`,
+          context, "syncRosterIdentity"));
+      }
+      const published = publicRosterById.get(assignmentId);
+      if (rosterParityDiffers(assignment, published))
+        issues.push(issue("ROSTER_PUBLIC_PARITY_MISMATCH", "warning",
+          `${tree.season.id} · roster ${assignmentId}: public copy differs`,
+          published
+            ? "The public roster identity/status fields differ from the operational roster assignment."
+            : "The operational roster assignment has no public roster copy.",
+          { seasonId: tree.season.id, assignmentId }, "syncPublicRosterAssignment"));
+
+      if (assignment.status === "active") {
+        const rankKey = `${assignment.teamId}|${Number(assignment.rankNumber || 0)}`;
+        addMapList(activeRankKeys, rankKey, assignment);
+        addMapList(activePlayerKeys, assignment.playerId, assignment);
+      }
+    });
+    activeRankKeys.forEach((records, key) => {
+      if (records.length > 1)
+        issues.push(issue("ROSTER_DUPLICATE_ACTIVE_RANK", "error",
+          `${tree.season.id} · duplicate active rank ${key}`,
+          `${records.length} active roster assignments occupy the same team/rank: ${records.map(record => record.id).join(", ")}.`,
+          { seasonId: tree.season.id, rankKey: key }));
+    });
+    activePlayerKeys.forEach((records, playerId) => {
+      const distinctRanks = new Set(records.map(record => `${record.teamId}|${Number(record.rankNumber || 0)}`));
+      if (playerId && distinctRanks.size > 1)
+        issues.push(issue("ROSTER_DUPLICATE_ACTIVE_PLAYER", "error",
+          `${tree.season.id} · ${playerId}: multiple active roster positions`,
+          [...distinctRanks].join(", "), { seasonId: tree.season.id, playerId }));
+    });
+
+    tree.matchups.forEach(matchupTree => {
+      matchupTree.lineups.forEach(lineup => {
+        parseList(lineup.lines).forEach((line, lineIndex) => {
+          for (const playerNumber of [1, 2]) {
+            const idField = `player${playerNumber}Id`;
+            const nameField = `player${playerNumber}Name`;
+            const playerId = line?.[idField] || "";
+            const storedName = line?.[nameField] || "";
+            if (!playerId && !storedName) continue;
+            const identity = playerReferenceFinding(privateById, privatePlayers, playerId, storedName);
+            if (identity.kind === "ok") continue;
+            const repair = identity.targetPlayerId ? "syncLineupPlayerIdentity" : null;
+            issues.push(issue(
+              identity.kind === "wrongId" || identity.kind === "unknown"
+                ? "LINEUP_PLAYER_ID_NAME_CONFLICT" : "LINEUP_NAME_SNAPSHOT_MISMATCH",
+              identity.kind === "staleName" ? "warning" : "error",
+              `${tree.season.id} · ${matchupTree.matchup.id} · ${lineup.id} L${lineIndex + 1}: lineup identity mismatch`,
+              identity.kind === "wrongId"
+                ? `${playerId} belongs to ${identity.canonicalName}; ${storedName} uniquely belongs to ${identity.targetPlayerId}.`
+                : identity.kind === "unknown"
+                  ? `${playerId || "No Player ID"} is not in Player Master${identity.targetPlayerId ? `; ${storedName} belongs to ${identity.targetPlayerId}` : ""}.`
+                  : `${playerId} is ${identity.canonicalName} in Player Master, not ${storedName || "a blank name"}.`,
+              {
+                seasonId: tree.season.id, matchupId: matchupTree.matchup.id,
+                teamId: lineup.id, lineIndex, playerNumber, sourcePlayerId: playerId,
+                storedName, targetPlayerId: identity.targetPlayerId, targetName: identity.targetName
+              }, repair
+            ));
+          }
+        });
+      });
+      matchupTree.lineMatches.forEach(lineMatch => {
+        for (const side of ["home", "away"]) {
+          parseList(lineMatch[`${side}Players`]).forEach((player, playerIndex) => {
+            const playerId = player?.playerId || "";
+            const storedName = player?.nameSnapshot || player?.playerNameSnapshot || player?.name || "";
+            if (!playerId && !storedName) return;
+            const identity = playerReferenceFinding(privateById, privatePlayers, playerId, storedName);
+            if (identity.kind === "ok") return;
+            issues.push(issue(
+              identity.kind === "wrongId" || identity.kind === "unknown"
+                ? "LINE_MATCH_PLAYER_ID_NAME_CONFLICT" : "LINE_MATCH_NAME_SNAPSHOT_MISMATCH",
+              identity.kind === "staleName" ? "warning" : "error",
+              `${tree.season.id} · ${lineMatch.id}: ${side} player identity mismatch`,
+              identity.kind === "wrongId"
+                ? `${playerId} belongs to ${identity.canonicalName}; ${storedName} uniquely belongs to ${identity.targetPlayerId}.`
+                : identity.kind === "unknown"
+                  ? `${playerId || "No Player ID"} is not in Player Master${identity.targetPlayerId ? `; ${storedName} belongs to ${identity.targetPlayerId}` : ""}.`
+                  : `${playerId} is ${identity.canonicalName} in Player Master, not ${storedName || "a blank name"}.`,
+              {
+                seasonId: tree.season.id, matchupId: matchupTree.matchup.id,
+                lineMatchId: lineMatch.id, side, playerIndex,
+                sourcePlayerId: playerId, storedName,
+                targetPlayerId: identity.targetPlayerId, targetName: identity.targetName
+              }, identity.targetPlayerId ? "syncLineMatchPlayerIdentity" : null
+            ));
+          });
+        }
+      });
+    });
+
+    const publicMatchupById = new Map(tree.publicMatchups.map(record => [record.matchup.id, record]));
+    tree.matchups.forEach(matchupTree => {
+      const publicTree = publicMatchupById.get(matchupTree.matchup.id);
+      const publicLineById = new Map((publicTree?.lineMatches || []).map(record => [record.id, record]));
+      matchupTree.lineMatches.forEach(lineMatch => {
+        const published = publicLineById.get(lineMatch.id);
+        const operationalIdentity = {
+          homePlayers: parseList(lineMatch.homePlayers),
+          awayPlayers: parseList(lineMatch.awayPlayers)
+        };
+        const publicIdentity = published ? {
+          homePlayers: parseList(published.homePlayers),
+          awayPlayers: parseList(published.awayPlayers)
+        } : null;
+        if (!published || JSON.stringify(operationalIdentity) !== JSON.stringify(publicIdentity))
+          issues.push(issue("LINE_MATCH_PUBLIC_PARITY_MISMATCH", "warning",
+            `${tree.season.id} · ${lineMatch.id}: public line identity differs`,
+            published
+              ? "Published home/away player identities differ from the operational line match."
+              : "The operational line match has no public copy.",
+            {
+              seasonId: tree.season.id,
+              matchupId: matchupTree.matchup.id,
+              lineMatchId: lineMatch.id
+            }, "syncPublicLineMatchIdentity"));
+      });
+    });
   });
   return {
     scannedAt: new Date(),
@@ -306,7 +537,10 @@ async function collectAudit() {
       players: players.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
       users: users.length, accountLinks: links.length, seasons: seasons.length,
       teams: seasonTrees.reduce((sum, tree) => sum + tree.teams.length, 0),
-      members: seasonTrees.reduce((sum, tree) => sum + tree.members.length, 0)
+      members: seasonTrees.reduce((sum, tree) => sum + tree.members.length, 0),
+      rosterAssignments: seasonTrees.reduce((sum, tree) => sum + tree.rosterAssignments.length, 0),
+      lineups: seasonTrees.reduce((sum, tree) => sum + tree.matchups.reduce((inner, matchup) => inner + matchup.lineups.length, 0), 0),
+      lineMatches: seasonTrees.reduce((sum, tree) => sum + tree.matchups.reduce((inner, matchup) => inner + matchup.lineMatches.length, 0), 0)
     },
     issues,
     maps: { publicById, privateById, userByUid, linkByPlayer, registrationByUid },
@@ -475,9 +709,136 @@ async function syncCaptainAccess(context) {
   await batch.commit();
 }
 
+async function syncRosterIdentity(context) {
+  if (!context.targetPlayerId || !context.targetName)
+    throw new Error("The correct Player Master identity could not be resolved.");
+  const operationalRef = doc(db, "seasons", context.seasonId, "rosterAssignments", context.assignmentId);
+  const publicRef = doc(db, "publicSeasons", context.seasonId, "rosterAssignments", context.assignmentId);
+  await runTransaction(db, async transaction => {
+    const [operationalSnapshot, publicSnapshot] = await Promise.all([
+      transaction.get(operationalRef), transaction.get(publicRef)
+    ]);
+    if (!operationalSnapshot.exists()) throw new Error("The roster assignment no longer exists.");
+    const current = operationalSnapshot.data();
+    if ((current.playerId || "") !== (context.sourcePlayerId || "") ||
+      normalizeName(current.playerNameSnapshot) !== normalizeName(context.storedName))
+      throw new Error("The roster assignment changed after the audit. Run the audit again.");
+    const correction = {
+      playerId: context.targetPlayerId,
+      playerNameSnapshot: context.targetName,
+      updatedByUid: auth.currentUser.uid,
+      updatedAt: serverTimestamp()
+    };
+    if ((current.originalPlayerId || "") === (context.sourcePlayerId || "") &&
+      normalizeName(current.originalPlayerNameSnapshot) === normalizeName(context.storedName)) {
+      correction.originalPlayerId = context.targetPlayerId;
+      correction.originalPlayerNameSnapshot = context.targetName;
+    }
+    if ((current.replacementPlayerId || "") === (context.sourcePlayerId || "") &&
+      normalizeName(current.replacementPlayerNameSnapshot) === normalizeName(context.storedName)) {
+      correction.replacementPlayerId = context.targetPlayerId;
+      correction.replacementPlayerNameSnapshot = context.targetName;
+    }
+    transaction.set(operationalRef, correction, { merge: true });
+    transaction.set(publicRef, {
+      ...correction,
+      publishedAt: serverTimestamp()
+    }, { merge: true });
+  });
+}
+
+async function syncPublicRosterAssignment(context) {
+  const tree = auditState.seasonTrees.find(item => item.season.id === context.seasonId);
+  const source = tree?.rosterAssignments.find(item => item.id === context.assignmentId);
+  if (!source) throw new Error("The operational roster assignment no longer exists.");
+  await setDoc(doc(db, "publicSeasons", context.seasonId, "rosterAssignments", context.assignmentId), {
+    assignmentId: context.assignmentId,
+    seasonId: context.seasonId,
+    ...rosterIdentityFields(source),
+    updatedAt: serverTimestamp(),
+    updatedByUid: auth.currentUser.uid
+  }, { merge: true });
+}
+
+async function syncLineupPlayerIdentity(context) {
+  if (!context.targetPlayerId || !context.targetName)
+    throw new Error("The correct Player Master identity could not be resolved.");
+  const lineupRef = doc(db, "seasons", context.seasonId, "matchups", context.matchupId, "lineups", context.teamId);
+  await runTransaction(db, async transaction => {
+    const snapshot = await transaction.get(lineupRef);
+    if (!snapshot.exists()) throw new Error("The lineup no longer exists.");
+    const lines = parseList(snapshot.data().lines).map(line => ({ ...line }));
+    const line = lines[Number(context.lineIndex)];
+    const idField = `player${Number(context.playerNumber)}Id`;
+    const nameField = `player${Number(context.playerNumber)}Name`;
+    if (!line || (line[idField] || "") !== (context.sourcePlayerId || "") ||
+      normalizeName(line[nameField]) !== normalizeName(context.storedName))
+      throw new Error("The lineup changed after the audit. Run the audit again.");
+    line[idField] = context.targetPlayerId;
+    line[nameField] = context.targetName;
+    transaction.set(lineupRef, {
+      lines,
+      identityCorrectedByUid: auth.currentUser.uid,
+      identityCorrectedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  });
+}
+
+async function syncLineMatchPlayerIdentity(context) {
+  if (!context.targetPlayerId || !context.targetName)
+    throw new Error("The correct Player Master identity could not be resolved.");
+  const operationalRef = doc(db, "seasons", context.seasonId, "matchups", context.matchupId, "lineMatches", context.lineMatchId);
+  const publicRef = doc(db, "publicSeasons", context.seasonId, "matchups", context.matchupId, "lineMatches", context.lineMatchId);
+  await runTransaction(db, async transaction => {
+    const [operationalSnapshot, publicSnapshot] = await Promise.all([
+      transaction.get(operationalRef), transaction.get(publicRef)
+    ]);
+    if (!operationalSnapshot.exists()) throw new Error("The operational line match no longer exists.");
+    const field = `${context.side}Players`;
+    const players = parseList(operationalSnapshot.data()[field]).map(player => ({ ...player }));
+    const player = players[Number(context.playerIndex)];
+    const storedName = player?.nameSnapshot || player?.playerNameSnapshot || player?.name || "";
+    if (!player || (player.playerId || "") !== (context.sourcePlayerId || "") ||
+      normalizeName(storedName) !== normalizeName(context.storedName))
+      throw new Error("The line match changed after the audit. Run the audit again.");
+    player.playerId = context.targetPlayerId;
+    player.nameSnapshot = context.targetName;
+    if ("playerNameSnapshot" in player) player.playerNameSnapshot = context.targetName;
+    if ("name" in player) player.name = context.targetName;
+    const correction = {
+      [field]: players,
+      identityCorrectedByUid: auth.currentUser.uid,
+      identityCorrectedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+    transaction.set(operationalRef, correction, { merge: true });
+    transaction.set(publicRef, correction, { merge: true });
+  });
+}
+
+async function syncPublicLineMatchIdentity(context) {
+  const tree = auditState.seasonTrees.find(item => item.season.id === context.seasonId);
+  const matchup = tree?.matchups.find(item => item.matchup.id === context.matchupId);
+  const source = matchup?.lineMatches.find(item => item.id === context.lineMatchId);
+  if (!source) throw new Error("The operational line match no longer exists.");
+  await setDoc(
+    doc(db, "publicSeasons", context.seasonId, "matchups", context.matchupId, "lineMatches", context.lineMatchId),
+    {
+      homePlayers: parseList(source.homePlayers),
+      awayPlayers: parseList(source.awayPlayers),
+      updatedAt: serverTimestamp(),
+      updatedByUid: auth.currentUser.uid
+    },
+    { merge: true }
+  );
+}
+
 const repairs = {
   syncPublicPlayer, syncEmailIndex, syncAccountTree, syncPrivateAccount,
-  syncMembershipIdentity, syncCaptainAccess
+  syncMembershipIdentity, syncCaptainAccess, syncRosterIdentity,
+  syncPublicRosterAssignment, syncLineupPlayerIdentity,
+  syncLineMatchPlayerIdentity, syncPublicLineMatchIdentity
 };
 
 function renderAudit() {
@@ -486,7 +847,7 @@ function renderAudit() {
   const errors = auditState.issues.filter(item => item.severity === "error").length;
   const warnings = auditState.issues.filter(item => item.severity === "warning").length;
   summary.innerHTML = `<b>${auditState.issues.length ? `${errors} conflicts · ${warnings} warnings` : "All checked identity trees are synchronized"}</b>
-    <span>${auditState.counts.players} public players · ${auditState.counts.privatePlayers} private masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.teams} season teams</span>
+    <span>${auditState.counts.players} public players · ${auditState.counts.privatePlayers} private masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.teams} season teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
     <small>Scanned ${esc(auditState.scannedAt.toLocaleString())}. No data was changed by the audit.</small>`;
   panel.innerHTML = auditState.issues.length ? auditState.issues.map(item => `
     <article class="identity-audit-row ${item.severity}">
@@ -494,7 +855,7 @@ function renderAudit() {
         <b>${esc(item.title)}</b><p>${esc(item.detail)}</p></div>
       ${item.repair ? `<button type="button" class="secondary compact-button" data-identity-repair="${esc(item.id)}">Repair</button>` : `<span class="identity-manual-review">Manual review</span>`}
     </article>`).join("") :
-    '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, or captain-assignment conflicts were found.</p></div>';
+    '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, captain, roster, lineup, line-match, or public-parity conflicts were found.</p></div>';
 }
 
 async function runAudit() {

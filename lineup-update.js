@@ -1,18 +1,9 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=3";
 import { calculateMatchScore } from "./score-rules.js?v=1";
+import { loadCanonicalPlayers } from "./player-identity.js?v=1";
 
-const config = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722",
-};
-const app = getApps().length ? getApp() : initializeApp(config);
-const auth = getAuth(app);
-const db = getFirestore(app);
 const byId = (id) => document.getElementById(id);
 let state = null;
 
@@ -93,10 +84,11 @@ function enteredSets(article) {
 function selectedPlayer(article, side, index, teamId, current) {
   const playerId = article.querySelector(`[data-${side}-player="${index}"]`).value;
   const player = rosterPlayers(teamId, current).find((item) => item.playerId === playerId);
-  if (!player) throw new Error("Select all four lineup players.");
+  const canonical = state.canonicalPlayers?.get(playerId);
+  if (!player || !canonical) throw new Error("Select four valid Player Master players.");
   return {
     playerId: player.playerId,
-    nameSnapshot: player.playerNameSnapshot || player.nameSnapshot || player.playerId,
+    nameSnapshot: canonical.displayName,
     rankNumber: Number(player.rankNumber || player.rankSnapshot || 0),
   };
 }
@@ -240,11 +232,12 @@ async function load(user) {
   const seasonId = control.data()?.activeSeasonId;
   if (!seasonId) throw new Error("No active season is configured.");
   const seasonRef = doc(db, "seasons", seasonId);
-  const [seasonDoc, matchups, rosters, venues] = await Promise.all([
+  const [seasonDoc, matchups, rosters, venues, canonicalPlayers] = await Promise.all([
     getDoc(seasonRef),
     getDocs(collection(seasonRef, "matchups")),
     getDocs(collection(seasonRef, "rosterAssignments")),
     getDocs(collection(db, "venues")),
+    loadCanonicalPlayers(),
   ]);
   const rostersByTeam = new Map();
   rosters.docs.forEach((item) => {
@@ -259,6 +252,7 @@ async function load(user) {
     matchups: matchups.docs.map((item) => ({ matchupId: item.id, ...item.data() })),
     venues: venues.docs.map((item) => ({ venueId: item.id, ...item.data() })),
     rostersByTeam,
+    canonicalPlayers,
     records: [],
   };
   byId("lineupUpdateSeason").replaceChildren(option(seasonId, state.season.name || seasonId, true));
