@@ -23,6 +23,7 @@ const normalizeEmail = value => String(value || "").trim().toLowerCase();
 const parseList = value => Array.isArray(value) ? value : [];
 let auditState = null;
 let auditRunning = false;
+let auditReadOnly = false;
 
 function isSuperAdmin() {
   const authorization = window.alphaOpenAuthorization;
@@ -217,26 +218,32 @@ async function readMatchupIdentityTree(root, seasonId) {
 }
 
 async function collectAudit() {
-  const [players, privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
+  const [players, privatePlayers, emailIndexes, users, links, registrations, seasons, publicSeasons] = await Promise.all([
     readCollection("players"),
     readCollection("playerPrivate"),
     readCollection("playerEmailIndex"),
     readCollection("users"),
     readCollection("playerAccountLinks"),
     readCollection("registrationRequests"),
-    readCollection("seasons")
+    readCollection("seasons"),
+    readCollection("publicSeasons")
   ]);
+  const publicSeasonById = new Map(publicSeasons.map(record => [record.id, record]));
   const seasonTrees = await Promise.all(seasons.map(async season => {
-    const [members, teams, rosterAssignments, publicRosterAssignments, matchups, publicMatchups] = await Promise.all([
+    const [members, teams, publicTeams, rosterAssignments, publicRosterAssignments, weeks, publicWeeks, matchups, publicMatchups] = await Promise.all([
       readCollection("seasons", season.id, "members"),
       readCollection("seasons", season.id, "teams"),
+      readCollection("publicSeasons", season.id, "teams"),
       readCollection("seasons", season.id, "rosterAssignments"),
       readCollection("publicSeasons", season.id, "rosterAssignments"),
+      readCollection("seasons", season.id, "weeks"),
+      readCollection("publicSeasons", season.id, "weeks"),
       readMatchupIdentityTree("seasons", season.id),
       readMatchupIdentityTree("publicSeasons", season.id)
     ]);
     return {
-      season, members, teams, rosterAssignments, publicRosterAssignments,
+      season, publicSeason: publicSeasonById.get(season.id) || null,
+      members, teams, publicTeams, rosterAssignments, publicRosterAssignments, weeks, publicWeeks,
       matchups, publicMatchups
     };
   }));
@@ -254,6 +261,13 @@ async function collectAudit() {
   links.filter(record => record.status === "active").forEach(record => addMapList(linksByUid, record.uid, record));
 
   const issues = [];
+  publicSeasons.forEach(publicSeason => {
+    if (!seasons.some(season => season.id === publicSeason.id))
+      issues.push(issue("PUBLIC_ONLY_SEASON", "error",
+        `${publicSeason.id}: season exists only in publicSeasons`,
+        "This season must be migrated or intentionally archived before the publicSeasons tree is removed.",
+        { seasonId: publicSeason.id }));
+  });
   const allPlayerIds = new Set([...publicById.keys(), ...privateById.keys()]);
   allPlayerIds.forEach(playerId => {
     const publicRecord = publicById.get(playerId);
@@ -263,6 +277,13 @@ async function collectAudit() {
         "The public Player Master record has no playerPrivate source record.", { playerId }));
       return;
     }
+    const obsoleteFields = ["globalScore", "emergencyContact", "accountUid", "accountStatus"]
+      .filter(field => Object.prototype.hasOwnProperty.call(privateRecord, field));
+    if (obsoleteFields.length)
+      issues.push(issue("PLAYER_OBSOLETE_FIELDS", "info",
+        `${playerId}: fields scheduled for migration`,
+        `Player Master still contains ${obsoleteFields.join(", ")}. The audit is read-only; no fields were removed.`,
+        { playerId, fields: obsoleteFields.join(",") }));
     if (!publicRecord) {
       issues.push(issue("PUBLIC_MISSING", "warning", `${playerId}: public profile missing`,
         "The private master exists, but the players mirror is missing.", { playerId }, "syncPublicPlayer"));
@@ -346,6 +367,41 @@ async function collectAudit() {
 
   seasonTrees.forEach(tree => {
     const memberByUid = new Map(tree.members.map(record => [record.id, record]));
+    const publicTeamById = new Map(tree.publicTeams.map(record => [record.id, record]));
+    const publicWeekById = new Map(tree.publicWeeks.map(record => [record.id, record]));
+    const publicRosterById = new Map(tree.publicRosterAssignments.map(record => [record.id, record]));
+    const operationalTeamIds = new Set(tree.teams.map(record => record.id));
+    const operationalWeekIds = new Set(tree.weeks.map(record => record.id));
+    const operationalRosterIds = new Set(tree.rosterAssignments.map(record => record.id));
+    const operationalMatchupIds = new Set(tree.matchups.map(record => record.matchup.id));
+    tree.publicTeams.forEach(record => {
+      if (!operationalTeamIds.has(record.id))
+        issues.push(issue("PUBLIC_ONLY_TEAM", "error",
+          `${tree.season.id} · ${record.id}: team exists only in publicSeasons`,
+          "Preserve or reconcile this team before removing the public season tree.",
+          { seasonId: tree.season.id, teamId: record.id }));
+    });
+    tree.publicWeeks.forEach(record => {
+      if (!operationalWeekIds.has(record.id))
+        issues.push(issue("PUBLIC_ONLY_WEEK", "error",
+          `${tree.season.id} · ${record.id}: week exists only in publicSeasons`,
+          "Preserve or reconcile this week before removing the public season tree.",
+          { seasonId: tree.season.id, weekId: record.id }));
+    });
+    tree.publicRosterAssignments.forEach(record => {
+      if (!operationalRosterIds.has(record.id))
+        issues.push(issue("PUBLIC_ONLY_ROSTER", "error",
+          `${tree.season.id} · ${record.id}: roster record exists only in publicSeasons`,
+          "Preserve or reconcile this roster record before removing the public season tree.",
+          { seasonId: tree.season.id, assignmentId: record.id }));
+    });
+    tree.publicMatchups.forEach(record => {
+      if (!operationalMatchupIds.has(record.matchup.id))
+        issues.push(issue("PUBLIC_ONLY_MATCHUP", "error",
+          `${tree.season.id} · ${record.matchup.id}: matchup exists only in publicSeasons`,
+          "Preserve or reconcile this matchup before removing the public season tree.",
+          { seasonId: tree.season.id, matchupId: record.matchup.id }));
+    });
     tree.members.forEach(member => {
       const user = userByUid.get(member.id);
       if (!user || member.playerId !== user.playerId) {
@@ -359,7 +415,37 @@ async function collectAudit() {
       }
     });
     tree.teams.forEach(team => {
-      parseList(team.captainPlayerIds).forEach(playerId => {
+      const captainIds = team.captainPlayerId
+        ? [team.captainPlayerId]
+        : parseList(team.captainPlayerIds);
+      if (captainIds.length > 1)
+        issues.push(issue("TEAM_MULTIPLE_CAPTAINS", "warning",
+          `${tree.season.id} · ${team.name || team.id}: multiple captain IDs`,
+          `${captainIds.join(", ")} are stored; the simplified schema permits one captainPlayerId.`,
+          { seasonId: tree.season.id, teamId: team.id }));
+      const legacyCaptainFields = ["captainPlayerIds", "captainUids", "captainNameSnapshot", "captainEmailsNormalized"]
+        .filter(field => Object.prototype.hasOwnProperty.call(team, field));
+      if (legacyCaptainFields.length)
+        issues.push(issue("TEAM_LEGACY_CAPTAIN_FIELDS", "info",
+          `${tree.season.id} · ${team.name || team.id}: legacy captain fields`,
+          `${legacyCaptainFields.join(", ")} will be replaced by captainPlayerId after reconciliation.`,
+          { seasonId: tree.season.id, teamId: team.id, fields: legacyCaptainFields.join(",") }));
+      captainIds.forEach(playerId => {
+        const master = privateById.get(playerId);
+        if (!master) {
+          issues.push(issue("CAPTAIN_UNKNOWN_PLAYER", "error",
+            `${tree.season.id} · ${team.name || team.id}: captain is missing from Player Master`,
+            `${playerId} does not exist in playerPrivate.`,
+            { seasonId: tree.season.id, teamId: team.id, playerId }));
+          return;
+        }
+        const storedName = String(team.captainNameSnapshot || "").trim();
+        const canonicalName = masterName(master);
+        if (storedName && normalizeName(storedName) !== normalizeName(canonicalName))
+          issues.push(issue("CAPTAIN_PLAYER_ID_NAME_CONFLICT", "error",
+            `${tree.season.id} · ${team.name || team.id}: captain Player ID/name conflict`,
+            `${playerId} belongs to ${canonicalName}; the team snapshot says ${storedName}.`,
+            { seasonId: tree.season.id, teamId: team.id, playerId }));
         const link = linkByPlayer.get(playerId);
         if (!link || link.status !== "active" || !link.uid || !userByUid.has(link.uid)) {
           issues.push(issue("CAPTAIN_ACCOUNT_MISSING", "warning",
@@ -378,9 +464,21 @@ async function collectAudit() {
             `${playerId} is linked to ${link.uid}, but the team/member authorization trees differ.`,
             { seasonId: tree.season.id, teamId: team.id, playerId, uid: link.uid }, "syncCaptainAccess"));
       });
+      const publicTeam = publicTeamById.get(team.id);
+      if (publicTeam) {
+        const operationalCaptainIds = captainIds;
+        const publishedCaptainIds = publicTeam.captainPlayerId
+          ? [publicTeam.captainPlayerId]
+          : parseList(publicTeam.captainPlayerIds);
+        if (JSON.stringify(operationalCaptainIds) !== JSON.stringify(publishedCaptainIds) ||
+          normalizeName(team.captainNameSnapshot) !== normalizeName(publicTeam.captainNameSnapshot))
+          issues.push(issue("TEAM_PUBLIC_CAPTAIN_PARITY_MISMATCH", "warning",
+            `${tree.season.id} · ${team.name || team.id}: public captain copy differs`,
+            "The operational and public team captain identities are not the same.",
+            { seasonId: tree.season.id, teamId: team.id }));
+      }
     });
 
-    const publicRosterById = new Map(tree.publicRosterAssignments.map(record => [record.id, record]));
     const activeRankKeys = new Map();
     const activePlayerKeys = new Map();
     tree.rosterAssignments.forEach(assignment => {
@@ -529,6 +627,17 @@ async function collectAudit() {
               lineMatchId: lineMatch.id
             }, "syncPublicLineMatchIdentity"));
       });
+      (publicTree?.lineMatches || []).forEach(publicLine => {
+        if (!matchupTree.lineMatches.some(line => line.id === publicLine.id))
+          issues.push(issue("PUBLIC_ONLY_LINE_MATCH", "error",
+            `${tree.season.id} · ${matchupTree.matchup.id} · ${publicLine.id}: line match exists only in publicSeasons`,
+            "Preserve or reconcile this published line match before removing the public season tree.",
+            {
+              seasonId: tree.season.id,
+              matchupId: matchupTree.matchup.id,
+              lineMatchId: publicLine.id
+            }));
+      });
     });
   });
   return {
@@ -536,7 +645,9 @@ async function collectAudit() {
     counts: {
       players: players.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
       users: users.length, accountLinks: links.length, seasons: seasons.length,
+      publicSeasons: publicSeasons.length,
       teams: seasonTrees.reduce((sum, tree) => sum + tree.teams.length, 0),
+      publicTeams: seasonTrees.reduce((sum, tree) => sum + tree.publicTeams.length, 0),
       members: seasonTrees.reduce((sum, tree) => sum + tree.members.length, 0),
       rosterAssignments: seasonTrees.reduce((sum, tree) => sum + tree.rosterAssignments.length, 0),
       lineups: seasonTrees.reduce((sum, tree) => sum + tree.matchups.reduce((inner, matchup) => inner + matchup.lineups.length, 0), 0),
@@ -847,22 +958,24 @@ function renderAudit() {
   const errors = auditState.issues.filter(item => item.severity === "error").length;
   const warnings = auditState.issues.filter(item => item.severity === "warning").length;
   summary.innerHTML = `<b>${auditState.issues.length ? `${errors} conflicts · ${warnings} warnings` : "All checked identity trees are synchronized"}</b>
-    <span>${auditState.counts.players} public players · ${auditState.counts.privatePlayers} private masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.teams} season teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
-    <small>Scanned ${esc(auditState.scannedAt.toLocaleString())}. No data was changed by the audit.</small>`;
+    <span>${auditState.counts.players} public players · ${auditState.counts.privatePlayers} private masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.seasons} operational seasons · ${auditState.counts.publicSeasons} public seasons · ${auditState.counts.teams} operational teams · ${auditState.counts.publicTeams} public teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
+    <small>Scanned ${esc(auditState.scannedAt.toLocaleString())}. No data was changed by the audit.${auditReadOnly ? " Migration-readiness mode disables every repair action." : ""}</small>`;
   panel.innerHTML = auditState.issues.length ? auditState.issues.map(item => `
     <article class="identity-audit-row ${item.severity}">
       <div><span class="badge ${item.severity === "error" ? "red" : "orange"}">${esc(item.severity)}</span>
         <b>${esc(item.title)}</b><p>${esc(item.detail)}</p></div>
-      ${item.repair ? `<button type="button" class="secondary compact-button" data-identity-repair="${esc(item.id)}">Repair</button>` : `<span class="identity-manual-review">Manual review</span>`}
+      ${item.repair && !auditReadOnly ? `<button type="button" class="secondary compact-button" data-identity-repair="${esc(item.id)}">Repair</button>` : `<span class="identity-manual-review">${auditReadOnly ? "Read-only finding" : "Manual review"}</span>`}
     </article>`).join("") :
     '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, captain, roster, lineup, line-match, or public-parity conflicts were found.</p></div>';
 }
 
-async function runAudit() {
+async function runAudit(options = {}) {
   if (auditRunning || !isSuperAdmin()) return;
   auditRunning = true;
-  const button = $("#runIdentityAudit"), panel = $("#identityAuditResults");
-  button.disabled = true;
+  auditReadOnly = options.readOnly === true;
+  const buttons = [$("#runIdentityAudit"), $("#runMigrationReadinessAudit")].filter(Boolean);
+  const panel = $("#identityAuditResults");
+  buttons.forEach(button => { button.disabled = true; });
   panel.innerHTML = '<div class="empty-state compact"><b>Scanning live Firebase identity trees…</b><p>This is one controlled read of each required collection.</p></div>';
   try {
     auditState = await collectAudit();
@@ -871,7 +984,7 @@ async function runAudit() {
     panel.innerHTML = `<div class="empty-state compact"><b>Identity audit failed</b><p>${esc(error.message || "Refresh and try again.")}</p></div>`;
   } finally {
     auditRunning = false;
-    button.disabled = false;
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -891,7 +1004,8 @@ async function repairIssue(issueId) {
   }
 }
 
-$("#runIdentityAudit")?.addEventListener("click", runAudit);
+$("#runIdentityAudit")?.addEventListener("click", () => runAudit());
+$("#runMigrationReadinessAudit")?.addEventListener("click", () => runAudit({ readOnly: true }));
 $("#historicalPlayerIdForm")?.addEventListener("submit", reconcileHistoricalPlayerId);
 $("#identityAuditResults")?.addEventListener("click", event => {
   const button = event.target.closest("[data-identity-repair]");

@@ -251,7 +251,7 @@
 
       <div class="admin-section" data-admin-section="identity-audit" hidden>
         <section class="dashboard-card season-admin-card" data-super-admin>
-          <div class="card-top"><div><span class="kicker">Super Admin · Data Quality</span><h2>Identity Reconciliation</h2><p class="muted">Compare Player Master with email, account, membership, captain, roster, lineup, match, and public publication records.</p></div><div class="card-actions"><button class="primary compact-button" id="runIdentityAudit" type="button">Run expanded live audit</button><span class="badge navy">Super Admin</span></div></div>
+          <div class="card-top"><div><span class="kicker">Super Admin · Data Quality</span><h2>Identity Reconciliation</h2><p class="muted">Compare Player Master with email, account, membership, captain, roster, lineup, match, and public publication records.</p></div><div class="card-actions"><button class="secondary compact-button" id="runMigrationReadinessAudit" type="button">Run migration readiness</button><button class="primary compact-button" id="runIdentityAudit" type="button">Run expanded live audit</button><span class="badge navy">Super Admin</span></div></div>
           <div class="info-box identity-audit-note">The audit is read-only. A repair occurs only after you select an individual issue and confirm it.</div>
           <form id="historicalPlayerIdForm" class="identity-history-repair">
             <label>Incorrect ID in line record<input id="historicalOldPlayerId" type="text" placeholder="P1201" required></label>
@@ -363,7 +363,7 @@
   <script src="approval-bootstrap.js?v=8"></script>
   <script src="match-management-bootstrap.js?v=23"></script>
   <script src="poster-generator.js?v=2"></script>
-  <script type="module" src="runtime-loader.js?v=39"></script>
+  <script type="module" src="runtime-loader.js?v=40"></script>
   <script src="pwa.js?v=26"></script>
   <dialog id="resetSeasonDialog"><form id="resetSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Destructive operation</span><h2>Reset season data</h2></div><button type="button" id="closeResetSeason" aria-label="Close">×</button></div><p class="muted">This keeps the Season Master and all global users/players, but permanently removes every operational and public child record for the selected season.</p><div class="info-box" id="resetSeasonScope"></div><label class="wide">Type the confirmation phrase<input id="resetSeasonConfirmation" autocomplete="off" spellcheck="false"></label><label class="check-row"><input id="resetSeasonAcknowledgement" type="checkbox"> I understand that teams, memberships, rosters, schedules, lineups, scores, standings, approvers, audits and published season data will be deleted.</label><div class="info-box" id="resetSeasonMessage">No data has been changed.</div><div class="form-actions"><button type="button" class="secondary" id="cancelResetSeason">Cancel</button><button type="submit" class="primary danger-button" id="confirmResetSeason" disabled>Delete season data</button></div></form></dialog>
 </body>

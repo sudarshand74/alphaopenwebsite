@@ -60,14 +60,15 @@ async function exportAllPlayers() {
     const preferredFields = [
       ["Player ID", "playerId"], ["First Name", "firstName"], ["Last Name", "lastName"],
       ["Full Name", "fullName"], ["Email Address", "emailNormalized"], ["Mobile Number", "phone"],
-      ["T-Shirt Size", "tShirtSize"], ["AOR Suggested", "globalRank"], ["Global Score", "globalScore"],
-      ["Status", "status"], ["Waiver Status", "waiverStatus"], ["Emergency Contact", "emergencyContact"],
+      ["T-Shirt Size", "tShirtSize"], ["AOR Suggested", "globalRank"],
+      ["Status", "status"], ["Waiver Status", "waiverStatus"],
       ["Internal Notes", "internalNotes"], ["Created At", "createdAt"], ["Updated At", "updatedAt"],
       ["Created By UID", "createdByUid"], ["Updated By UID", "updatedByUid"]
     ];
     const knownKeys = new Set(preferredFields.map(([, key]) => key));
+    const retiredKeys = new Set(["globalScore", "emergencyContact"]);
     const additionalKeys = [...new Set(playerCache.flatMap(player => Object.keys(player)))]
-      .filter(key => !knownKeys.has(key)).sort();
+      .filter(key => !knownKeys.has(key) && !retiredKeys.has(key)).sort();
     const rows = playerCache.map(player => Object.fromEntries([
       ...preferredFields.map(([heading, key]) => [heading, excelValue(player[key])]),
       ...additionalKeys.map(key => [key, excelValue(player[key])])
@@ -152,8 +153,8 @@ async function createPlayer(candidate, allowMatchingName = false) {
     transaction.set(privateRef, {
       ...shared, firstName, lastName, fullName, emailNormalized: email, phone: String(candidate.phone || "").trim() || null,
       tShirtSize: String(candidate.tShirtSize || "").trim().toUpperCase() || null,
-      globalRank: candidate.globalRank ? Number(candidate.globalRank) : null, globalScore: null, waiverStatus: null,
-      emergencyContact: null, internalNotes: null, createdByUid: auth.currentUser.uid, updatedByUid: auth.currentUser.uid
+      globalRank: candidate.globalRank ? Number(candidate.globalRank) : null, waiverStatus: null,
+      internalNotes: null, createdByUid: auth.currentUser.uid, updatedByUid: auth.currentUser.uid
     });
     transaction.set(emailIndexRef, { emailNormalized: email, playerId, status: "active", createdAt: serverTimestamp(), createdByUid: auth.currentUser.uid });
     transaction.set(counterRef, { nextNumber: nextNumber + 1, updatedAt: serverTimestamp(), updatedByUid: auth.currentUser.uid }, { merge: true });

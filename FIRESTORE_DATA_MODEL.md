@@ -140,9 +140,7 @@ emailNormalized: string
 phone: string | null
 tShirtSize: string | null
 globalRank: number | null
-globalScore: number | null
 waiverStatus: string | null
-emergencyContact: map | null
 internalNotes: string | null
 createdByUid: string
 createdAt: Timestamp

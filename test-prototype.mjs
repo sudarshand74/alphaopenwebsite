@@ -87,7 +87,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v174"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v175"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -175,9 +175,9 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=39'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=40'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
-for (const id of ["runIdentityAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
+for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
 const seasonReset = await fs.readFile("season-reset.js","utf8");
 assert(html.includes('id="resetSeasonDialog"')&&html.includes('id="resetSeasonConfirmation"'),"Season reset confirmation UI is missing");
@@ -192,6 +192,8 @@ for (const collectionName of ["players","playerPrivate","playerEmailIndex","user
 for (const repair of ["syncPublicPlayer","syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
 for (const repair of ["syncRosterIdentity","syncPublicRosterAssignment","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity","syncPublicLineMatchIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);
 for (const finding of ["ROSTER_PLAYER_ID_NAME_CONFLICT","ROSTER_PUBLIC_PARITY_MISMATCH","LINEUP_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PUBLIC_PARITY_MISMATCH"]) assert(identityReconciliation.includes(finding), `Expanded identity audit finding is missing: ${finding}`);
+for (const finding of ["PUBLIC_ONLY_SEASON","PUBLIC_ONLY_TEAM","PUBLIC_ONLY_WEEK","PUBLIC_ONLY_ROSTER","PUBLIC_ONLY_MATCHUP","PUBLIC_ONLY_LINE_MATCH","PLAYER_OBSOLETE_FIELDS","CAPTAIN_PLAYER_ID_NAME_CONFLICT","TEAM_LEGACY_CAPTAIN_FIELDS"]) assert(identityReconciliation.includes(finding), `Migration readiness finding is missing: ${finding}`);
+assert(identityReconciliation.includes("Migration-readiness mode disables every repair action."),"Migration readiness audit must be read-only");
 assert(identityReconciliation.includes('readCollection("seasons", season.id, "rosterAssignments")'),"Identity audit must scan operational roster assignments");
 assert(identityReconciliation.includes('readCollection("publicSeasons", season.id, "rosterAssignments")'),"Identity audit must scan published roster assignments");
 assert(identityReconciliation.includes('readMatchupIdentityTree("seasons", season.id)'),"Identity audit must scan operational lineups and line matches");
