@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import "./season-reset.js?v=3";
+import "./season-reset.js?v=4";
 const config = {
     projectId: "alphaopen-development-2026",
     appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
@@ -673,35 +673,6 @@ async function exportEntireDatabase() {
             }),
           );
         }
-      }
-    }
-
-    const publicSeasonSnapshot = await getDocs(collection(db, "publicSeasons"));
-    appendSnapshotRows(bucket("Public Seasons"), publicSeasonSnapshot);
-    const publicCollections = [
-      ["Public Teams", "teams"],
-      ["Public Rosters", "rosterAssignments"],
-      ["Public Weeks", "weeks"],
-      ["Public Matchups", "matchups"],
-      ["Public Standings", "standings"],
-    ];
-    for (const season of publicSeasonSnapshot.docs) {
-      const snapshots = await Promise.all(
-        publicCollections.map(([, collectionName]) =>
-          getDocs(collection(season.ref, collectionName)),
-        ),
-      );
-      snapshots.forEach((snapshot, index) =>
-        appendSnapshotRows(bucket(publicCollections[index][0]), snapshot, {
-          "Season ID": season.id,
-        }),
-      );
-      for (const matchup of snapshots[3].docs) {
-        appendSnapshotRows(
-          bucket("Public Line Matches"),
-          await getDocs(collection(matchup.ref, "lineMatches")),
-          { "Season ID": season.id, "Matchup ID": matchup.id },
-        );
       }
     }
 

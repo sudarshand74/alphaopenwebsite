@@ -12,10 +12,6 @@ const OPERATIONAL_COLLECTIONS = [
   "latePassRequests", "adjustments", "importAudits", "playoffBrackets",
   "announcements", "auditEvents",
 ];
-const PUBLIC_COLLECTIONS = [
-  "teams", "rosterAssignments", "weeks", "matchups", "standings",
-  "standingsSnapshots", "playoffBrackets", "announcements",
-];
 const MATCHUP_COLLECTIONS = ["lineups", "lineupReviews", "lineMatches"];
 const LINE_WORKFLOW_COLLECTIONS = [
   "scheduleProposals", "scoreSubmissions", "scoreDecisions",
@@ -121,22 +117,6 @@ async function collectDocuments(seasonId) {
     );
   }
 
-  const publicMatchups = await readCollection(
-    "Public matchups", "publicSeasons", seasonId, "matchups",
-  );
-  for (const matchup of publicMatchups) {
-    await readCollection(
-      "Public line matches", "publicSeasons", seasonId,
-      "matchups", matchup.id, "lineMatches",
-    );
-  }
-  for (const collectionName of PUBLIC_COLLECTIONS) {
-    if (collectionName === "matchups") continue;
-    await readCollection(
-      `Public ${collectionName}`, "publicSeasons", seasonId, collectionName,
-    );
-  }
-
   return { references: [...references.values()], counts };
 }
 
@@ -155,7 +135,7 @@ async function resetSeason(event) {
   submit.disabled = true;
   confirmation.disabled = true;
   acknowledgement.disabled = true;
-  message.textContent = `Scanning ${deleting.seasonId} operational and public records…`;
+  message.textContent = `Scanning ${deleting.seasonId} canonical season records…`;
   try {
     const deletedCounts = new Map();
     let deletedTotal = 0;

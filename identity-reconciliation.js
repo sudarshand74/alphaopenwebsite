@@ -61,20 +61,18 @@ async function collectLineIdentityUpdates(oldPlayerId, newPlayerId, expectedName
   const seasons = await readCollection("seasons");
   const updates = [];
   for (const season of seasons) {
-    for (const root of ["seasons", "publicSeasons"]) {
-      const matchups = await readCollection(root, season.id, "matchups");
-      for (const matchup of matchups) {
-        const records = await readCollection(root, season.id, "matchups", matchup.id, "lineMatches");
-        records.forEach(record => {
-          const home = correctLinePlayer(record.homePlayers, oldPlayerId, newPlayerId, expectedName);
-          const away = correctLinePlayer(record.awayPlayers, oldPlayerId, newPlayerId, expectedName);
-          if (home.changed || away.changed)
-            updates.push({
-              ref: record.ref,
-              data: { homePlayers: home.players, awayPlayers: away.players }
-            });
-        });
-      }
+    const matchups = await readCollection("seasons", season.id, "matchups");
+    for (const matchup of matchups) {
+      const records = await readCollection("seasons", season.id, "matchups", matchup.id, "lineMatches");
+      records.forEach(record => {
+        const home = correctLinePlayer(record.homePlayers, oldPlayerId, newPlayerId, expectedName);
+        const away = correctLinePlayer(record.awayPlayers, oldPlayerId, newPlayerId, expectedName);
+        if (home.changed || away.changed)
+          updates.push({
+            ref: record.ref,
+            data: { homePlayers: home.players, awayPlayers: away.players }
+          });
+      });
     }
   }
   return updates;
@@ -112,7 +110,7 @@ async function reconcileHistoricalPlayerId(event) {
     if (!window.confirm(
       `Correct line-player entries where ${oldPlayerId} is paired with the name ${newName}?\n\n` +
       `Those entries will use ${newPlayerId}. ${oldPlayerId} remains assigned to ${oldName}. ` +
-      `${updates.length} operational/public line records will be updated. Scores and points will not change.`
+      `${updates.length} canonical line records will be updated. Scores and points will not change.`
     )) {
       message.textContent = "Historical Player ID reconciliation canceled.";
       return;
@@ -175,11 +173,6 @@ function rosterIdentityFields(record) {
   };
 }
 
-function rosterParityDiffers(operational, published) {
-  if (!published) return true;
-  return JSON.stringify(rosterIdentityFields(operational)) !== JSON.stringify(rosterIdentityFields(published));
-}
-
 function playerReferenceFinding(privateById, privatePlayers, playerId, storedName) {
   const master = privateById.get(playerId);
   const canonicalName = masterName(master);
@@ -218,33 +211,25 @@ async function readMatchupIdentityTree(root, seasonId) {
 }
 
 async function collectAudit() {
-  const [players, privatePlayers, emailIndexes, users, links, registrations, seasons, publicSeasons] = await Promise.all([
+  const [players, privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
     readCollection("players"),
     readCollection("playerPrivate"),
     readCollection("playerEmailIndex"),
     readCollection("users"),
     readCollection("playerAccountLinks"),
     readCollection("registrationRequests"),
-    readCollection("seasons"),
-    readCollection("publicSeasons")
+    readCollection("seasons")
   ]);
-  const publicSeasonById = new Map(publicSeasons.map(record => [record.id, record]));
   const seasonTrees = await Promise.all(seasons.map(async season => {
-    const [members, teams, publicTeams, rosterAssignments, publicRosterAssignments, weeks, publicWeeks, matchups, publicMatchups] = await Promise.all([
+    const [members, teams, rosterAssignments, weeks, matchups] = await Promise.all([
       readCollection("seasons", season.id, "members"),
       readCollection("seasons", season.id, "teams"),
-      readCollection("publicSeasons", season.id, "teams"),
       readCollection("seasons", season.id, "rosterAssignments"),
-      readCollection("publicSeasons", season.id, "rosterAssignments"),
       readCollection("seasons", season.id, "weeks"),
-      readCollection("publicSeasons", season.id, "weeks"),
-      readMatchupIdentityTree("seasons", season.id),
-      readMatchupIdentityTree("publicSeasons", season.id)
+      readMatchupIdentityTree("seasons", season.id)
     ]);
     return {
-      season, publicSeason: publicSeasonById.get(season.id) || null,
-      members, teams, publicTeams, rosterAssignments, publicRosterAssignments, weeks, publicWeeks,
-      matchups, publicMatchups
+      season, members, teams, rosterAssignments, weeks, matchups
     };
   }));
   const publicById = new Map(players.map(record => [record.id, record]));
@@ -261,13 +246,6 @@ async function collectAudit() {
   links.filter(record => record.status === "active").forEach(record => addMapList(linksByUid, record.uid, record));
 
   const issues = [];
-  publicSeasons.forEach(publicSeason => {
-    if (!seasons.some(season => season.id === publicSeason.id))
-      issues.push(issue("PUBLIC_ONLY_SEASON", "error",
-        `${publicSeason.id}: season exists only in publicSeasons`,
-        "This season must be migrated or intentionally archived before the publicSeasons tree is removed.",
-        { seasonId: publicSeason.id }));
-  });
   const allPlayerIds = new Set([...publicById.keys(), ...privateById.keys()]);
   allPlayerIds.forEach(playerId => {
     const publicRecord = publicById.get(playerId);
@@ -367,41 +345,6 @@ async function collectAudit() {
 
   seasonTrees.forEach(tree => {
     const memberByUid = new Map(tree.members.map(record => [record.id, record]));
-    const publicTeamById = new Map(tree.publicTeams.map(record => [record.id, record]));
-    const publicWeekById = new Map(tree.publicWeeks.map(record => [record.id, record]));
-    const publicRosterById = new Map(tree.publicRosterAssignments.map(record => [record.id, record]));
-    const operationalTeamIds = new Set(tree.teams.map(record => record.id));
-    const operationalWeekIds = new Set(tree.weeks.map(record => record.id));
-    const operationalRosterIds = new Set(tree.rosterAssignments.map(record => record.id));
-    const operationalMatchupIds = new Set(tree.matchups.map(record => record.matchup.id));
-    tree.publicTeams.forEach(record => {
-      if (!operationalTeamIds.has(record.id))
-        issues.push(issue("PUBLIC_ONLY_TEAM", "error",
-          `${tree.season.id} · ${record.id}: team exists only in publicSeasons`,
-          "Preserve or reconcile this team before removing the public season tree.",
-          { seasonId: tree.season.id, teamId: record.id }));
-    });
-    tree.publicWeeks.forEach(record => {
-      if (!operationalWeekIds.has(record.id))
-        issues.push(issue("PUBLIC_ONLY_WEEK", "error",
-          `${tree.season.id} · ${record.id}: week exists only in publicSeasons`,
-          "Preserve or reconcile this week before removing the public season tree.",
-          { seasonId: tree.season.id, weekId: record.id }));
-    });
-    tree.publicRosterAssignments.forEach(record => {
-      if (!operationalRosterIds.has(record.id))
-        issues.push(issue("PUBLIC_ONLY_ROSTER", "error",
-          `${tree.season.id} · ${record.id}: roster record exists only in publicSeasons`,
-          "Preserve or reconcile this roster record before removing the public season tree.",
-          { seasonId: tree.season.id, assignmentId: record.id }));
-    });
-    tree.publicMatchups.forEach(record => {
-      if (!operationalMatchupIds.has(record.matchup.id))
-        issues.push(issue("PUBLIC_ONLY_MATCHUP", "error",
-          `${tree.season.id} · ${record.matchup.id}: matchup exists only in publicSeasons`,
-          "Preserve or reconcile this matchup before removing the public season tree.",
-          { seasonId: tree.season.id, matchupId: record.matchup.id }));
-    });
     tree.members.forEach(member => {
       const user = userByUid.get(member.id);
       if (!user || member.playerId !== user.playerId) {
@@ -464,19 +407,6 @@ async function collectAudit() {
             `${playerId} is linked to ${link.uid}, but the team/member authorization trees differ.`,
             { seasonId: tree.season.id, teamId: team.id, playerId, uid: link.uid }, "syncCaptainAccess"));
       });
-      const publicTeam = publicTeamById.get(team.id);
-      if (publicTeam) {
-        const operationalCaptainIds = captainIds;
-        const publishedCaptainIds = publicTeam.captainPlayerId
-          ? [publicTeam.captainPlayerId]
-          : parseList(publicTeam.captainPlayerIds);
-        if (JSON.stringify(operationalCaptainIds) !== JSON.stringify(publishedCaptainIds) ||
-          normalizeName(team.captainNameSnapshot) !== normalizeName(publicTeam.captainNameSnapshot))
-          issues.push(issue("TEAM_PUBLIC_CAPTAIN_PARITY_MISMATCH", "warning",
-            `${tree.season.id} · ${team.name || team.id}: public captain copy differs`,
-            "The operational and public team captain identities are not the same.",
-            { seasonId: tree.season.id, teamId: team.id }));
-      }
     });
 
     const activeRankKeys = new Map();
@@ -510,15 +440,6 @@ async function collectAudit() {
           `${assignment.playerId} is ${identity.canonicalName} in Player Master, not ${assignment.playerNameSnapshot || "a blank name"}.`,
           context, "syncRosterIdentity"));
       }
-      const published = publicRosterById.get(assignmentId);
-      if (rosterParityDiffers(assignment, published))
-        issues.push(issue("ROSTER_PUBLIC_PARITY_MISMATCH", "warning",
-          `${tree.season.id} · roster ${assignmentId}: public copy differs`,
-          published
-            ? "The public roster identity/status fields differ from the operational roster assignment."
-            : "The operational roster assignment has no public roster copy.",
-          { seasonId: tree.season.id, assignmentId }, "syncPublicRosterAssignment"));
-
       if (assignment.status === "active") {
         const rankKey = `${assignment.teamId}|${Number(assignment.rankNumber || 0)}`;
         addMapList(activeRankKeys, rankKey, assignment);
@@ -601,53 +522,13 @@ async function collectAudit() {
       });
     });
 
-    const publicMatchupById = new Map(tree.publicMatchups.map(record => [record.matchup.id, record]));
-    tree.matchups.forEach(matchupTree => {
-      const publicTree = publicMatchupById.get(matchupTree.matchup.id);
-      const publicLineById = new Map((publicTree?.lineMatches || []).map(record => [record.id, record]));
-      matchupTree.lineMatches.forEach(lineMatch => {
-        const published = publicLineById.get(lineMatch.id);
-        const operationalIdentity = {
-          homePlayers: parseList(lineMatch.homePlayers),
-          awayPlayers: parseList(lineMatch.awayPlayers)
-        };
-        const publicIdentity = published ? {
-          homePlayers: parseList(published.homePlayers),
-          awayPlayers: parseList(published.awayPlayers)
-        } : null;
-        if (!published || JSON.stringify(operationalIdentity) !== JSON.stringify(publicIdentity))
-          issues.push(issue("LINE_MATCH_PUBLIC_PARITY_MISMATCH", "warning",
-            `${tree.season.id} · ${lineMatch.id}: public line identity differs`,
-            published
-              ? "Published home/away player identities differ from the operational line match."
-              : "The operational line match has no public copy.",
-            {
-              seasonId: tree.season.id,
-              matchupId: matchupTree.matchup.id,
-              lineMatchId: lineMatch.id
-            }, "syncPublicLineMatchIdentity"));
-      });
-      (publicTree?.lineMatches || []).forEach(publicLine => {
-        if (!matchupTree.lineMatches.some(line => line.id === publicLine.id))
-          issues.push(issue("PUBLIC_ONLY_LINE_MATCH", "error",
-            `${tree.season.id} · ${matchupTree.matchup.id} · ${publicLine.id}: line match exists only in publicSeasons`,
-            "Preserve or reconcile this published line match before removing the public season tree.",
-            {
-              seasonId: tree.season.id,
-              matchupId: matchupTree.matchup.id,
-              lineMatchId: publicLine.id
-            }));
-      });
-    });
   });
   return {
     scannedAt: new Date(),
     counts: {
       players: players.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
       users: users.length, accountLinks: links.length, seasons: seasons.length,
-      publicSeasons: publicSeasons.length,
       teams: seasonTrees.reduce((sum, tree) => sum + tree.teams.length, 0),
-      publicTeams: seasonTrees.reduce((sum, tree) => sum + tree.publicTeams.length, 0),
       members: seasonTrees.reduce((sum, tree) => sum + tree.members.length, 0),
       rosterAssignments: seasonTrees.reduce((sum, tree) => sum + tree.rosterAssignments.length, 0),
       lineups: seasonTrees.reduce((sum, tree) => sum + tree.matchups.reduce((inner, matchup) => inner + matchup.lineups.length, 0), 0),
@@ -910,7 +791,7 @@ function renderAudit() {
   const errors = auditState.issues.filter(item => item.severity === "error").length;
   const warnings = auditState.issues.filter(item => item.severity === "warning").length;
   summary.innerHTML = `<b>${auditState.issues.length ? `${errors} conflicts · ${warnings} warnings` : "All checked identity trees are synchronized"}</b>
-    <span>${auditState.counts.players} public players · ${auditState.counts.privatePlayers} private masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.seasons} operational seasons · ${auditState.counts.publicSeasons} public seasons · ${auditState.counts.teams} operational teams · ${auditState.counts.publicTeams} public teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
+    <span>${auditState.counts.players} player profiles · ${auditState.counts.privatePlayers} player masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.seasons} seasons · ${auditState.counts.teams} teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
     <small>Scanned ${esc(auditState.scannedAt.toLocaleString())}. No data was changed by the audit.${auditReadOnly ? " Migration-readiness mode disables every repair action." : ""}</small>`;
   panel.innerHTML = auditState.issues.length ? auditState.issues.map(item => `
     <article class="identity-audit-row ${item.severity}">
@@ -918,7 +799,7 @@ function renderAudit() {
         <b>${esc(item.title)}</b><p>${esc(item.detail)}</p></div>
       ${item.repair && !auditReadOnly ? `<button type="button" class="secondary compact-button" data-identity-repair="${esc(item.id)}">Repair</button>` : `<span class="identity-manual-review">${auditReadOnly ? "Read-only finding" : "Manual review"}</span>`}
     </article>`).join("") :
-    '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, captain, roster, lineup, line-match, or public-parity conflicts were found.</p></div>';
+    '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, captain, roster, lineup, or line-match conflicts were found.</p></div>';
 }
 
 async function runAudit(options = {}) {

@@ -88,7 +88,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v185"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v186"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -176,7 +176,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=46'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=47'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
@@ -193,14 +193,11 @@ assert(serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Season r
 for (const collectionName of ["players","playerPrivate","playerEmailIndex","users","playerAccountLinks","registrationRequests","seasons"]) assert(identityReconciliation.includes(`"${collectionName}"`), `Identity audit must scan ${collectionName}`);
 for (const repair of ["syncPublicPlayer","syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
 for (const repair of ["syncRosterIdentity","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);
-for (const retiredRepair of ["syncPublicRosterAssignment","syncPublicLineMatchIdentity"]) assert(!identityReconciliation.includes(`async function ${retiredRepair}`), `Legacy season publication repair must be disabled: ${retiredRepair}`);
-for (const finding of ["ROSTER_PLAYER_ID_NAME_CONFLICT","ROSTER_PUBLIC_PARITY_MISMATCH","LINEUP_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PUBLIC_PARITY_MISMATCH"]) assert(identityReconciliation.includes(finding), `Expanded identity audit finding is missing: ${finding}`);
-for (const finding of ["PUBLIC_ONLY_SEASON","PUBLIC_ONLY_TEAM","PUBLIC_ONLY_WEEK","PUBLIC_ONLY_ROSTER","PUBLIC_ONLY_MATCHUP","PUBLIC_ONLY_LINE_MATCH","PLAYER_OBSOLETE_FIELDS","CAPTAIN_PLAYER_ID_NAME_CONFLICT","TEAM_LEGACY_CAPTAIN_FIELDS"]) assert(identityReconciliation.includes(finding), `Migration readiness finding is missing: ${finding}`);
+for (const finding of ["ROSTER_PLAYER_ID_NAME_CONFLICT","LINEUP_PLAYER_ID_NAME_CONFLICT","LINE_MATCH_PLAYER_ID_NAME_CONFLICT"]) assert(identityReconciliation.includes(finding), `Expanded identity audit finding is missing: ${finding}`);
+for (const finding of ["PLAYER_OBSOLETE_FIELDS","CAPTAIN_PLAYER_ID_NAME_CONFLICT","TEAM_LEGACY_CAPTAIN_FIELDS"]) assert(identityReconciliation.includes(finding), `Migration readiness finding is missing: ${finding}`);
 assert(identityReconciliation.includes("Migration-readiness mode disables every repair action."),"Migration readiness audit must be read-only");
 assert(identityReconciliation.includes('readCollection("seasons", season.id, "rosterAssignments")'),"Identity audit must scan operational roster assignments");
-assert(identityReconciliation.includes('readCollection("publicSeasons", season.id, "rosterAssignments")'),"Identity audit must scan published roster assignments");
 assert(identityReconciliation.includes('readMatchupIdentityTree("seasons", season.id)'),"Identity audit must scan operational lineups and line matches");
-assert(identityReconciliation.includes('readMatchupIdentityTree("publicSeasons", season.id)'),"Identity audit must scan published line matches");
 assert(identityReconciliation.includes("window.confirm"),"Identity repairs must require explicit confirmation");
 assert(!identityReconciliation.includes("sudarshandesai74@gmail.com"),"Identity tool must not hardcode a Super Admin email");
 assert(identityReconciliation.includes('authorization?.roles?.includes("superAdmin")'),"Identity tool must use authoritative role authorization");
@@ -224,7 +221,7 @@ assert(firestoreRules.includes("function isActiveUser()"),"Suspended users must 
 assert(html.includes('id="exportDatabase"'),"Full Firebase Excel export control is missing");
 assert(seasonBulkImport.includes("exportEntireDatabase"),"Full Firebase Excel export workflow is missing");
 assert(seasonBulkImport.includes('"Document Path"'),"Database export must preserve Firestore document paths");
-assert(seasonBulkImport.includes('"Public Line Matches"'),"Database export must include published line matches");
+assert(!seasonBulkImport.includes('"Public Line Matches"'),"Database export must not recreate legacy publication worksheets");
 assert(js.includes('new CustomEvent("alphaopen:route-changed"'),"Route changes must trigger lazy Firebase loading");
 assert(firebaseData.includes("function cachedRead"),"Shared Firebase request deduplication is missing");
 assert(firebaseData.includes("async function loadForRoute"),"Route-aware Firebase loader is missing");

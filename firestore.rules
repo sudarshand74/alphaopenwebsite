@@ -545,25 +545,6 @@ service cloud.firestore {
       }
     }
 
-    // Legacy publication tree retained temporarily for migration audit and
-    // cleanup. The application no longer reads or writes this tree.
-    match /publicSeasons/{seasonId} {
-      allow read, write: if isSuperAdmin();
-
-      match /matchups/{matchupId}/lineMatches/{lineMatchId} {
-        allow read, write: if isSuperAdmin();
-      }
-
-      match /rosterAssignments/{assignmentId} {
-        allow read, write: if isSuperAdmin();
-      }
-
-      match /{document=**} {
-        allow read: if isSuperAdmin();
-        allow write: if isSuperAdmin();
-      }
-    }
-
     // Every collection not explicitly matched above remains inaccessible.
     match /{document=**} {
       allow read, write: if false;
