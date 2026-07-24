@@ -13,7 +13,7 @@ import {
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import "./season-reset.js?v=2";
+import "./season-reset.js?v=3";
 const config = {
     projectId: "alphaopen-development-2026",
     appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",

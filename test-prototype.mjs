@@ -89,7 +89,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v183"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v184"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -177,16 +177,17 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=44'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=45'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
 const seasonReset = await fs.readFile("season-reset.js","utf8");
 assert(html.includes('id="resetSeasonDialog"')&&html.includes('id="resetSeasonConfirmation"'),"Season reset confirmation UI is missing");
 assert(seasonReset.includes("DELETE ${target.seasonId}")&&seasonReset.includes("resetSeasonAcknowledgement"),"Season reset requires typed and checked confirmation");
+assert(seasonReset.includes("reset completed and verified empty"),"Season reset success message must confirm an empty verification scan");
 for (const collectionName of ["teams","members","rosterAssignments","weeks","matchups","approverAssignments","standings","lineups","lineupReviews","lineMatches","revisions","scheduleProposals","scoreSubmissions","scoreDecisions"]) assert(seasonReset.includes(`"${collectionName}"`),`Season reset scope is missing ${collectionName}`);
 assert(seasonReset.includes('for (let start = 0; start < references.length; start += 400)'),"Season reset must use controlled Firestore batches");
-assert(seasonReset.includes("remaining.references.length"),"Season reset must verify that no scoped records remain");
+assert(seasonReset.includes("verification.references.length"),"Season reset must verify that no scoped records remain");
 assert(firestoreRules.includes("Super Admin season reset")&&firestoreRules.includes("allow delete: if isSuperAdmin()"),"Super Admin recursive season-delete rule is missing");
 assert(seasonBulkImport.includes("/assets/AlphaOpen_Season_Reload_Template.xlsx"),"Admin template download is not attached to the season reload workbook");
 assert(serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Season reload workbook is missing from the app shell");

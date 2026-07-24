@@ -157,18 +157,33 @@ async function resetSeason(event) {
   acknowledgement.disabled = true;
   message.textContent = `Scanning ${deleting.seasonId} operational and public records…`;
   try {
-    const { references, counts } = await collectDocuments(deleting.seasonId);
-    message.textContent = `${references.length} season records found. Deleting in controlled batches…`;
-    await deleteInBatches(references);
-    const remaining = await collectDocuments(deleting.seasonId);
-    if (remaining.references.length) {
-      throw new Error(`${remaining.references.length} season records remain. Run reset again after reviewing permissions.`);
+    const deletedCounts = new Map();
+    let deletedTotal = 0;
+    for (let pass = 1; pass <= 5; pass += 1) {
+      const { references, counts } = await collectDocuments(deleting.seasonId);
+      if (!references.length) break;
+      message.textContent = `Deleting ${references.length} ${deleting.seasonId} records (verification pass ${pass})…`;
+      await deleteInBatches(references);
+      deletedTotal += references.length;
+      counts.forEach((count, category) => {
+        deletedCounts.set(category, (deletedCounts.get(category) || 0) + count);
+      });
     }
-    const breakdown = [...counts.entries()]
+    const verification = await collectDocuments(deleting.seasonId);
+    if (verification.references.length) {
+      const remaining = [...verification.counts.entries()]
+        .filter(([, count]) => count)
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(" · ");
+      throw new Error(
+        `${verification.references.length} season records remain after verification.${remaining ? ` ${remaining}` : ""}`,
+      );
+    }
+    const breakdown = [...deletedCounts.entries()]
       .filter(([, count]) => count)
       .map(([name, count]) => `${name}: ${count}`)
       .join(" · ");
-    message.textContent = `${deleting.seasonId} reset completed. ${references.length} records deleted.${breakdown ? ` ${breakdown}` : ""} Season Master and global users/players were retained.`;
+    message.textContent = `${deleting.seasonId} reset completed and verified empty. ${deletedTotal} delete operations completed.${breakdown ? ` ${breakdown}` : ""} Season Master and global users/players were retained.`;
     window.alphaOpenAuthUI?.showMessage(`${deleting.seasonId} is ready for a clean bulk upload.`);
   } catch (error) {
     console.error("Season reset failed", error);

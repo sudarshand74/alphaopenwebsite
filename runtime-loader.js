@@ -2,7 +2,7 @@ const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LO
 const coreModules=["./firebase-auth.js?v=34","./firebase-data.js?v=58"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
-const adminModuleForPanel={players:"./player-admin.js?v=33","identity-audit":"./identity-reconciliation.js?v=9",rosters:"./roster-admin-v3.js?v=7",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=7","season-teams":"./season-structure-admin.js?v=1","season-matchups":"./season-structure-admin.js?v=1","lineup-approvers":"./lineup-approver-admin.js?v=4"};
+const adminModuleForPanel={players:"./player-admin.js?v=33","identity-audit":"./identity-reconciliation.js?v=9",rosters:"./roster-admin-v3.js?v=7",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=8","season-teams":"./season-structure-admin.js?v=1","season-matchups":"./season-structure-admin.js?v=1","lineup-approvers":"./lineup-approver-admin.js?v=4"};
 function loadRouteFeature(route){
   if(["fall2026","captain-schedule","captain-score"].includes(route))return importFeature("./season-operations.js?v=1");
   if(route==="ec-roster")return importFeature("./roster-admin-v3.js?v=7");
