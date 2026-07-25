@@ -83,8 +83,10 @@ assert(firebaseData.includes('collection(db, "seasons")'),"Canonical season data
 assert(firebaseData.includes('if (route === "matches")')&&firebaseData.includes("loadActiveSeasonMatches"),"Matches route must load the active canonical season");
 assert(firebaseData.includes("getCountFromServer"),"Home approval count must use lightweight aggregation queries");
 assert(firebaseData.includes('where("homeLineupStatus", "==", "submitted")')&&firebaseData.includes('where("awayLineupStatus", "==", "submitted")'),"Pending lineup aggregation filters are missing");
-assert(firebaseData.includes("await Promise.all([")&&firebaseData.includes("loadPublicActiveSeason(),")&&firebaseData.includes("loadPendingApprovalCount(user),"),"Home active-season and approval reads must run in parallel");
+assert(firebaseData.includes("await Promise.all([")&&firebaseData.includes("loadVisibleSeasonHeaders(),")&&firebaseData.includes("loadPublicActiveSeason(),")&&firebaseData.includes("loadPendingApprovalCount(user),"),"Home season-header, active-season and approval reads must run in parallel");
 assert(firebaseData.includes('getDoc(doc(db, "seasons", activeSeasonId))'),"Home must read only the configured active-season record");
+assert(firebaseData.includes('where("status", "==", "active")')&&firebaseData.includes('where("status", "==", "completed")'),"Guest season headers must query only active and completed canonical seasons");
+assert(!firebaseData.includes('if (!auth.currentUser) {\n      window.alphaOpenDataUI?.applyPublicSeasons([]);'),"Guest active-season loading must not be short-circuited");
 assert(firebaseData.includes('collection(seasonRef, "matchups")'),"Firebase matchup collection loading is missing");
 assert(firebaseData.includes('"lineMatches"'),"Firebase line-match loading is missing");
 assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includes("initialLineup"),"Hardcoded prototype identities or lineups remain");
@@ -92,7 +94,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v203"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v204"),"Missing versioned app-shell cache");
 assert(html.includes('runtime-loader.js?v=61" async'),"Firebase runtime must not block the guest page load");
 assert(!serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"The service worker must not pre-cache the admin Excel template");
 assert(!serviceWorker.includes("community-katta.jpg"),"The service worker must not pre-cache the full photo gallery");
@@ -175,7 +177,9 @@ assert(firebaseData.includes('where("status", "==", "active")'),"Single-active-s
 assert(firebaseData.includes('doc(db, "systemConfig", "seasonControl")'),"Active-season control document is missing");
 assert(firebaseData.includes("managedPastSeasons"),"Read-only past-season profile display is missing");
 assert(firebaseAuth.includes("activeSeasonId"),"Authentication must resolve the active season dynamically");
+assert(firebaseAuth.includes('roles.has("ec") && teamIds.length')&&firebaseAuth.includes('access.push("captain")'),"A team-assigned EC must receive captain submission access");
 assert(firestoreRules.includes("match /systemConfig/{documentId}"),"Season-control security rules are missing");
+assert(firestoreRules.includes("function isGuestVisibleSeason(seasonId)"),"Guest-safe canonical season rule is missing");
 assert(firebaseAuth.includes("registrationRequests"),"Google registration request creation is missing");
 assert(firebaseAuth.includes("eligiblePlayerId"),"Player Master registration eligibility check is missing");
 assert(firebaseAuth.includes("registration/not-in-player-master"),"Non-player registration rejection is missing");

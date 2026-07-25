@@ -204,11 +204,13 @@ async function authorizationFor(user, userData) {
   const activeSeasonId = seasonControl.exists() ? seasonControl.data().activeSeasonId : null;
   const membership = activeSeasonId ? await getDoc(doc(db, "seasons", activeSeasonId, "members", user.uid)) : null;
   const roles = new Set([...(userData.globalRoles || []), ...(membership?.exists() ? membership.data().roles || [] : [])]);
+  const teamIds = membership?.exists() ? membership.data().teamIds || [] : [];
   if (userData.profileType === "player") roles.add("player");
 
   const access = [];
   if (roles.has("player")) access.push("player");
   if (roles.has("captain")) access.push("captain");
+  if (roles.has("ec") && teamIds.length) access.push("captain");
   if (roles.has("neutralApprover")) access.push("approver");
   if (roles.has("ec") || roles.has("superAdmin")) access.push("ec");
   if (roles.has("superAdmin")) access.push("captain", "approver", "player");
@@ -220,7 +222,7 @@ async function authorizationFor(user, userData) {
     : roles.has("neutralApprover") ? "Neutral Approver"
     : roles.has("player") ? "Player"
     : "Guest";
-  return { role, access: uniqueAccess, playerId: userData.playerId || null, playerName: userData.displayName || null, status: "active", roles: [...roles], activeSeasonId, teamIds: membership?.exists() ? membership.data().teamIds || [] : [] };
+  return { role, access: uniqueAccess, playerId: userData.playerId || null, playerName: userData.displayName || null, status: "active", roles: [...roles], activeSeasonId, teamIds };
 }
 
 async function startGoogleSignIn() {

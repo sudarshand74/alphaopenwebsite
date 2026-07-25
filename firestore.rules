@@ -37,6 +37,12 @@ service cloud.firestore {
         && get(userPath(request.auth.uid)).data.status == 'active';
     }
 
+    function isGuestVisibleSeason(seasonId) {
+      return exists(/databases/$(database)/documents/seasons/$(seasonId))
+        && get(/databases/$(database)/documents/seasons/$(seasonId)).data.status is string
+        && get(/databases/$(database)/documents/seasons/$(seasonId)).data.status in ['active', 'completed'];
+    }
+
     // Temporary bootstrap path. Replace the email check with a custom claim
     // after the first Super Admin account is provisioned by trusted code.
     function isSuperAdmin() {
@@ -270,7 +276,8 @@ service cloud.firestore {
     }
 
     match /systemConfig/{documentId} {
-      allow read: if signedIn();
+      allow get: if documentId == 'seasonControl' || signedIn();
+      allow list: if signedIn();
       allow write: if isSuperAdmin();
     }
 
@@ -300,7 +307,12 @@ service cloud.firestore {
     }
 
     match /seasons/{seasonId} {
-      allow read: if isActiveUser();
+      allow get: if isActiveUser()
+        || (resource.data.status is string
+          && resource.data.status in ['active', 'completed']);
+      allow list: if isActiveUser()
+        || (resource.data.status is string
+          && resource.data.status in ['active', 'completed']);
       allow write: if isSuperAdmin();
 
       match /ruleVersions/{ruleVersionId} {
@@ -316,7 +328,7 @@ service cloud.firestore {
       }
 
       match /teams/{teamId} {
-        allow read: if isActiveUser();
+        allow read: if isActiveUser() || isGuestVisibleSeason(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
@@ -326,12 +338,12 @@ service cloud.firestore {
       }
 
       match /rosterAssignments/{assignmentId} {
-        allow read: if isActiveUser();
+        allow read: if isActiveUser() || isGuestVisibleSeason(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
       match /weeks/{weekId} {
-        allow read: if isActiveUser();
+        allow read: if isActiveUser() || isGuestVisibleSeason(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
@@ -340,7 +352,7 @@ service cloud.firestore {
       }
 
       match /matchups/{matchupId} {
-        allow read: if isActiveUser();
+        allow read: if isActiveUser() || isGuestVisibleSeason(seasonId);
         allow write: if isSeasonEC(seasonId)
           || (isSeasonApprover(seasonId)
             && resource.data.homeTeamId == request.resource.data.homeTeamId
@@ -452,7 +464,7 @@ service cloud.firestore {
         }
 
         match /lineMatches/{lineMatchId} {
-          allow read: if isActiveUser();
+          allow read: if isActiveUser() || isGuestVisibleSeason(seasonId);
           // Approval creates the operational records. Super Admin and EC may
           // correct players; captains remain limited to schedule and scores.
           allow create: if isSeasonEC(seasonId) || isSeasonApprover(seasonId);
@@ -539,7 +551,7 @@ service cloud.firestore {
       }
 
       match /standings/{teamId} {
-        allow read: if isActiveUser();
+        allow read: if isActiveUser() || isGuestVisibleSeason(seasonId);
         allow write: if false;
       }
 

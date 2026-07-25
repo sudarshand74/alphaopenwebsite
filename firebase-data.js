@@ -76,6 +76,24 @@ function seasonsOnce() {
   );
 }
 
+function visibleSeasonsOnce() {
+  const reference = collection(db, "seasons"),
+    mapSnapshot = (snapshot) => snapshot.docs.map((item) => ({ seasonId: item.id, ref: item.ref, ...item.data() }));
+  return cachedRead("visible-seasons", async () => {
+    const [activeSnapshot, completedSnapshot] = await Promise.all([
+      getDocs(query(reference, where("status", "==", "active"))),
+      getDocs(query(reference, where("status", "==", "completed"))),
+    ]);
+    return [...mapSnapshot(activeSnapshot), ...mapSnapshot(completedSnapshot)];
+  });
+}
+
+async function loadVisibleSeasonHeaders() {
+  const seasons = await visibleSeasonsOnce();
+  window.alphaOpenDataUI?.applyPublicSeasons(seasons);
+  return seasons;
+}
+
 function seasonTree(seasonRef, cacheKey, includeStandings = false) {
   const ttl = cacheKey.startsWith("operational-tree:")
     ? OPERATIONAL_READ_TTL_MS
@@ -121,11 +139,6 @@ function seasonTree(seasonRef, cacheKey, includeStandings = false) {
 
 async function loadPublicActiveSeason() {
   try {
-    if (!auth.currentUser) {
-      window.alphaOpenDataUI?.applyPublicSeasons([]);
-      window.alphaOpenDataUI?.applyActiveSeason(null);
-      return null;
-    }
     try {
       const cachedActive = JSON.parse(localStorage.getItem(ACTIVE_SEASON_SNAPSHOT_KEY) || "null");
       if (cachedActive?.seasonId) window.alphaOpenDataUI?.applyActiveSeason(cachedActive);
@@ -223,7 +236,7 @@ async function loadCompletedSeason(seasonId) {
       window.alphaOpenDataUI?.applyHistoryData([]);
       return;
     }
-    const seasons = await seasonsOnce();
+    const seasons = await visibleSeasonsOnce();
     window.alphaOpenDataUI?.applyPublicSeasons(seasons);
     const selected = seasons.find(
       (season) =>
@@ -976,17 +989,9 @@ function currentRoute() {
 }
 
 async function loadForRoute(route, user = auth.currentUser) {
-  if (!user && ["home", "fall2026", "season-dashboard", "matches", "schedule", "history"].includes(route)) {
-    window.alphaOpenDataUI?.applyPublicSeasons([]);
-    window.alphaOpenDataUI?.applyActiveSeason(null);
-    window.alphaOpenDataUI?.applyLeagueData({
-      season: null, teams: [], standings: [], matchups: [], lineMatches: [],
-    });
-    window.alphaOpenDataUI?.applyHistoryData([]);
-    return;
-  }
   if (route === "home") {
     await Promise.all([
+      loadVisibleSeasonHeaders(),
       loadPublicActiveSeason(),
       loadPendingApprovalCount(user),
     ]);
@@ -1001,12 +1006,13 @@ async function loadForRoute(route, user = auth.currentUser) {
     return;
   }
   if (route === "schedule") {
-    const seasons = await seasonsOnce();
+    const seasons = await visibleSeasonsOnce();
     window.alphaOpenDataUI?.applyPublicSeasons(seasons);
     window.alphaOpenDataUI?.applyHistoryData([]);
     return;
   }
   if (route === "history") {
+    if (!user) return;
     const seasons = await seasonsOnce();
     window.alphaOpenDataUI?.applyPublicSeasons(seasons);
     window.alphaOpenDataUI?.applyHistoryData([]);

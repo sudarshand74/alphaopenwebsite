@@ -1,4 +1,4 @@
-const CACHE_NAME = "alphaopen-shell-v203";
+const CACHE_NAME = "alphaopen-shell-v204";
 const APP_SHELL = [
   "/", "/index.html", "/styles.css?v=72", "/app.js?v=109", "/runtime-loader.js?v=61", "/pwa.js?v=26",
   "/manifest.webmanifest", "/assets/alphaopen-logo.png",
