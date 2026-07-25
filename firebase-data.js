@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocFromCache,
+  getCountFromServer,
   getDocs,
   getDocsFromCache,
   limit,
@@ -129,14 +130,13 @@ async function loadPublicActiveSeason() {
       const cachedActive = JSON.parse(localStorage.getItem(ACTIVE_SEASON_SNAPSHOT_KEY) || "null");
       if (cachedActive?.seasonId) window.alphaOpenDataUI?.applyActiveSeason(cachedActive);
     } catch { /* Ignore malformed or unavailable browser storage. */ }
-    const [seasons, control] = await Promise.all([
-      seasonsOnce(),
-      getDoc(SEASON_CONTROL_REF),
-    ]);
-    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
+    const control = await getDoc(SEASON_CONTROL_REF);
     const activeSeasonId = control.data()?.activeSeasonId || null;
-    const active = activeSeasonId
-      ? seasons.find((season) => season.seasonId === activeSeasonId) || null
+    const activeSnapshot = activeSeasonId
+      ? await getDoc(doc(db, "seasons", activeSeasonId))
+      : null;
+    const active = activeSnapshot?.exists()
+      ? { seasonId: activeSnapshot.id, ref: activeSnapshot.ref, ...activeSnapshot.data() }
       : null;
     window.alphaOpenDataUI?.applyActiveSeason(active);
     if (active?.seasonId) {
@@ -175,9 +175,17 @@ async function loadPendingApprovalCount(user, authorization = window.alphaOpenAu
     window.alphaOpenDataUI?.applyPendingApprovalCount(0);
     return;
   }
-  const snapshot = await getDocs(collection(db, "seasons", seasonId, "matchups"));
-  const count = window.alphaOpenCountSubmittedLineups(
-    snapshot.docs.map((item) => item.data()),
+  const matchups = collection(db, "seasons", seasonId, "matchups");
+  const count = await cachedRead(
+    `pending-approval-count:${seasonId}`,
+    async () => {
+      const [home, away] = await Promise.all([
+        getCountFromServer(query(matchups, where("homeLineupStatus", "==", "submitted"))),
+        getCountFromServer(query(matchups, where("awayLineupStatus", "==", "submitted"))),
+      ]);
+      return home.data().count + away.data().count;
+    },
+    15 * 1000,
   );
   window.alphaOpenDataUI?.applyPendingApprovalCount(count);
 }
@@ -190,6 +198,7 @@ window.addEventListener("alphaopen:match-line-updated", (event) => {
     try { localStorage.removeItem(CACHE_STAMP_PREFIX + key); }
     catch { /* Storage can be unavailable in private browsing. */ }
   });
+  readCache.delete(`pending-approval-count:${seasonId}`);
 });
 async function loadActiveSeasonDashboardData() {
   try {
@@ -977,8 +986,10 @@ async function loadForRoute(route, user = auth.currentUser) {
     return;
   }
   if (route === "home") {
-    await loadPublicActiveSeason();
-    await loadPendingApprovalCount(user);
+    await Promise.all([
+      loadPublicActiveSeason(),
+      loadPendingApprovalCount(user),
+    ]);
     return;
   }
   if (route === "fall2026" || route === "season-dashboard") {
