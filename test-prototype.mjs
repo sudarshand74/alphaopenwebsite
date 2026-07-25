@@ -88,7 +88,11 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v200"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v202"),"Missing versioned app-shell cache");
+assert(html.includes('runtime-loader.js?v=60" async'),"Firebase runtime must not block the guest page load");
+assert(!serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"The service worker must not pre-cache the admin Excel template");
+assert(!serviceWorker.includes("community-katta.jpg"),"The service worker must not pre-cache the full photo gallery");
+assert(html.includes('data-src="assets/community-patio.jpg"'),"Offscreen gallery images must load on demand");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -189,7 +193,7 @@ assert(seasonReset.includes('for (let start = 0; start < references.length; star
 assert(seasonReset.includes("verification.references.length"),"Season reset must verify that no scoped records remain");
 assert(firestoreRules.includes("Super Admin season reset")&&firestoreRules.includes("allow delete: if isSuperAdmin()"),"Super Admin recursive season-delete rule is missing");
 assert(seasonBulkImport.includes("/assets/AlphaOpen_Season_Reload_Template.xlsx"),"Admin template download is not attached to the season reload workbook");
-assert(serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Season reload workbook is missing from the app shell");
+assert(!serviceWorker.includes("AlphaOpen_Season_Reload_Template.xlsx"),"Admin workbook must load only when requested");
 for (const collectionName of ["players","playerEmailIndex","users","playerAccountLinks","registrationRequests","seasons"]) assert(identityReconciliation.includes(`"${collectionName}"`), `Identity audit must scan ${collectionName}`);
 for (const repair of ["syncEmailIndex","syncAccountTree","syncPrivateAccount","syncMembershipIdentity","syncCaptainAccess"]) assert(identityReconciliation.includes(repair), `Identity repair is missing: ${repair}`);
 for (const repair of ["syncRosterIdentity","syncLineupPlayerIdentity","syncLineMatchPlayerIdentity"]) assert(identityReconciliation.includes(repair), `Expanded identity repair is missing: ${repair}`);

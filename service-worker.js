@@ -1,12 +1,9 @@
-const CACHE_NAME = "alphaopen-shell-v200";
+const CACHE_NAME = "alphaopen-shell-v202";
 const APP_SHELL = [
-  "/", "/index.html", "/styles.css?v=72", "/app.js?v=108", "/runtime-loader.js?v=60", "/firebase-client.js?v=4", "/player-identity.js?v=1", "/ao-content.js?v=1", "/lineup-bootstrap.js?v=14", "/lineup-submit.js?v=13", "/approval-bootstrap.js?v=10", "/lineup-approve.js?v=9", "/match-management-bootstrap.js?v=24", "/match-management.js?v=24", "/poster-generator.js?v=2", "/score-rules.js?v=1", "/firebase-auth.js?v=43", "/firebase-data.js?v=62", "/player-admin.js?v=34", "/identity-reconciliation.js?v=14", "/venue-admin.js?v=26", "/season-operations.js?v=1", "/season-bulk-import.js?v=11", "/season-reset.js?v=4", "/roster-admin-v3.js?v=10", "/season-structure-admin.js?v=3", "/lineup-approver-admin.js?v=4", "/lineup-update.js?v=8", "/pwa.js?v=26",
-  "/manifest.webmanifest", "/assets/alphaopen-logo.png", "/assets/AlphaOpen_Season_Reload_Template.xlsx",
+  "/", "/index.html", "/styles.css?v=72", "/app.js?v=109", "/runtime-loader.js?v=60", "/pwa.js?v=26",
+  "/manifest.webmanifest", "/assets/alphaopen-logo.png",
   "/assets/icon-192.png", "/assets/icon-512.png",
-  "/assets/ao-community.jpeg", "/assets/community-patio.jpg", "/assets/community-group.jpg",
-  "/assets/community-night-court.jpg", "/assets/community-day-group.jpg", "/assets/community-banner-team.jpg",
-  "/assets/community-court-group.jpg", "/assets/community-bottle.jpg", "/assets/community-awards.jpg",
-  "/assets/community-trophies.jpg", "/assets/community-katta.jpg"
+  "/assets/ao-community.jpeg"
 ];
 
 self.addEventListener("install", event => {

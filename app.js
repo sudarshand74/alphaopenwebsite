@@ -155,16 +155,17 @@ function renderWorkspace(account) {
   );
   const actions = [
     [
-      activeSeasonRoute,
-      activeSeasonLabel,
-      "Click here to see current season’s teams, schedule, ranking and match results.",
-    ],
-    [
       "matches",
       "Matches",
       "Click here to see today’s, upcoming and recently completed matches and generate posters on the fly.",
     ],
   ];
+  if (activeSeasonRecord || account.role !== "Guest")
+    actions.unshift([
+      activeSeasonRoute,
+      activeSeasonLabel,
+      "Click here to see current season’s teams, schedule, ranking and match results.",
+    ]);
   if (account.role !== "Super Admin" && account.access.includes("captain"))
     actions.push(["lineup", "Build & Submit Lineup", "Run SOR checks"]);
   if (account.role === "Super Admin" || account.access.includes("approver")) {
@@ -1905,6 +1906,11 @@ function initCommunityCarousel() {
   const dotButtons = $$("button", dots);
   const show = (index) => {
     current = (index + slides.length) % slides.length;
+    const image = slides[current].querySelector("img[data-src]");
+    if (image) {
+      image.src = image.dataset.src;
+      image.removeAttribute("data-src");
+    }
     track.style.transform = `translateX(-${current * 100}%)`;
     slides.forEach((slide, i) => {
       slide.classList.toggle("active", i === current);
