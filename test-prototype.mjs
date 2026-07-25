@@ -88,7 +88,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v198"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v199"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -176,7 +176,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=58'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=59'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
@@ -258,9 +258,11 @@ assert(html.includes('id="exportTeamRoster"'), "Team roster export button is mis
 const rosterAdmin = await fs.readFile("roster-admin-v3.js", "utf8");
 assert(rosterAdmin.includes("async function exportTeamRoster()"), "Team roster export workflow is missing");
 for (const sheet of ["Team Roster", "Teams", "Captains", "Player Details", "Roster Assignments", "Roster Slots"]) assert(rosterAdmin.includes(`"${sheet}"`), `Team roster export sheet is missing: ${sheet}`);
-assert(html.includes('id="historySeasonFilter"'), "All-season history filter is missing");
-assert(firebaseData.includes("loadPublishedHistoryData"), "Published all-season history loader is missing");
-assert(js.includes("applyHistoryData(seasons)"), "All-season history binding is missing");
+assert(html.includes('id="historySeasonFilter"') && html.includes('id="completedSeasonSelect"'), "Completed-season selectors are missing");
+assert(firebaseData.includes("loadCompletedSeason(seasonId)"), "On-demand completed-season loader is missing");
+assert(firebaseData.includes("alphaopen:completed-season-selected"), "Completed-season selection event is missing");
+assert(!firebaseData.includes("loadPublishedHistoryData"), "Previous seasons must not load eagerly");
+assert(firebaseData.includes("loadActiveSeasonDashboardData"), "Active-season dashboard loader is missing");
 const templateColumns = ['"Email Address"', '"First Name"', '"Last Name"', '"Full Name"', '"Mobile Number"', '"T-Shirt Size"', '"AOR Suggested"'];
 for (let index = 1; index < templateColumns.length; index += 1) assert(playerAdmin.indexOf(templateColumns[index - 1], playerAdmin.indexOf("json_to_sheet")) < playerAdmin.indexOf(templateColumns[index], playerAdmin.indexOf("json_to_sheet")), "Player template column order is incorrect");
 assert(firestoreRules.includes("match /playerEmailIndex"),"Player email index rules are missing");

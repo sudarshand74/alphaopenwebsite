@@ -146,21 +146,13 @@ function renderWorkspace(account) {
       (item) => String(item.season?.status || "").toLowerCase() === "active",
     ) || fallSeasonData;
   const activeSeasonRecord = activeSeason?.season || null;
-  const activeSeasonRoute =
-    String(activeSeasonRecord?.term || "").toLowerCase() === "fall" &&
-    Number(activeSeasonRecord?.year) === 2026
-      ? "fall2026"
-      : "schedule";
+  const activeSeasonRoute = "fall2026";
   const activeSeasonLabel = activeSeasonRecord
     ? `Active season: ${activeSeasonRecord.seasonId} · ${activeSeasonRecord.name || activeSeasonRecord.seasonId}`
     : "Active season: Loading…";
-  const completedSeason = [...workspacePublicSeasons]
-    .filter((season) => String(season.status || "").toLowerCase() === "completed")
-    .sort(
-      (a, b) =>
-        String(b.endDate || "").localeCompare(String(a.endDate || "")) ||
-        Number(b.year || 0) - Number(a.year || 0),
-    )[0];
+  const completedSeasons = workspacePublicSeasons.filter(
+    (season) => String(season.status || "").toLowerCase() === "completed",
+  );
   const actions = [
     [
       activeSeasonRoute,
@@ -195,11 +187,11 @@ function renderWorkspace(account) {
     actions.push(["admin", "Season admin", "Manage people and data"]);
   if (account.access.includes("player"))
     actions.push(["history", "My Player History", "View all matches played by me", "my-player-history"]);
-  if (completedSeason)
+  if (completedSeasons.length)
     actions.push([
       "schedule",
-      `Past season: ${completedSeason.seasonId} · ${completedSeason.name || completedSeason.seasonId}`,
-      "Click here to see Spring 2026 teams, standings, playoffs and match results.",
+      "Previous Seasons",
+      "Select a completed season to view its dashboards and results.",
       "",
       "past-season-action",
     ]);
@@ -218,7 +210,7 @@ function navigate(route) {
   if (!target || target.hidden) return;
   mountAdminFeature(route, target);
   if (route === "history" && $("#historySeasonFilter")) {
-    $("#historySeasonFilter").value = "all";
+    $("#historySeasonFilter").value = "";
     renderHistory(accounts[currentAccountKey]);
   }
   if(route==="ec-roster") mountRosterPanel("ecRosterMount");
@@ -1719,6 +1711,11 @@ function renderHistory(account) {
       '<div class="empty-state"><b>Loading all-season Firebase history…</b></div>';
     return;
   }
+  if (!historySeasons.length) {
+    $("#historyRows").innerHTML =
+      '<div class="empty-state"><b>Select a completed season</b><p>No historical data is loaded until a completed season is selected.</p></div>';
+    return;
+  }
   const playerIndex = new Map();
   historySeasons.forEach((item) =>
     (item.lineMatches || [])
@@ -1757,10 +1754,9 @@ function renderHistory(account) {
   }
   const selectedPlayerId = playerFilter?.value || "",
     selectedPlayerName = playerIndex.get(selectedPlayerId) || "Select a player";
-  const selectedSeason = $("#historySeasonFilter")?.value || "all";
+  const selectedSeason = $("#historySeasonFilter")?.value || "";
   const included = historySeasons.filter(
-    (item) =>
-      selectedSeason === "all" || item.season.seasonId === selectedSeason,
+    (item) => item.season.seasonId === selectedSeason,
   );
   const rows = included
     .flatMap((item) => {
@@ -1994,6 +1990,22 @@ function initials(name) {
 window.alphaOpenDataUI = {
   applyPublicSeasons(seasons) {
     workspacePublicSeasons = seasons || [];
+    const completed = [...workspacePublicSeasons]
+      .filter((season) => String(season.status || "").toLowerCase() === "completed")
+      .sort(
+        (a, b) =>
+          String(b.endDate || "").localeCompare(String(a.endDate || "")) ||
+          Number(b.year || 0) - Number(a.year || 0),
+      );
+    ["completedSeasonSelect", "historySeasonFilter"].forEach((id) => {
+      const select = $(`#${id}`);
+      if (!select) return;
+      const selected = select.value || "";
+      select.innerHTML = `<option value="">Select a completed season</option>${completed
+        .map((season) => `<option value="${safeText(season.seasonId)}">${safeText(season.name || season.seasonId)}</option>`)
+        .join("")}`;
+      select.value = completed.some((season) => season.seasonId === selected) ? selected : "";
+    });
     renderWorkspace(accounts[currentAccountKey]);
   },
   applyActiveSeason(season) {
@@ -2041,39 +2053,22 @@ window.alphaOpenDataUI = {
         String(b.season.term || "").localeCompare(String(a.season.term || "")),
     );
     historyDataLoaded = true;
-    springSeasonData =
-      historySeasons.find(
-        (item) =>
-          String(item.season.term || "").toLowerCase() === "spring" &&
-          Number(item.season.year) === 2026,
-      ) ||
-      historySeasons.find((item) =>
-        /spring.*2026|2026.*spring/i.test(
-          `${item.season.name || ""} ${item.season.seasonId || ""}`,
-        ),
-      ) ||
-      null;
-    fallSeasonData =
-      historySeasons.find(
-        (item) =>
-          String(item.season.term || "").toLowerCase() === "fall" &&
-          Number(item.season.year) === 2026,
-      ) ||
-      historySeasons.find((item) =>
-        /fall.*2026|2026.*fall/i.test(
-          `${item.season.name || ""} ${item.season.seasonId || ""}`,
-        ),
-      ) ||
-      null;
-    const filter = $("#historySeasonFilter");
-    if (filter) {
-      const selected = filter.value || "all";
-      filter.innerHTML = `<option value="all">All Seasons</option>${historySeasons.map((item) => `<option value="${item.season.seasonId}">${item.season.name || item.season.seasonId}</option>`).join("")}`;
-      filter.value = [...filter.options].some(
-        (option) => option.value === selected,
-      )
-        ? selected
-        : "all";
+    springSeasonData = historySeasons.find(
+      (item) => String(item.season.status || "").toLowerCase() === "completed",
+    ) || null;
+    fallSeasonData = historySeasons.find(
+      (item) => String(item.season.status || "").toLowerCase() === "active",
+    ) || null;
+    $(".view[data-view='schedule']")?.classList.toggle(
+      "completed-season-loaded",
+      Boolean(springSeasonData),
+    );
+    if (springSeasonData?.season) {
+      const completedSeason = springSeasonData.season;
+      if ($("#completedSeasonTitle"))
+        $("#completedSeasonTitle").textContent = completedSeason.name || completedSeason.seasonId;
+      if ($("#completedSeasonBadge"))
+        $("#completedSeasonBadge").textContent = "Completed";
     }
     renderHistory(accounts[currentAccountKey]);
     renderWorkspace(accounts[currentAccountKey]);
@@ -2169,9 +2164,15 @@ $("#fallWeekFilter")?.addEventListener("change", renderFallSeason);
 $("#fallTeamFilter")?.addEventListener("change", renderFallSeason);
 $("#fallPlayerFilter")?.addEventListener("change", renderFallSeason);
 $("#fallStatusFilter")?.addEventListener("change", renderFallSeason);
-$("#historySeasonFilter").addEventListener("change", () =>
-  renderHistory(accounts[currentAccountKey]),
-);
+function requestCompletedSeason(event) {
+  const seasonId = event.target.value || "";
+  window.alphaOpenDataUI.applyHistoryData([]);
+  window.dispatchEvent(new CustomEvent("alphaopen:completed-season-selected", {
+    detail: { seasonId },
+  }));
+}
+$("#completedSeasonSelect")?.addEventListener("change", requestCompletedSeason);
+$("#historySeasonFilter")?.addEventListener("change", requestCompletedSeason);
 $("#historyPlayerFilter")?.addEventListener("change", () =>
   renderHistory(accounts[currentAccountKey]),
 );
@@ -2212,8 +2213,9 @@ $("#springLineEditorForm")?.addEventListener("submit", (event) => {
       (set) => set.homeScore > set.awayScore,
     ).length,
     awaySetWins = sets.filter((set) => set.awayScore > set.homeScore).length;
-  const payload = {
-    matchupId,
+    const payload = {
+      seasonId: springSeasonData?.season?.seasonId,
+      matchupId,
     lineMatchId,
     homeTeamId: record.line.homeTeamId,
     awayTeamId: record.line.awayTeamId,

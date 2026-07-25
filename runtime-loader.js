@@ -1,11 +1,11 @@
 const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LOCAL_HOSTS.has(location.hostname),useFirebaseEmulator=isLocalDevelopment&&new URLSearchParams(location.search).get("firebase")==="emulator";
-const coreModules=["./firebase-auth.js?v=43","./firebase-data.js?v=60"];
+const coreModules=["./firebase-auth.js?v=43","./firebase-data.js?v=61"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
-const adminModuleForPanel={players:"./player-admin.js?v=34","identity-audit":"./identity-reconciliation.js?v=14",rosters:"./roster-admin-v3.js?v=9",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=11","season-teams":"./season-structure-admin.js?v=3","season-matchups":"./season-structure-admin.js?v=3","lineup-approvers":"./lineup-approver-admin.js?v=4"};
+const adminModuleForPanel={players:"./player-admin.js?v=34","identity-audit":"./identity-reconciliation.js?v=14",rosters:"./roster-admin-v3.js?v=10",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=11","season-teams":"./season-structure-admin.js?v=3","season-matchups":"./season-structure-admin.js?v=3","lineup-approvers":"./lineup-approver-admin.js?v=4"};
 function loadRouteFeature(route){
   if(["fall2026","captain-schedule","captain-score"].includes(route))return importFeature("./season-operations.js?v=1");
-  if(route==="ec-roster")return importFeature("./roster-admin-v3.js?v=9");
+  if(route==="ec-roster")return importFeature("./roster-admin-v3.js?v=10");
   if(route==="ec-lineup")return importFeature("./lineup-update.js?v=8");
   if(route==="admin")return importFeature(adminModuleForPanel[document.querySelector("[data-admin-panel].active")?.dataset.adminPanel]||adminModuleForPanel.players);
   return Promise.resolve();

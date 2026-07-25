@@ -4,6 +4,7 @@ import {
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   serverTimestamp,
   writeBatch,
@@ -329,7 +330,10 @@ form?.addEventListener("submit", async (event) => {
 });
 async function loadSeasons() {
   if (!isAdmin()) return;
-  const snapshot = await getDocs(collection(db, "seasons")),
+  const [snapshot, control] = await Promise.all([
+    getDocs(collection(db, "seasons")),
+    getDoc(doc(db, "systemConfig", "seasonControl")),
+  ]),
     seasons = snapshot.docs
       .map((item) => ({ seasonId: item.id, ...item.data() }))
       .sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
@@ -339,8 +343,9 @@ async function loadSeasons() {
         `<option value="${esc(item.seasonId)}">${esc(item.name || item.seasonId)}</option>`,
     )
     .join("");
-  if (seasons.some((item) => item.seasonId === "AO-S-2026"))
-    seasonSelect.value = "AO-S-2026";
+  const activeSeasonId = control.data()?.activeSeasonId || "";
+  if (seasons.some((item) => item.seasonId === activeSeasonId))
+    seasonSelect.value = activeSeasonId;
   await loadRoster();
 }
 seasonSelect?.addEventListener("change", loadRoster);

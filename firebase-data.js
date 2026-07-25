@@ -129,29 +129,15 @@ async function loadPublicActiveSeason() {
       const cachedActive = JSON.parse(localStorage.getItem(ACTIVE_SEASON_SNAPSHOT_KEY) || "null");
       if (cachedActive?.seasonId) window.alphaOpenDataUI?.applyActiveSeason(cachedActive);
     } catch { /* Ignore malformed or unavailable browser storage. */ }
-    const seasons = await seasonsOnce();
+    const [seasons, control] = await Promise.all([
+      seasonsOnce(),
+      getDoc(SEASON_CONTROL_REF),
+    ]);
     window.alphaOpenDataUI?.applyPublicSeasons(seasons);
-    const today = new Date().toISOString().slice(0, 10);
-    const newestFirst = (a, b) =>
-      String(b.startDate || "").localeCompare(String(a.startDate || "")) ||
-      Number(b.year || 0) - Number(a.year || 0) ||
-      String(b.term || "").localeCompare(String(a.term || ""));
-    const active =
-      seasons
-        .filter(
-          (season) =>
-            String(season.status || "").toLowerCase() === "active" &&
-            (!season.endDate || season.endDate >= today),
-        )
-        .sort(newestFirst)[0] ||
-      seasons.find(
-        (season) =>
-          (!season.startDate || season.startDate <= today) &&
-          (!season.endDate || season.endDate >= today),
-      ) ||
-      seasons.find((season) => season.seasonId === "AO-F-2026") ||
-      [...seasons].sort(newestFirst)[0] ||
-      null;
+    const activeSeasonId = control.data()?.activeSeasonId || null;
+    const active = activeSeasonId
+      ? seasons.find((season) => season.seasonId === activeSeasonId) || null
+      : null;
     window.alphaOpenDataUI?.applyActiveSeason(active);
     if (active?.seasonId) {
       try { localStorage.setItem(ACTIVE_SEASON_SNAPSHOT_KEY, JSON.stringify(active)); }
@@ -205,54 +191,48 @@ window.addEventListener("alphaopen:match-line-updated", (event) => {
     catch { /* Storage can be unavailable in private browsing. */ }
   });
 });
-async function loadPublishedHistoryData() {
+async function loadActiveSeasonDashboardData() {
   try {
-    const published = await seasonsOnce();
-    const seasons = await Promise.all(
-      published.map((season) => seasonTree(season.ref, `public-tree:${season.seasonId}`)),
+    const active = await loadPublicActiveSeason();
+    if (!active?.seasonId) throw new Error("No active season is configured.");
+    const data = await seasonTree(
+      doc(db, "seasons", active.seasonId),
+      `operational-tree:${active.seasonId}`,
+      true,
     );
-    publishedHistorySeasons = seasons;
-    window.alphaOpenDataUI?.applyHistoryData(seasons);
+    window.alphaOpenDataUI?.applyHistoryData([data]);
+    window.alphaOpenDataUI?.applyLeagueData(data);
   } catch (error) {
-    console.error("All-season player history load failed", error);
-    window.alphaOpenDataUI?.showHistoryError(error.message || "Player history could not be loaded.");
+    console.error("Active-season dashboard load failed", error);
+    window.alphaOpenDataUI?.showHistoryError(error.message || "The active season could not be loaded.");
   }
 }
 
-async function loadOperationalFallHistoryData() {
+async function loadCompletedSeason(seasonId) {
   try {
-    const fall = await seasonTree(doc(db, "seasons", "AO-F-2026"), "operational-tree:AO-F-2026");
-    window.alphaOpenDataUI?.applyHistoryData([
-      ...publishedHistorySeasons.filter(
-        (item) => item.season?.seasonId !== "AO-F-2026",
-      ),
-      fall,
-    ]);
-  } catch (error) {
-    console.error("Operational Fall 2026 load failed", error);
-  }
-}
-
-async function loadPublicFallHistoryData() {
-  try {
-    const fall = await seasonTree(doc(db, "seasons", "AO-F-2026"), "canonical-tree:AO-F-2026");
-    window.alphaOpenDataUI?.applyHistoryData([
-      ...publishedHistorySeasons.filter((item) => item.season?.seasonId !== "AO-F-2026"),
-      fall,
-    ]);
-  } catch (error) {
-    console.error("Public Fall 2026 load failed", error);
-  }
-}
-
-async function loadPublicLeagueData() {
-  try {
-    window.alphaOpenDataUI?.applyLeagueData(
-      await seasonTree(doc(db, "seasons", "AO-S-2026"), "canonical-league:AO-S-2026", true),
+    if (!seasonId) {
+      window.alphaOpenDataUI?.applyHistoryData([]);
+      return;
+    }
+    const seasons = await seasonsOnce();
+    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
+    const selected = seasons.find(
+      (season) =>
+        season.seasonId === seasonId &&
+        String(season.status || "").toLowerCase() === "completed",
     );
+    if (!selected) throw new Error("Select a completed season.");
+    const data = await seasonTree(
+      selected.ref,
+      `completed-tree:${selected.seasonId}`,
+      true,
+    );
+    publishedHistorySeasons = [data];
+    window.alphaOpenDataUI?.applyHistoryData([data]);
+    window.alphaOpenDataUI?.applyLeagueData(data);
   } catch (error) {
-    console.error("Public Firebase league data load failed",error);
-    window.alphaOpenDataUI?.showError(error.message||"Please refresh and try again.");
+    console.error("Completed-season load failed", error);
+    window.alphaOpenDataUI?.showHistoryError(error.message || "The completed season could not be loaded.");
   }
 }
 
@@ -958,7 +938,8 @@ window.addEventListener("alphaopen:update-spring-line",async event=>{
   const reply=(ok,message="")=>window.dispatchEvent(new CustomEvent("alphaopen:spring-line-updated",{detail:{ok,message}}));
   try {
     const user=auth.currentUser;if(!user)throw new Error("Super Admin sign-in is required.");
-    const item=event.detail||{},seasonId="AO-S-2026";
+    const item=event.detail||{},seasonId=item.seasonId;
+    if(!seasonId)throw new Error("The completed season ID is missing.");
     if(!item.matchupId||!item.lineMatchId)throw new Error("The Spring line record is missing its ID.");
     const operationalMatch=doc(db,"seasons",seasonId,"matchups",item.matchupId);
     const operationalLine=doc(operationalMatch,"lineMatches",item.lineMatchId);
@@ -993,8 +974,7 @@ async function loadForRoute(route, user = auth.currentUser) {
     return;
   }
   if (route === "fall2026" || route === "season-dashboard") {
-    await loadPublicActiveSeason();
-    await (user ? loadOperationalFallHistoryData() : loadPublicFallHistoryData());
+    await loadActiveSeasonDashboardData();
     return;
   }
   if (route === "matches") {
@@ -1002,12 +982,15 @@ async function loadForRoute(route, user = auth.currentUser) {
     return;
   }
   if (route === "schedule") {
-    await loadPublicLeagueData();
+    const seasons = await seasonsOnce();
+    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
+    window.alphaOpenDataUI?.applyHistoryData([]);
     return;
   }
   if (route === "history") {
-    await loadPublishedHistoryData();
-    if (user) await loadOperationalFallHistoryData();
+    const seasons = await seasonsOnce();
+    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
+    window.alphaOpenDataUI?.applyHistoryData([]);
     return;
   }
   if (route === "admin") {
@@ -1032,6 +1015,12 @@ window.addEventListener("alphaopen:authorization-changed", (event) => {
     console.error("Pending lineup approval count failed", error);
     window.alphaOpenDataUI?.applyPendingApprovalCount(null);
   });
+});
+
+window.addEventListener("alphaopen:completed-season-selected", (event) => {
+  loadCompletedSeason(event.detail?.seasonId || "").catch((error) =>
+    console.error("Completed-season selection failed", error),
+  );
 });
 
 window.addEventListener("alphaopen:refresh-matches", async () => {

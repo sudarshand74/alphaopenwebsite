@@ -21,7 +21,9 @@ const weekLabel=key=>["QF","SF","F"].includes(key)?key:`Week${String(key).replac
 
 async function load(){
   const user=auth.currentUser;if(!user)return;
-  const control=await getDoc(doc(db,"systemConfig","seasonControl")),seasonId=control.data()?.activeSeasonId||"AO-F-2026",seasonRef=doc(db,"seasons",seasonId);
+  const control=await getDoc(doc(db,"systemConfig","seasonControl")),seasonId=control.data()?.activeSeasonId;
+  if(!seasonId)throw new Error("No active season is configured.");
+  const seasonRef=doc(db,"seasons",seasonId);
   const [season,member,teams,assignments,matchups,ownApprover,rules]=await Promise.all([
     getDoc(seasonRef),getDoc(doc(seasonRef,"members",user.uid)),getDocs(collection(seasonRef,"teams")),getDocs(collection(seasonRef,"rosterAssignments")),getDocs(collection(seasonRef,"matchups")),getDoc(doc(seasonRef,"approverAssignments",user.uid)),getDocs(collection(seasonRef,"ruleVersions"))
   ]);
