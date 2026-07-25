@@ -532,7 +532,14 @@ async function loadRegisteredUsers() {
       "Firestore did not respond in time. Check your connection and retry."
     );
     const playerNames = new Map(
-      playersSnapshot.docs.map(item => [item.id, item.data().displayName || item.id])
+      playersSnapshot.docs.map(item => {
+        const player = item.data();
+        const name =
+          player.displayName ||
+          player.fullName ||
+          [player.firstName, player.lastName].filter(Boolean).join(" ");
+        return [item.id, name || ""];
+      })
     );
     seasonRecords = seasonsSnapshot.docs.map(item => ({ ...item.data(), seasonId: item.id }));
     if (loadId !== registeredUsersLoadId) return;
@@ -601,10 +608,11 @@ function renderRegisteredUsers(records, filter = "") {
       const actions = protectedAccount ? '<span class="badge navy">Protected account</span>' : status === "pending"
         ? `<button class="primary" data-user-action="approve" data-uid="${record.uid}">Approve</button><button class="secondary" data-user-action="reject" data-uid="${record.uid}">Reject</button>${deleteAction}`
         : `<button class="secondary" data-user-action="manage" data-uid="${record.uid}">Manage access</button>${deleteAction}`;
-      const playerIdentity = record.user.playerId
-        ? `Player ID: ${escapeHtml(record.user.playerId)}${record.playerName ? ` · ${escapeHtml(record.playerName)}` : ""}`
-        : "No Player Master link";
-      return `<div class="registered-user-row"><div><b>${escapeHtml(record.playerName || record.user.displayName || record.user.email)}</b><small>${escapeHtml(record.user.email)}</small><small>${playerIdentity}</small></div><div><span class="badge ${status === "active" ? "lime" : status === "rejected" ? "orange" : "gray"}">${escapeHtml(status)}</span><small>${escapeHtml(profileLabel(profile))}</small></div><div class="registered-user-actions">${actions}</div></div>`;
+      const identityHeading = record.user.playerId
+        ? `${escapeHtml(record.user.playerId)} · ${escapeHtml(record.playerName || record.user.displayName || "Player name unavailable")}`
+        : escapeHtml(record.user.displayName || record.user.email);
+      const missingPlayerLink = record.user.playerId ? "" : "<small>No Player Master link</small>";
+      return `<div class="registered-user-row"><div><b>${identityHeading}</b><small>${escapeHtml(record.user.email)}</small>${missingPlayerLink}</div><div><span class="badge ${status === "active" ? "lime" : status === "rejected" ? "orange" : "gray"}">${escapeHtml(status)}</span><small>${escapeHtml(profileLabel(profile))}</small></div><div class="registered-user-actions">${actions}</div></div>`;
     }).join("");
     registeredUsersPanel.querySelectorAll("[data-user-action]").forEach(button => button.addEventListener("click", () => handleUserAction(button.dataset.userAction, button.dataset.uid)));
 }

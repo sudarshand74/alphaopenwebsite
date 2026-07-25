@@ -88,7 +88,7 @@ assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includ
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");
 assert(manifest.icons.some(icon=>icon.sizes==="192x192"),"Missing 192px app icon");
 assert(manifest.icons.some(icon=>icon.sizes==="512x512"),"Missing 512px app icon");
-assert(serviceWorker.includes("alphaopen-shell-v199"),"Missing versioned app-shell cache");
+assert(serviceWorker.includes("alphaopen-shell-v200"),"Missing versioned app-shell cache");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
 assert(html.includes("poster-generator.js?v=2"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
@@ -176,7 +176,7 @@ assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Re
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
-assert(html.includes('runtime-loader.js?v=59'),"Environment-aware runtime loader is missing");
+assert(html.includes('runtime-loader.js?v=60'),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","runMigrationReadinessAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
 const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
