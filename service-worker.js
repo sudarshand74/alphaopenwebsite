@@ -1,9 +1,13 @@
-const CACHE_NAME = "alphaopen-shell-v203";
+const CACHE_NAME = "alphaopen-shell-v236";
 const APP_SHELL = [
-  "/", "/index.html", "/styles.css?v=72", "/app.js?v=109", "/runtime-loader.js?v=61", "/pwa.js?v=26",
-  "/manifest.webmanifest", "/assets/alphaopen-logo.png",
+  "/", "/index.html", "/styles.css?v=80", "/lineup-workflow.css?v=1", "/app.js?v=127", "/runtime-loader.js?v=80", "/firebase-client.js?v=4", "/player-identity.js?v=5", "/public-season-dashboard.js?v=14", "/ao-content.js?v=2", "/lineup-bootstrap.js?v=20", "/lineup-submit.js?v=20", "/lineup-workflow-client.js?v=4", "/approval-bootstrap.js?v=16", "/lineup-approve.js?v=15", "/lineup-reset-bootstrap.js?v=3", "/lineup-reset.js?v=3", "/ec-lineup-status-bootstrap.js?v=2", "/ec-lineup-status.js?v=2", "/match-management-bootstrap.js?v=32", "/match-management.js?v=32", "/poster-generator.js?v=3", "/score-rules.js?v=1", "/firebase-auth.js?v=37", "/firebase-data.js?v=85", "/player-admin.js?v=42", "/identity-reconciliation.js?v=10", "/venue-admin.js?v=26", "/season-operations.js?v=2", "/season-bulk-import.js?v=14", "/season-reset.js?v=3", "/roster-admin-v3.js?v=20", "/season-structure-admin.js?v=9", "/lineup-approver-admin.js?v=4", "/lineup-update.js?v=11", "/pwa.js?v=26",
+  "/manifest.webmanifest", "/assets/alphaopen-logo.png", "/assets/AlphaOpen_Season_Reload_Template.xlsx",
   "/assets/icon-192.png", "/assets/icon-512.png",
-  "/assets/ao-community.jpeg"
+  "/assets/community-2026-group-banner.jpg", "/assets/community-2026-patio.jpg",
+  "/assets/community-2026-league-banner.jpg", "/assets/community-2026-night-court.jpg",
+  "/assets/community-2026-day-gathering.jpg", "/assets/community-2026-court-banner.jpg",
+  "/assets/community-2026-court-group.jpg", "/assets/community-2026-award-lineup.jpg",
+  "/assets/community-2026-award-team.jpg"
 ];
 
 self.addEventListener("install", event => {

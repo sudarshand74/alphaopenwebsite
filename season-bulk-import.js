@@ -13,7 +13,8 @@ import {
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import "./season-reset.js?v=4";
+import "./season-reset.js?v=2";
+import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
 const config = {
     projectId: "alphaopen-development-2026",
     appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
@@ -370,9 +371,7 @@ async function processImport(event) {
         seasonId: season.seasonId,
         name: captain.teamName,
         captainPlayerIds: [captain.playerId],
-        captainEmailsNormalized: [captain.playerEmail],
         captainNameSnapshot: captain.captainName,
-        captainUids: captain.uid ? [captain.uid] : [],
         status: "active",
         updatedAt: now,
       };
@@ -499,6 +498,9 @@ async function processImport(event) {
     });
     summary.textContent = `Writing ${operations.length} validated Firebase records…`;
     await commitBatchOperations(operations);
+    if (season.status === "active") {
+      await publishPublicSeasonDashboard(season.seasonId);
+    }
     summary.textContent = `${season.seasonId} processed successfully: ${captains.length} teams, ${roster.length} players, ${schedule.length} matchups.`;
     preview.innerHTML +=
       '<div class="import-row valid"><b>Season ready</b><small>Lineup workflow will use the generated Matchup IDs.</small></div>';
@@ -566,7 +568,8 @@ async function exportEntireDatabase() {
     };
     const globalCollections = [
       ["Users", "users"],
-      ["Player Master", "players"],
+      ["Players Public", "players"],
+      ["Player Private", "playerPrivate"],
       ["Email Index", "playerEmailIndex"],
       ["Account Links", "playerAccountLinks"],
       ["Player Link Requests", "playerLinkRequests"],

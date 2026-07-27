@@ -1,7 +1,7 @@
 # AlphaOpen Firestore Data Model
 
 Status: Final design for MVP implementation  
-Version: 1.1
+Version: 1.0  
 Firebase project: `alphaopen-development-2026`
 
 ## 1. Design decisions
@@ -9,7 +9,7 @@ Firebase project: `alphaopen-development-2026`
 1. Firebase Authentication UID is the permanent account key. Player ID is the permanent Player Master key; normalized email is a unique deduplication index and may change without changing player history.
 2. Existing AlphaOpen canonical IDs remain unchanged and become Firestore document IDs wherever practical.
 3. Master people and venues are global. Competition records are owned by a season.
-4. Each season has one canonical tree. Persona-based Firestore rules control access to canonical collections and restricted workflow subcollections; no manually synchronized publication tree is maintained.
+4. Public and private data use separate documents because Firestore security rules cannot hide individual fields in a readable document.
 5. Current state is stored for fast screens; immutable revisions and audit events preserve history.
 6. Scores, standings, participation totals, and validation results are derived by trusted application code. Captains cannot directly write official calculated values.
 7. Timestamps are Firestore `Timestamp` values in UTC. A season stores its IANA timezone, such as `America/New_York`, for display and deadline calculation.
@@ -38,6 +38,7 @@ users/{uid}
   notifications/{notificationId}
 
 players/{playerId}
+playerPrivate/{playerId}
 playerEmailIndex/{encodedNormalizedEmail}
 systemCounters/players
 playerAccountLinks/{playerId}
@@ -74,7 +75,7 @@ seasons/{seasonId}
 
 ```
 
-`seasons` is the sole season source of truth. Active authenticated users may read season masters and approved competition records. Draft lineups, reviews, account memberships, requests, and audit records retain narrower Captain, Neutral Approver, EC, or Super Admin rules. Unauthenticated guests do not read season records.
+Season data is stored only in the operational `seasons` tree and requires an authenticated, authorized account.
 
 ## 4. Global collections
 
@@ -108,10 +109,21 @@ Rules:
 
 ### 4.2 `players/{playerId}`
 
-Canonical Player Master. This is the sole source of player identity, contact,
-ranking, waiver, and account-link information. It is not a guest-readable
-collection. Super Admin has full access, an active-season EC may list it for
-roster operations, and a signed-in player may read only their own record.
+Guest-safe player identity. Only fields approved for public display belong here.
+
+```text
+playerId: string
+displayName: string
+status: "active" | "inactive"
+publicProfileEnabled: boolean
+photoUrl: string | null
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### 4.3 `playerPrivate/{playerId}`
+
+EC-controlled private master record.
 
 ```text
 playerId: string
@@ -122,16 +134,17 @@ emailNormalized: string
 phone: string | null
 tShirtSize: string | null
 globalRank: number | null
+globalScore: number | null
 waiverStatus: string | null
+emergencyContact: map | null
 internalNotes: string | null
-accountUid: string | null
 createdByUid: string
 createdAt: Timestamp
 updatedByUid: string
 updatedAt: Timestamp
 ```
 
-### 4.3 `playerAccountLinks/{playerId}`
+### 4.4 `playerAccountLinks/{playerId}`
 
 The approved one-to-one connection between a master player and Google account.
 
@@ -150,7 +163,7 @@ reason: string | null
 
 The application must prevent more than one active player link per UID and more than one active UID per Player ID unless a recorded Super Admin exception exists. `playerEmailIndex` enforces one normalized email per Player ID, and `systemCounters/players.nextNumber` assigns permanent sequential IDs beginning at `P1001`.
 
-### 4.4 `playerLinkRequests/{requestId}`
+### 4.5 `playerLinkRequests/{requestId}`
 
 ```text
 requestingUid: string
@@ -164,7 +177,7 @@ createdAt: Timestamp
 decidedAt: Timestamp | null
 ```
 
-### 4.5 `registrationRequests/{uid}`
+### 4.6 `registrationRequests/{uid}`
 
 Created automatically after a person's first verified Google authentication. The document ID is the Firebase UID.
 
@@ -292,8 +305,8 @@ Global Super Admin is not repeated here. An approver's actual authority comes fr
 teamId: string
 name: string
 shortName: string
-captainUids: string[]
 captainPlayerIds: string[]
+captainNameSnapshot: string
 status: "active" | "withdrawn"
 seed: number | null
 color: string | null
@@ -371,8 +384,6 @@ weekId: string
 stage: string
 homeTeamId: string
 awayTeamId: string
-homeCaptainUids: string[]
-awayCaptainUids: string[]
 approverUids: string[]
 lineupDeadlineAt: Timestamp
 approvalDeadlineAt: Timestamp
@@ -380,10 +391,21 @@ publishAt: Timestamp
 playByAt: Timestamp
 effectivePlayByAt: Timestamp
 status: "scheduled" | "lineupsOpen" | "readyForApproval" | "approved" | "published" | "inProgress" | "completed" | "ecReview" | "cancelled"
-homeLineupStatus: string
-awayLineupStatus: string
+homeLineupStatus: "pendingSubmission" | "submitted" | "approved" | "rejected"
+awayLineupStatus: "pendingSubmission" | "submitted" | "approved" | "rejected"
+lineupApprovalStatus: "awaitingSubmission" | "awaitingApproval" | "rejected" | "fullyApproved"
+homeLineupRevisionNumber: number
+awayLineupRevisionNumber: number
+homeLineupTracking: map
+awayLineupTracking: map
+approvalCycleNumber: number
 bothLineupsSubmitted: boolean
 lineupsPublished: boolean
+lineupsPublishedAt: Timestamp | null
+fullyApprovedAt: Timestamp | null
+lastLineupReset: map | null
+lineupWorkflowActorUid: string | null
+lineupWorkflowOperationId: string | null
 completedLineCount: number
 homeTeamPoints: number
 awayTeamPoints: number
@@ -402,7 +424,7 @@ There are exactly two current lineup documents per matchup, one per team.
 ```text
 teamId: string
 opponentTeamId: string
-status: "draft" | "validationFailed" | "systemValidated" | "submitted" | "waitingForOpponent" | "readyForApproval" | "changesRequested" | "resubmitted" | "approved" | "published" | "locked"
+status: "draft" | "submitted" | "approved" | "rejected"
 revisionNumber: number
 ruleVersionId: string
 lines: array[5]
@@ -416,11 +438,20 @@ validation: map
   errors: array
   warnings: array
 submittedByUid: string | null
+submittedByPlayerId: string | null
+submittedByNameSnapshot: string | null
+submittedByRole: "captain" | "ec" | "neutralApprover" | "superAdmin" | null
 submittedAt: Timestamp | null
 approvedByUid: string | null
+approvedByPlayerId: string | null
+approvedByNameSnapshot: string | null
+approvedByRole: "neutralApprover" | "superAdmin" | null
 approvedAt: Timestamp | null
-publishedAt: Timestamp | null
-lockedAt: Timestamp | null
+rejectionReason: string | null
+rejectedByUid: string | null
+rejectedByPlayerId: string | null
+rejectedByNameSnapshot: string | null
+rejectedAt: Timestamp | null
 updatedAt: Timestamp
 ```
 
@@ -430,20 +461,38 @@ Sealing rules:
 
 - A captain can read their own team's lineup.
 - The opposing captain cannot read it before `lineupsPublished == true`.
-- An assigned approver can read both only when `bothLineupsSubmitted == true`, unless a recorded EC exception grants one-sided access.
+- An assigned approver can read each submitted lineup independently, including while the opponent remains pending.
 - ECs and Super Admins may read all lineups in their permitted scope.
-- Captains cannot directly set approval, publication, or official validation fields.
+- Captains can submit only their authorized team's current revision. Firestore rules prevent them from setting approval or publication fields.
 
 ### 8.2 `matchups/{matchupId}/lineupReviews/{reviewId}`
 
 ```text
-approverUid: string
-action: "approvedBoth" | "changesHome" | "changesAway" | "changesBoth" | "escalated"
+teamId: string | null
+side: "home" | "away" | null
+lineupRevisionNumber: number | null
+action: "submitted" | "approved" | "rejected" | "approvalReopened" | "resetBothApprovedLineups"
 reason: string | null
-homeRevisionNumber: number
-awayRevisionNumber: number
-createdAt: Timestamp
+actedByUid: string
+actedByPlayerId: string | null
+actedByNameSnapshot: string
+actedByRole: "captain" | "ec" | "neutralApprover" | "superAdmin"
+actedAt: Timestamp
+previousStatus: string
+newStatus: string
+selfApproved: boolean | null
+operationId: string
 ```
+
+On the Firebase Spark plan, official submission, approval, rejection, full
+publication, and approved-lineup reset use atomic browser-side Firestore
+transactions. Firestore rules validate the actor, team scope, status
+transition, immutable revision, and create-only audit record. A fully approved
+reset always resets both teams, increments `approvalCycleNumber`, and preserves
+immutable revisions and review history. The reset screen checks every Match
+Line for score activity and the transaction re-reads those records immediately
+before resetting. When Cloud Functions become available, this same document
+contract can move behind callable functions without a data migration.
 
 ### 8.3 `seasons/{seasonId}/approverAssignments/{assignmentId}`
 
@@ -472,6 +521,10 @@ lineMatchId: string
 lineNumber: number
 homeTeamId: string
 awayTeamId: string
+homeLineupRevisionNumber: number
+awayLineupRevisionNumber: number
+lineupState: "approved" | "awaitingReapproval"
+scoreEntryAllowed: boolean
 homePlayers: array[2]                 // player, assignment, name and rank snapshots
 awayPlayers: array[2]
 scheduleStatus: string
@@ -551,7 +604,7 @@ calculatedAt: Timestamp
 sourceVersion: number
 ```
 
-`standingsSnapshots` stores immutable standings at publication milestones. No second publication copy is created. Approved schedules, results, standings, playoff brackets, and announcements remain in their canonical season collections, while draft lineups, disputes, availability, and audit content remain protected by their more restrictive subcollection rules.
+`standingsSnapshots` stores immutable standings at publication milestones. Season summaries, schedules, approved lineups, results, standings, playoff brackets, and announcements remain in the authorized season tree.
 
 ## 12. Notifications and audit
 
@@ -610,14 +663,14 @@ Avoid array-contains queries combined with several range filters. Where a dashbo
 
 | Data | Guest | Player | Captain | Approver | EC | Super Admin |
 |---|---:|---:|---:|---:|---:|---:|
-| Public season tree | Read | Read | Read | Read | Read | Read/write publication |
+| Season tree | No | Authorized-season read | Authorized-season read | Assigned-season read | Season-scoped read/write | Full |
 | Own user/profile | No | Read/update safe preferences | Same | Same | Scoped read | Full |
 | Player private master | No | Own approved subset | Team-needed subset through safe view | No | Season roster scope | Full |
 | Roster assignments | No | Own/team read | Own team read | Matchup-needed read | Season write | Full |
 | Draft lineup | No | If own captain role | Own team write | No | Season read/override | Full |
 | Submitted sealed lineup | No | Own side only | Own side only | Both when review-ready | Season read | Full |
-| Published lineup/result | Public copy | Read | Read | Read | Read | Full |
-| Official score/points | Published only | Read | Submit proposal only | Read | Resolve | Full |
+| Approved lineup/result | No | Authorized-season read | Authorized-season read | Assigned-season read | Read | Full |
+| Official score/points | No | Authorized-season read | Submit proposal only | Assigned-season read | Resolve | Full |
 | Audit events | No | No | No | Assigned-event read | Season read | Full |
 
 Security rules authorize access; they do not replace league-rule validation. SOR, eligibility, participation limits, score calculation, simultaneous lineup publication, standings updates, and audit creation require trusted server-side transactions before production use.
@@ -644,7 +697,7 @@ Cloud Functions deployment requires a billing-enabled Firebase project. Developm
 Import sample and production data in this order:
 
 1. `venues` and `venuePrivate`
-2. `players`
+2. `players` and `playerPrivate`
 3. `seasons` and `ruleVersions`
 4. `members`
 5. `teams`

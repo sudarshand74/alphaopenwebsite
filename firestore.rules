@@ -42,18 +42,11 @@ service cloud.firestore {
     function isSuperAdmin() {
       return signedIn()
         && (
-          request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353'
-          || (
-            'superAdmin' in request.auth.token
-            && request.auth.token.superAdmin == true
-          )
+          request.auth.token.get('superAdmin', false) == true
           || hasStoredSuperAdminRole()
           || (
-            'email_verified' in request.auth.token
-            && 'email' in request.auth.token
-            && request.auth.token.email_verified == true
-            && request.auth.token.email is string
-            && request.auth.token.email.lower() == 'sudarshandesai74@gmail.com'
+            request.auth.token.email_verified == true
+            && request.auth.token.email == 'sudarshandesai74@gmail.com'
           )
         );
     }
@@ -86,20 +79,10 @@ service cloud.firestore {
       return isSuperAdmin() || hasSeasonRole(seasonId, 'ec');
     }
 
-    function isActiveSeasonEC() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/systemConfig/seasonControl)
-        && get(/databases/$(database)/documents/systemConfig/seasonControl).data.activeSeasonId is string
-        && hasSeasonRole(
-          get(/databases/$(database)/documents/systemConfig/seasonControl).data.activeSeasonId,
-          'ec'
-        );
-    }
-
     function isCaptainForTeam(seasonId, teamId) {
       return isSeasonMember(seasonId)
-        && seasonMember(seasonId).roles.hasAny(['captain'])
-        && seasonMember(seasonId).teamIds.hasAny([teamId]);
+        && seasonMember(seasonId).get('roles', []).hasAny(['captain'])
+        && seasonMember(seasonId).get('teamIds', []).hasAny([teamId]);
     }
 
     function matchupPath(seasonId, matchupId) {
@@ -114,10 +97,8 @@ service cloud.firestore {
       return get(matchupPath(seasonId, matchupId)).data;
     }
 
-    function isMatchupApprover(seasonId, matchupId) {
-      return isActiveUser()
-        && matchupExists(seasonId, matchupId)
-        && matchup(seasonId, matchupId).approverUids.hasAny([request.auth.uid]);
+    function isPublicMatchStatus(line) {
+      return line.scheduleStatus in ['toBeScheduled', 'scheduled', 'completed'];
     }
 
     function seasonApproverPath(seasonId) {
@@ -126,9 +107,14 @@ service cloud.firestore {
 
     function isSeasonApprover(seasonId) {
       return isActiveUser()
-        && exists(seasonApproverPath(seasonId))
-        && get(seasonApproverPath(seasonId)).data.status == 'active'
-        && get(seasonApproverPath(seasonId)).data.approverUid == request.auth.uid;
+        && (
+          (
+            exists(seasonApproverPath(seasonId))
+            && get(seasonApproverPath(seasonId)).data.status == 'active'
+            && get(seasonApproverPath(seasonId)).data.approverUid == request.auth.uid
+          )
+          || hasSeasonRole(seasonId, 'neutralApprover')
+        );
     }
 
     function isMatchupTeamCaptain(seasonId, matchupId) {
@@ -137,6 +123,91 @@ service cloud.firestore {
           isCaptainForTeam(seasonId, matchup(seasonId, matchupId).homeTeamId)
           || isCaptainForTeam(seasonId, matchup(seasonId, matchupId).awayTeamId)
         );
+    }
+
+    function lineupPath(seasonId, matchupId, teamId) {
+      return /databases/$(database)/documents/seasons/$(seasonId)/matchups/$(matchupId)/lineups/$(teamId);
+    }
+
+    function canSubmitLineup(seasonId, matchupId, teamId) {
+      return matchupExists(seasonId, matchupId)
+        && (
+          matchup(seasonId, matchupId).homeTeamId == teamId
+          || matchup(seasonId, matchupId).awayTeamId == teamId
+        )
+        && (
+          isSuperAdmin()
+          || matchup(seasonId, matchupId).get('approverUids', []).hasAny([request.auth.uid])
+          || isSeasonEC(seasonId)
+          || isSeasonApprover(seasonId)
+          || isCaptainForTeam(seasonId, teamId)
+        );
+    }
+
+    function canReviewLineup(seasonId, matchupId) {
+      return isSuperAdmin()
+        || (
+          matchupExists(seasonId, matchupId)
+          && matchup(seasonId, matchupId).get('approverUids', []).hasAny([request.auth.uid])
+        )
+        || isSeasonApprover(seasonId);
+    }
+
+    function isWorkflowActor(seasonId, matchupId) {
+      return signedIn()
+        && getAfter(matchupPath(seasonId, matchupId)).data.lineupWorkflowActorUid == request.auth.uid;
+    }
+
+    function lineupStatusMatchesMatchup(seasonId, matchupId, teamId, status) {
+      return (
+          getAfter(matchupPath(seasonId, matchupId)).data.homeTeamId == teamId
+          && getAfter(matchupPath(seasonId, matchupId)).data.homeLineupStatus == status
+        )
+        || (
+          getAfter(matchupPath(seasonId, matchupId)).data.awayTeamId == teamId
+          && getAfter(matchupPath(seasonId, matchupId)).data.awayLineupStatus == status
+        );
+    }
+
+    function validLineupApprovalState(data) {
+      return (
+          (data.homeLineupStatus == 'rejected' || data.awayLineupStatus == 'rejected')
+          && data.lineupApprovalStatus == 'rejected'
+        )
+        || (
+          data.homeLineupStatus == 'approved'
+          && data.awayLineupStatus == 'approved'
+          && data.lineupApprovalStatus == 'fullyApproved'
+        )
+        || (
+          data.homeLineupStatus in ['submitted', 'approved']
+          && data.awayLineupStatus in ['submitted', 'approved']
+          && !(data.homeLineupStatus == 'approved' && data.awayLineupStatus == 'approved')
+          && data.lineupApprovalStatus == 'awaitingApproval'
+        )
+        || (
+          (data.homeLineupStatus == 'pendingSubmission' || data.awayLineupStatus == 'pendingSubmission')
+          && data.homeLineupStatus != 'rejected'
+          && data.awayLineupStatus != 'rejected'
+          && data.lineupApprovalStatus == 'awaitingSubmission'
+        );
+    }
+
+    function matchupWorkflowKeys() {
+      return [
+        'homeLineupStatus', 'awayLineupStatus',
+        'homeLineupRevisionNumber', 'awayLineupRevisionNumber',
+        'homeLineupTracking', 'awayLineupTracking',
+        'lineupApprovalStatus', 'bothLineupsSubmitted',
+        'lineupsPublished', 'lineupsPublishedAt', 'fullyApprovedAt',
+        'approvalCycleNumber', 'lastLineupReset',
+        'lineupWorkflowActorUid', 'lineupWorkflowOperationId', 'updatedAt'
+      ];
+    }
+
+    function workflowMatchupUpdateOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(matchupWorkflowKeys())
+        && validLineupApprovalState(request.resource.data);
     }
 
     function safeOwnUserCreate(uid) {
@@ -191,22 +262,14 @@ service cloud.firestore {
     }
 
     match /players/{playerId} {
-      allow get: if (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353')
-        || isSuperAdmin()
-        || (signedIn() && resource.data.accountUid == request.auth.uid)
-        || (
-          signedIn()
-          && 'email_verified' in request.auth.token
-          && 'email' in request.auth.token
-          && request.auth.token.email_verified == true
-          && resource.data.emailNormalized is string
-          && resource.data.emailNormalized.lower() == request.auth.token.email.lower()
-        );
-      allow list: if (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353')
-        || isSuperAdmin()
-        || isActiveSeasonEC();
-      allow write: if (signedIn() && request.auth.uid == 'FciGEEwisVeBwfGODRsKQVckR353')
-        || isSuperAdmin();
+      allow read: if isSuperAdmin()
+        || signedIn()
+        || (resource.data.status == 'active' && resource.data.publicProfileEnabled == true);
+      allow write: if isSuperAdmin();
+    }
+
+    match /playerPrivate/{playerId} {
+      allow read, write: if isSuperAdmin();
     }
 
     match /playerEmailIndex/{emailKey} {
@@ -281,6 +344,16 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    match /publicSeasonDashboards/{seasonId} {
+      allow read: if resource.data.status == 'completed';
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /publicCompletedSeasons/{seasonId} {
+      allow read: if resource.data.status == 'completed';
+      allow create, update, delete: if isSuperAdmin();
+    }
+
     match /aoContent/{contentId} {
       allow get: if resource.data.status == 'active' || isSuperAdmin();
       allow list: if isSuperAdmin() || resource.data.status == 'active';
@@ -300,7 +373,7 @@ service cloud.firestore {
     }
 
     match /seasons/{seasonId} {
-      allow read: if isActiveUser();
+      allow read: if isSuperAdmin() || isSeasonMember(seasonId) || isSeasonApprover(seasonId);
       allow write: if isSuperAdmin();
 
       match /ruleVersions/{ruleVersionId} {
@@ -316,22 +389,22 @@ service cloud.firestore {
       }
 
       match /teams/{teamId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId) || isSeasonApprover(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
       match /rosterSlots/{slotId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
       match /rosterAssignments/{assignmentId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId) || isSeasonApprover(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
       match /weeks/{weekId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId) || isSeasonApprover(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
@@ -340,26 +413,44 @@ service cloud.firestore {
       }
 
       match /matchups/{matchupId} {
-        allow read: if isActiveUser();
-        allow write: if isSeasonEC(seasonId)
-          || (isSeasonApprover(seasonId)
-            && resource.data.homeTeamId == request.resource.data.homeTeamId
-            && resource.data.awayTeamId == request.resource.data.awayTeamId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'bothLineupsSubmitted', 'lineupsPublished', 'status',
-              'homeLineupStatus', 'awayLineupStatus',
-              'approvedByUid', 'approvedAt', 'updatedAt'
-            ]))
-          || (isCaptainForTeam(seasonId, resource.data.homeTeamId)
-            && request.resource.data.homeLineupStatus in ['draft', 'submitted']
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'homeLineupStatus', 'updatedAt'
-            ]))
-          || (isCaptainForTeam(seasonId, resource.data.awayTeamId)
-            && request.resource.data.awayLineupStatus in ['draft', 'submitted']
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'awayLineupStatus', 'updatedAt'
-            ]));
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId) || isSeasonApprover(seasonId);
+        allow create, delete: if isSuperAdmin();
+        allow update: if isSuperAdmin();
+        allow update: if request.resource.data.homeLineupStatus == 'submitted'
+          && request.resource.data.awayLineupStatus == resource.data.awayLineupStatus
+          && workflowMatchupUpdateOnly()
+          && canSubmitLineup(seasonId, matchupId, resource.data.homeTeamId)
+          && existsAfter(lineupPath(seasonId, matchupId, resource.data.homeTeamId))
+          && getAfter(lineupPath(seasonId, matchupId, resource.data.homeTeamId)).data.status == 'submitted'
+          && getAfter(lineupPath(seasonId, matchupId, resource.data.homeTeamId)).data.submittedByUid == request.auth.uid;
+        allow update: if request.resource.data.awayLineupStatus == 'submitted'
+          && request.resource.data.homeLineupStatus == resource.data.homeLineupStatus
+          && workflowMatchupUpdateOnly()
+          && canSubmitLineup(seasonId, matchupId, resource.data.awayTeamId)
+          && existsAfter(lineupPath(seasonId, matchupId, resource.data.awayTeamId))
+          && getAfter(lineupPath(seasonId, matchupId, resource.data.awayTeamId)).data.status == 'submitted'
+          && getAfter(lineupPath(seasonId, matchupId, resource.data.awayTeamId)).data.submittedByUid == request.auth.uid;
+        allow update: if request.resource.data.homeLineupStatus in ['approved', 'rejected']
+          && request.resource.data.awayLineupStatus == resource.data.awayLineupStatus
+          && workflowMatchupUpdateOnly()
+          && canReviewLineup(seasonId, matchupId)
+          && getAfter(lineupPath(seasonId, matchupId, resource.data.homeTeamId)).data.status
+            == request.resource.data.homeLineupStatus;
+        allow update: if request.resource.data.awayLineupStatus in ['approved', 'rejected']
+          && request.resource.data.homeLineupStatus == resource.data.homeLineupStatus
+          && workflowMatchupUpdateOnly()
+          && canReviewLineup(seasonId, matchupId)
+          && getAfter(lineupPath(seasonId, matchupId, resource.data.awayTeamId)).data.status
+            == request.resource.data.awayLineupStatus;
+        allow update: if resource.data.lineupApprovalStatus == 'fullyApproved'
+          && request.resource.data.homeLineupStatus == 'pendingSubmission'
+          && request.resource.data.awayLineupStatus == 'pendingSubmission'
+          && request.resource.data.lineupApprovalStatus == 'awaitingSubmission'
+          && workflowMatchupUpdateOnly()
+          && canReviewLineup(seasonId, matchupId)
+          && request.resource.data.lastLineupReset.resetByUid == request.auth.uid
+          && !existsAfter(lineupPath(seasonId, matchupId, resource.data.homeTeamId))
+          && !existsAfter(lineupPath(seasonId, matchupId, resource.data.awayTeamId));
 
         match /lineups/{teamId} {
           function lineupPublished() {
@@ -367,100 +458,133 @@ service cloud.firestore {
               && matchup(seasonId, matchupId).lineupsPublished == true;
           }
 
-          function approverReviewReady() {
-            return isSeasonApprover(seasonId)
-              || (isMatchupApprover(seasonId, matchupId)
-                && matchup(seasonId, matchupId).bothLineupsSubmitted == true);
-          }
-
-          function validSubmittedLineup() {
-            return request.resource.data.status != 'submitted'
-              || (
-                request.resource.data.validation.passed == true
-                && request.resource.data.lines.size() == 5
-                && request.resource.data.lines[0].lineNumber == 1
-                && request.resource.data.lines[1].lineNumber == 2
-                && request.resource.data.lines[2].lineNumber == 3
-                && request.resource.data.lines[3].lineNumber == 4
-                && request.resource.data.lines[4].lineNumber == 5
-                && request.resource.data.lines[0].sor <= request.resource.data.lines[1].sor
-                && request.resource.data.lines[1].sor <= request.resource.data.lines[2].sor
-                && request.resource.data.lines[2].sor <= request.resource.data.lines[3].sor
-                && request.resource.data.lines[3].sor <= request.resource.data.lines[4].sor
-                && request.resource.data.lines[0].player1Rank >= 1
-                && request.resource.data.lines[0].player1Rank <= 4
-                && request.resource.data.lines[0].player2Rank >= 1
-                && request.resource.data.lines[0].player2Rank <= 4
-                && request.resource.data.lines[3].player1Rank >= 7
-                && request.resource.data.lines[3].player1Rank <= 13
-                && request.resource.data.lines[3].player2Rank >= 7
-                && request.resource.data.lines[3].player2Rank <= 13
-                && request.resource.data.lines[4].player1Rank >= 11
-                && request.resource.data.lines[4].player1Rank <= 14
-                && request.resource.data.lines[4].player2Rank >= 11
-                && request.resource.data.lines[4].player2Rank <= 14
-                && [
-                  request.resource.data.lines[0].player1Id, request.resource.data.lines[0].player2Id,
-                  request.resource.data.lines[1].player1Id, request.resource.data.lines[1].player2Id,
-                  request.resource.data.lines[2].player1Id, request.resource.data.lines[2].player2Id,
-                  request.resource.data.lines[3].player1Id, request.resource.data.lines[3].player2Id,
-                  request.resource.data.lines[4].player1Id, request.resource.data.lines[4].player2Id
-                ].toSet().size() == 10
-              );
+          function approverCanReview() {
+            return canReviewLineup(seasonId, matchupId);
           }
 
           allow read: if isSeasonEC(seasonId)
             || isCaptainForTeam(seasonId, teamId)
-            || approverReviewReady()
+            || approverCanReview()
             || (isSeasonMember(seasonId) && lineupPublished());
 
-          // Captains may save drafts only. Submission and every official status
-          // transition are trusted server operations.
-          allow create: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
+          allow create: if request.resource.data.status == 'draft'
             && request.resource.data.teamId == teamId
-            && request.resource.data.status in ['draft', 'systemValidated', 'submitted']
-            && validSubmittedLineup();
-          allow update: if (isCaptainForTeam(seasonId, teamId) || isSeasonApprover(seasonId) || isSeasonEC(seasonId))
-            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'rejected', 'submitted']
-            && request.resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'submitted', 'rejected', 'approved']
-            && (!(request.resource.data.status in ['approved', 'rejected']) || isSeasonApprover(seasonId) || isSuperAdmin())
-            && validSubmittedLineup()
+            && canSubmitLineup(seasonId, matchupId, teamId);
+          allow create: if request.resource.data.status == 'submitted'
             && request.resource.data.teamId == teamId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'status', 'revisionNumber', 'ruleVersionId', 'lines',
-              'validation', 'submittedByUid', 'submittedAt',
-              'approvedByUid', 'approvedAt',
-              'rejectionReason', 'rejectedByUid', 'rejectedAt',
-              'updatedByUid', 'updatedAt'
-            ]);
-          allow delete: if false;
+            && lineupStatusMatchesMatchup(seasonId, matchupId, teamId, 'submitted')
+            && request.resource.data.submittedByUid == request.auth.uid
+            && request.resource.data.updatedByUid == request.auth.uid
+            && request.resource.data.revisionNumber > 0
+            && request.resource.data.lines is list
+            && request.resource.data.lines.size() == 5
+            && isWorkflowActor(seasonId, matchupId);
+          allow update: if request.resource.data.status == 'draft'
+            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'rejected']
+            && request.resource.data.teamId == teamId
+            && canSubmitLineup(seasonId, matchupId, teamId);
+          allow update: if request.resource.data.status == 'submitted'
+            && resource.data.status in ['draft', 'validationFailed', 'systemValidated', 'changesRequested', 'rejected']
+            && request.resource.data.teamId == teamId
+            && lineupStatusMatchesMatchup(seasonId, matchupId, teamId, 'submitted')
+            && request.resource.data.submittedByUid == request.auth.uid
+            && request.resource.data.updatedByUid == request.auth.uid
+            && request.resource.data.revisionNumber > resource.data.revisionNumber
+            && request.resource.data.lines is list
+            && request.resource.data.lines.size() == 5
+            && isWorkflowActor(seasonId, matchupId);
+          allow update: if request.resource.data.status in ['approved', 'rejected']
+            && resource.data.status in ['submitted', 'approved']
+            && lineupStatusMatchesMatchup(
+              seasonId, matchupId, teamId, request.resource.data.status
+            )
+            && request.resource.data.teamId == teamId
+            && request.resource.data.revisionNumber == resource.data.revisionNumber
+            && request.resource.data.lines == resource.data.lines
+            && request.resource.data.updatedByUid == request.auth.uid
+            && (
+              (
+                request.resource.data.status == 'approved'
+                && request.resource.data.approvedByUid == request.auth.uid
+              )
+              || (
+                request.resource.data.status == 'rejected'
+                && request.resource.data.rejectedByUid == request.auth.uid
+                && request.resource.data.rejectionReason is string
+                && request.resource.data.rejectionReason.size() > 0
+              )
+            )
+            && isWorkflowActor(seasonId, matchupId);
+          allow delete: if isWorkflowActor(seasonId, matchupId)
+            && resource.data.status == 'approved'
+            && getAfter(matchupPath(seasonId, matchupId)).data.lineupApprovalStatus == 'awaitingSubmission'
+            && getAfter(matchupPath(seasonId, matchupId)).data.homeLineupStatus == 'pendingSubmission'
+            && getAfter(matchupPath(seasonId, matchupId)).data.awayLineupStatus == 'pendingSubmission';
 
           match /revisions/{revisionId} {
             allow read: if isSeasonEC(seasonId)
               || isCaptainForTeam(seasonId, teamId)
-              || approverReviewReady()
+              || approverCanReview()
               || (isSeasonMember(seasonId) && lineupPublished());
-            allow write: if false;
+            allow create: if request.resource.data.status == 'submitted'
+              && request.resource.data.teamId == teamId
+              && lineupStatusMatchesMatchup(seasonId, matchupId, teamId, 'submitted')
+              && request.resource.data.immutable == true
+              && request.resource.data.submittedByUid == request.auth.uid
+              && request.resource.data.updatedByUid == request.auth.uid
+              && request.resource.data.lines is list
+              && request.resource.data.lines.size() == 5
+              && isWorkflowActor(seasonId, matchupId);
+            allow update, delete: if false;
           }
         }
 
         match /lineupReviews/{reviewId} {
           allow read: if isSeasonEC(seasonId)
-            || isMatchupApprover(seasonId, matchupId)
+            || canReviewLineup(seasonId, matchupId)
             || isMatchupTeamCaptain(seasonId, matchupId);
-          allow write: if false;
+          allow create: if request.resource.data.action in [
+              'submitted', 'approved', 'rejected', 'approvalReopened', 'resetBothApprovedLineups'
+            ]
+            && request.resource.data.operationId == reviewId
+            && request.resource.data.actedByUid == request.auth.uid
+            && getAfter(matchupPath(seasonId, matchupId)).data.lineupWorkflowOperationId == reviewId
+            && isWorkflowActor(seasonId, matchupId);
+          allow update, delete: if false;
         }
 
         match /lineMatches/{lineMatchId} {
-          allow read: if isActiveUser();
-          // Approval creates the operational records. Super Admin and EC may
-          // correct players; captains remain limited to schedule and scores.
-          allow create: if isSeasonEC(seasonId) || isSeasonApprover(seasonId);
+          allow read: if isSuperAdmin()
+            || isSeasonMember(seasonId)
+            || isSeasonApprover(seasonId)
+            || isPublicMatchStatus(resource.data);
+          allow create: if request.resource.data.lineMatchId == lineMatchId
+            && request.resource.data.lineupState == 'approved'
+            && request.resource.data.scoreEntryAllowed == true
+            && getAfter(matchupPath(seasonId, matchupId)).data.lineupApprovalStatus == 'fullyApproved'
+            && isWorkflowActor(seasonId, matchupId);
           allow delete: if isSuperAdmin();
-          allow update: if isSuperAdmin()
-            || (isSeasonEC(seasonId)
+          allow update: if isSuperAdmin();
+          allow update: if isWorkflowActor(seasonId, matchupId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'lineMatchId', 'lineupId', 'seasonId', 'matchupId', 'lineNumber',
+              'homeTeamId', 'awayTeamId', 'homePlayers', 'awayPlayers',
+              'homeSor', 'awaySor', 'homeLineupRevisionNumber', 'awayLineupRevisionNumber',
+              'lineupState', 'scoreEntryAllowed', 'updatedAt'
+            ])
+            && getAfter(matchupPath(seasonId, matchupId)).data.lineupApprovalStatus == 'fullyApproved'
+            && request.resource.data.lineupState == 'approved'
+            && request.resource.data.scoreEntryAllowed == true;
+          allow update: if isWorkflowActor(seasonId, matchupId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'lineupState', 'scoreEntryAllowed', 'updatedAt'
+            ])
+            && getAfter(matchupPath(seasonId, matchupId)).data.lineupApprovalStatus == 'awaitingSubmission'
+            && request.resource.data.lineupState == 'awaitingReapproval'
+            && request.resource.data.scoreEntryAllowed == false;
+          allow update: if (isSeasonEC(seasonId)
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                'homePlayers', 'awayPlayers', 'venueId', 'venueNameSnapshot', 'venueAddressSnapshot',
+                'venueId', 'venueNameSnapshot', 'venueAddressSnapshot',
                 'scheduledAt', 'sets', 'scheduleStatus', 'scoreStatus',
                 'homePoints', 'awayPoints', 'winnerTeamId', 'updatedAt'
               ]))
@@ -470,6 +594,18 @@ service cloud.firestore {
                 'scheduleStatus', 'scoreStatus', 'homePoints', 'awayPoints',
                 'winnerTeamId', 'updatedAt'
               ]));
+
+          match /playerOverrides/{overrideId} {
+            allow read: if isSuperAdmin();
+            allow create: if isSuperAdmin()
+              && request.resource.data.overrideId == overrideId
+              && request.resource.data.seasonId == seasonId
+              && request.resource.data.matchupId == matchupId
+              && request.resource.data.lineMatchId == lineMatchId
+              && request.resource.data.reason is string
+              && request.resource.data.reason.size() > 0;
+            allow update, delete: if false;
+          }
 
           match /scheduleProposals/{proposalId} {
             allow read: if isSeasonEC(seasonId) || isMatchupTeamCaptain(seasonId, matchupId);
@@ -495,8 +631,15 @@ service cloud.firestore {
 
       match /approverAssignments/{assignmentId} {
         allow read: if isSeasonEC(seasonId)
+          || (
+            signedIn()
+            && (
+              assignmentId == request.auth.uid
+              || assignmentId == 'season_' + request.auth.uid
+            )
+          )
           || (signedIn() && resource.data.approverUid == request.auth.uid)
-          || (signedIn() && resource.data.backupApproverUid == request.auth.uid);
+          || (signedIn() && resource.data.get('backupApproverUid', '') == request.auth.uid);
         allow write: if isSuperAdmin();
       }
 
@@ -539,22 +682,22 @@ service cloud.firestore {
       }
 
       match /standings/{teamId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
         allow write: if false;
       }
 
       match /standingsSnapshots/{snapshotId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
         allow write: if false;
       }
 
       match /playoffBrackets/{bracketId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
       match /announcements/{announcementId} {
-        allow read: if isActiveUser();
+        allow read: if isSuperAdmin() || isSeasonMember(seasonId);
         allow write: if isSeasonEC(seasonId);
       }
 
@@ -568,6 +711,12 @@ service cloud.firestore {
       match /{document=**} {
         allow delete: if isSuperAdmin();
       }
+    }
+
+    // Collection-group queries need an explicit recursive match. Match Lines are
+    // public when their operational schedule status belongs on the Matches page.
+    match /{path=**}/lineMatches/{lineMatchId} {
+      allow read: if isPublicMatchStatus(resource.data);
     }
 
     // Every collection not explicitly matched above remains inaccessible.

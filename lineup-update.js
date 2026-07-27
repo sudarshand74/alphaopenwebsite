@@ -2,7 +2,8 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/f
 import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=4";
 import { calculateMatchScore } from "./score-rules.js?v=1";
-import { loadCanonicalPlayers } from "./player-identity.js?v=1";
+import { loadCanonicalPlayers } from "./player-identity.js?v=5";
+import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
 
 const byId = (id) => document.getElementById(id);
 let state = null;
@@ -92,6 +93,26 @@ function selectedPlayer(article, side, index, teamId, current) {
     rankNumber: Number(player.rankNumber || player.rankSnapshot || 0),
   };
 }
+function playerIds(players = []) {
+  return players.map((player) => String(player?.playerId || ""));
+}
+function auditPlayers(players = []) {
+  return players.map((player) => ({
+    playerId: player?.playerId || "",
+    nameSnapshot: player?.nameSnapshot || player?.playerNameSnapshot || player?.playerId || "",
+    rankNumber: Number(player?.rankNumber || player?.rankSnapshot || 0),
+  }));
+}
+function hasScoreActivity(line = {}) {
+  return Boolean(
+    (line.sets || []).length ||
+    Number(line.homePoints || 0) ||
+    Number(line.awayPoints || 0) ||
+    line.winnerTeamId ||
+    ["submitted", "awaitingconfirmation", "confirmed", "published", "locked", "completed"]
+      .includes(String(line.scoreStatus || "").toLowerCase()),
+  );
+}
 function render(record) {
   const { line, matchup } = record;
   const article = document.createElement("article");
@@ -132,7 +153,16 @@ function render(record) {
   status.readOnly = true;
   status.value = line.scheduleStatus === "scheduled" ? "Scheduled" : "To Be Scheduled";
   statusLabel.append(status);
-  schedule.append(venueLabel, dateLabel, statusLabel);
+  const overrideReasonLabel = document.createElement("label");
+  overrideReasonLabel.className = "player-override-reason";
+  overrideReasonLabel.append("Last-minute player override reason");
+  const overrideReason = document.createElement("input");
+  overrideReason.type = "text";
+  overrideReason.maxLength = 300;
+  overrideReason.placeholder = "Required only when changing a player";
+  overrideReason.dataset.playerOverrideReason = "";
+  overrideReasonLabel.append(overrideReason);
+  schedule.append(venueLabel, dateLabel, statusLabel, overrideReasonLabel);
   const score = document.createElement("div");
   score.className = "managed-score";
   score.append(Object.assign(document.createElement("b"), { textContent: "Score" }));
@@ -163,7 +193,9 @@ function render(record) {
   save.className = "primary";
   save.textContent = "Update lineup details";
   save.addEventListener("click", () => saveRecord(article, record, save).catch((error) => message(error.message)));
-  actions.append(save);
+  const overrideNote = document.createElement("span");
+  overrideNote.textContent = "Super Admin player changes are recorded in an immutable override audit.";
+  actions.append(overrideNote, save);
   article.append(head, playerGrid, schedule, score, actions);
   return article;
 }
@@ -174,6 +206,14 @@ async function saveRecord(article, record, button) {
   const awayPlayers = [0, 1].map((index) => selectedPlayer(article, "away", index, matchup.awayTeamId, line.awayPlayers));
   const ids = [...homePlayers, ...awayPlayers].map((player) => player.playerId);
   if (new Set(ids).size !== 4) throw new Error("All four lineup players must be unique.");
+  const playerChanged =
+    playerIds(homePlayers).join("|") !== playerIds(line.homePlayers).join("|") ||
+    playerIds(awayPlayers).join("|") !== playerIds(line.awayPlayers).join("|");
+  const overrideReason = article.querySelector("[data-player-override-reason]").value.trim();
+  if (playerChanged && !overrideReason)
+    throw new Error("Enter the reason for this last-minute player override.");
+  if (playerChanged && hasScoreActivity(line))
+    throw new Error("Players can only be overridden before score activity begins.");
   const venueId = article.querySelector("[data-update-venue]").value;
   const dateValue = article.querySelector("[data-update-played]").value;
   if (Boolean(venueId) !== Boolean(dateValue)) throw new Error("Enter both venue and date/time, or leave both blank.");
@@ -199,8 +239,40 @@ async function saveRecord(article, record, button) {
   };
   button.disabled = true;
   const batch = writeBatch(db);
-  const canonicalRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineMatches", line.lineMatchId);
-  batch.set(canonicalRef, payload, { merge: true });
+  const privateRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineMatches", line.lineMatchId);
+  if (playerChanged) {
+    const auditRef = doc(collection(privateRef, "playerOverrides"));
+    const actorName =
+      window.alphaOpenAuthorization?.playerName ||
+      auth.currentUser?.displayName ||
+      auth.currentUser?.email ||
+      "Super Admin";
+    Object.assign(payload, {
+      lineupState: "approved",
+      scoreEntryAllowed: true,
+      superAdminPlayerOverrideApproved: true,
+      lastPlayerOverrideId: auditRef.id,
+      lastPlayerOverrideAt: serverTimestamp(),
+      lastPlayerOverrideByUid: auth.currentUser.uid,
+      lastPlayerOverrideByNameSnapshot: actorName,
+      lastPlayerOverrideReason: overrideReason,
+    });
+    batch.set(auditRef, {
+      overrideId: auditRef.id,
+      seasonId: state.seasonId,
+      matchupId: matchup.matchupId,
+      lineMatchId: line.lineMatchId,
+      reason: overrideReason,
+      previousHomePlayers: auditPlayers(line.homePlayers),
+      previousAwayPlayers: auditPlayers(line.awayPlayers),
+      replacementHomePlayers: auditPlayers(homePlayers),
+      replacementAwayPlayers: auditPlayers(awayPlayers),
+      overriddenByUid: auth.currentUser.uid,
+      overriddenByNameSnapshot: actorName,
+      overriddenAt: serverTimestamp(),
+    });
+  }
+  batch.set(privateRef, payload, { merge: true });
   const siblingLines = state.records.filter((item) => item.matchup.matchupId === matchup.matchupId).map((item) => item.line.lineMatchId === line.lineMatchId ? { ...item.line, ...payload } : item.line);
   const completedLineCount = siblingLines.filter((item) => item.scheduleStatus === "completed").length;
   const canceledLineCount = siblingLines.filter((item) => item.scheduleStatus === "canceled").length;
@@ -215,7 +287,17 @@ async function saveRecord(article, record, button) {
   };
   batch.set(doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId), parentPayload, { merge: true });
   await batch.commit();
-  message(scheduleStatus === "completed" ? "Lineup and score updated. Match completed." : scheduleStatus === "scheduled" ? "Lineup updated. Match scheduled." : "Lineup updated. Match remains To Be Scheduled.");
+  await publishPublicSeasonDashboard(state.seasonId);
+  window.dispatchEvent(new CustomEvent("alphaopen:match-line-updated", {
+    detail: { seasonId: state.seasonId, matchupId: matchup.matchupId, lineMatchId: line.lineMatchId },
+  }));
+  message(playerChanged
+    ? "Super Admin player override saved, audited, and published for guests."
+    : scheduleStatus === "completed"
+      ? "Lineup and score updated. Match completed."
+      : scheduleStatus === "scheduled"
+        ? "Lineup updated. Match scheduled."
+        : "Lineup updated. Match remains To Be Scheduled.");
   await load(auth.currentUser);
 }
 async function load(user) {
@@ -238,7 +320,7 @@ async function load(user) {
   ]);
   const rostersByTeam = new Map();
   rosters.docs.forEach((item) => {
-    const player = { assignmentId: item.id, ...item.data() };
+    const player = { ...item.data(), assignmentId: item.id };
     if (player.status && player.status !== "active") return;
     if (!rostersByTeam.has(player.teamId)) rostersByTeam.set(player.teamId, []);
     rostersByTeam.get(player.teamId).push(player);
@@ -254,11 +336,6 @@ async function load(user) {
   };
   byId("lineupUpdateSeason").replaceChildren(option(seasonId, state.season.name || seasonId, true));
   for (const matchup of state.matchups) {
-    if (
-      matchup.lineupsPublished !== true &&
-      matchup.homeLineupStatus !== "approved" &&
-      matchup.awayLineupStatus !== "approved"
-    ) continue;
     const lines = await getDocs(collection(seasonRef, "matchups", matchup.matchupId, "lineMatches"));
     lines.docs.forEach((item) => state.records.push({ matchup, line: { lineMatchId: item.id, ...item.data() } }));
   }

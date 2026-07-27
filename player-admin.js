@@ -1,7 +1,7 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=4";
-import { bumpPlayerMasterVersion } from "./player-identity.js?v=1";
+import { bumpPlayerMasterVersion, resolvedPlayerName } from "./player-identity.js?v=5";
 
 const ADMIN_EMAIL = "sudarshandesai74@gmail.com";
 const $ = selector => document.querySelector(selector);
@@ -60,15 +60,14 @@ async function exportAllPlayers() {
     const preferredFields = [
       ["Player ID", "playerId"], ["First Name", "firstName"], ["Last Name", "lastName"],
       ["Full Name", "fullName"], ["Email Address", "emailNormalized"], ["Mobile Number", "phone"],
-      ["T-Shirt Size", "tShirtSize"], ["AOR Suggested", "globalRank"],
-      ["Status", "status"], ["Waiver Status", "waiverStatus"],
+      ["T-Shirt Size", "tShirtSize"], ["AOR Suggested", "globalRank"], ["Global Score", "globalScore"],
+      ["Status", "status"], ["Waiver Status", "waiverStatus"], ["Emergency Contact", "emergencyContact"],
       ["Internal Notes", "internalNotes"], ["Created At", "createdAt"], ["Updated At", "updatedAt"],
       ["Created By UID", "createdByUid"], ["Updated By UID", "updatedByUid"]
     ];
     const knownKeys = new Set(preferredFields.map(([, key]) => key));
-    const retiredKeys = new Set(["globalScore", "emergencyContact"]);
     const additionalKeys = [...new Set(playerCache.flatMap(player => Object.keys(player)))]
-      .filter(key => !knownKeys.has(key) && !retiredKeys.has(key)).sort();
+      .filter(key => !knownKeys.has(key)).sort();
     const rows = playerCache.map(player => Object.fromEntries([
       ...preferredFields.map(([heading, key]) => [heading, excelValue(player[key])]),
       ...additionalKeys.map(key => [key, excelValue(player[key])])
@@ -92,11 +91,10 @@ async function exportAllPlayers() {
 function renderPlayers(filter = "") {
   const term = filter.trim().toLowerCase();
   const filtered = !term ? playerCache : playerCache.filter(player => [
-    player.playerId, player.firstName, player.lastName, player.fullName, player.emailNormalized,
-    player.phone, player.tShirtSize, player.globalRank
+    player.playerId, player.firstName, player.lastName, player.fullName, player.displayName
   ].some(value => String(value ?? "").toLowerCase().includes(term)));
   playerCount.textContent = term ? `${filtered.length} of ${playerCache.length}` : `${playerCache.length} player${playerCache.length === 1 ? "" : "s"}`;
-  playerPanel.innerHTML = filtered.length ? filtered.map(player => `<div class="player-master-row"><span>${escapeHtml(player.playerId)}</span><b>${escapeHtml(player.fullName)}</b><small>${escapeHtml(player.emailNormalized)}</small><small>${escapeHtml(player.phone || "—")}</small><small>${escapeHtml(player.tShirtSize || "—")}</small><small>${player.globalRank || "—"}</small><button class="secondary compact-button" type="button" data-edit-player="${escapeHtml(player.playerId)}">Edit</button></div>`).join("") : `<div class="empty-state compact"><b>${term ? "No matching players" : "No players yet"}</b><p>${term ? "Try a different search." : "Add one player or import the Excel template."}</p></div>`;
+  playerPanel.innerHTML = filtered.length ? filtered.map(player => `<div class="player-master-row"><span>${escapeHtml(player.playerId)}</span><b>${escapeHtml(resolvedPlayerName(player.playerId, player.fullName, player.displayName, `${player.firstName || ""} ${player.lastName || ""}`) || "Player name unavailable")}</b><button class="secondary compact-button" type="button" data-edit-player="${escapeHtml(player.playerId)}">Edit</button></div>`).join("") : `<div class="empty-state compact"><b>${term ? "No matching players" : "No players yet"}</b><p>${term ? "Try a different search." : "Add one player or import the Excel template."}</p></div>`;
 }
 
 async function loadPlayers() {
@@ -104,7 +102,7 @@ async function loadPlayers() {
   playerPanel.innerHTML = '<p class="muted">Loading Player Master…</p>';
   try {
     const snapshot = await getDocs(collection(db, "players"));
-    playerCache = snapshot.docs.map(item => ({ playerId: item.id, ...item.data() }))
+    playerCache = snapshot.docs.map(item => ({ ...item.data(), playerId: item.id }))
       .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
     renderPlayers($("#playerMasterSearch").value);
   } catch (error) {
@@ -185,11 +183,11 @@ function openEditPlayer(playerId) {
   $("#editPlayerEmail").value = player.emailNormalized || "";
   $("#editPlayerFirstName").value = player.firstName || "";
   $("#editPlayerLastName").value = player.lastName || "";
-  $("#editPlayerFullName").value = player.fullName || "";
+  $("#editPlayerFullName").value = player.fullName || player.displayName || "";
   $("#editPlayerPhone").value = player.phone || "";
   $("#editPlayerTShirt").value = player.tShirtSize || "";
   $("#editPlayerGlobalRank").value = player.globalRank || "";
-  $("#editPlayerMessage").textContent = "Player ID is permanent. A changed Email Address must remain unique.";
+  $("#editPlayerMessage").textContent = "Player ID is permanent. Changing a linked email starts the protected access-transfer workflow.";
   openDialog(editDialog);
 }
 
@@ -394,6 +392,7 @@ async function transferPlayerEmail(event) {
     });
     pendingEmailTransfer = null;
     closeDialog(emailTransferDialog);
+    await bumpPlayerMasterVersion();
     await loadPlayers();
     window.alphaOpenAuthUI?.showMessage(
       `${transfer.playerId} now uses ${transfer.newEmail}. The player must register with that Google email and await approval.`,
@@ -413,9 +412,12 @@ async function submitEditPlayer(event) {
   const existing = playerCache.find(player => player.playerId === playerId);
   if (!existing) return;
   const candidate = {
-    email: normalizeEmail($("#editPlayerEmail").value), firstName: $("#editPlayerFirstName").value.trim(),
-    lastName: $("#editPlayerLastName").value.trim(), fullName: $("#editPlayerFullName").value.trim(),
-    phone: $("#editPlayerPhone").value.trim(), tShirtSize: $("#editPlayerTShirt").value,
+    email: normalizeEmail($("#editPlayerEmail").value),
+    firstName: $("#editPlayerFirstName").value.trim(),
+    lastName: $("#editPlayerLastName").value.trim(),
+    fullName: $("#editPlayerFullName").value.trim(),
+    phone: $("#editPlayerPhone").value.trim(),
+    tShirtSize: $("#editPlayerTShirt").value,
     globalRank: $("#editPlayerGlobalRank").value
   };
   const message = $("#editPlayerMessage");
@@ -428,6 +430,7 @@ async function submitEditPlayer(event) {
   if (duplicateName && !window.confirm(`${duplicateName.playerId} has the same Full Name. Save only if these are different people. Continue?`)) return;
 
   const oldEmail = normalizeEmail(existing.emailNormalized);
+  const emailChanged = oldEmail !== candidate.email;
   const playerRef = doc(db, "players", playerId);
   const oldIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(oldEmail));
   const newIndexRef = doc(db, "playerEmailIndex", encodeURIComponent(candidate.email));
@@ -459,35 +462,46 @@ async function submitEditPlayer(event) {
       if (!playerSnapshot.exists()) throw new Error("Player Master record no longer exists.");
       if (newIndexSnapshot.exists() && newIndexSnapshot.data().playerId !== playerId) throw new Error(`Email is already assigned to ${newIndexSnapshot.data().playerId}.`);
       transaction.update(playerRef, {
-        firstName: candidate.firstName, lastName: candidate.lastName, fullName: candidate.fullName,
-        emailNormalized: candidate.email, phone: candidate.phone || null,
-        tShirtSize: candidate.tShirtSize || null, globalRank: candidate.globalRank ? Number(candidate.globalRank) : null,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        fullName: candidate.fullName,
+        emailNormalized: candidate.email,
+        phone: candidate.phone || null,
+        tShirtSize: candidate.tShirtSize || null,
+        globalRank: candidate.globalRank ? Number(candidate.globalRank) : null,
         accountUid: accountLinkSnapshot.exists() ? accountLinkSnapshot.data().uid : linkedUser?.id || null,
         updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
       });
-      transaction.set(newIndexRef, { emailNormalized: candidate.email, playerId, status: "active", updatedAt: serverTimestamp(), updatedByUid: auth.currentUser.uid }, { merge: true });
-      if (oldEmail !== candidate.email && oldIndexSnapshot.exists()) transaction.delete(oldIndexRef);
-      if (linkedUser) transaction.set(linkedUser.ref, { playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
-      registrationSnapshot.docs.forEach(request => transaction.set(request.ref, { matchedPlayerId: playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true }));
-      if (accountLinkSnapshot.exists()) transaction.set(accountLinkRef, { playerId, emailAtApproval: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
+      if (emailChanged) transaction.set(newIndexRef, { emailNormalized: candidate.email, playerId, status: "active", updatedAt: serverTimestamp(), updatedByUid: auth.currentUser.uid }, { merge: true });
+      if (emailChanged && oldIndexSnapshot.exists()) transaction.delete(oldIndexRef);
+      if (emailChanged && linkedUser) transaction.set(linkedUser.ref, { playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
+      if (emailChanged) registrationSnapshot.docs.forEach(request => transaction.set(request.ref, { matchedPlayerId: playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true }));
+      if (emailChanged && accountLinkSnapshot.exists()) transaction.set(accountLinkRef, { playerId, emailAtApproval: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
     });
     const [verifiedPlayer, verifiedIndex, verifiedOldIndex, verifiedLink] = await Promise.all([
-      getDoc(playerRef), getDoc(newIndexRef), oldEmail === candidate.email ? Promise.resolve(null) : getDoc(oldIndexRef), getDoc(accountLinkRef)
+      getDoc(playerRef), getDoc(newIndexRef), emailChanged ? getDoc(oldIndexRef) : Promise.resolve(null), getDoc(accountLinkRef)
     ]);
     const verificationErrors = [];
     if (normalizeEmail(verifiedPlayer.data()?.emailNormalized) !== candidate.email) verificationErrors.push("Player Master email");
+    if (verifiedPlayer.data()?.fullName !== candidate.fullName) verificationErrors.push("Player Master name");
+    if (verifiedPlayer.data()?.firstName !== candidate.firstName || verifiedPlayer.data()?.lastName !== candidate.lastName) verificationErrors.push("Player Master first/last name");
+    if ((verifiedPlayer.data()?.phone || "") !== candidate.phone) verificationErrors.push("Player Master phone");
+    if ((verifiedPlayer.data()?.tShirtSize || "") !== candidate.tShirtSize) verificationErrors.push("Player Master T-shirt size");
+    if ((verifiedPlayer.data()?.globalRank || "") !== (candidate.globalRank ? Number(candidate.globalRank) : "")) verificationErrors.push("Player Master AOR Suggested");
     if (verifiedIndex.data()?.playerId !== playerId || normalizeEmail(verifiedIndex.data()?.emailNormalized) !== candidate.email) verificationErrors.push("email index");
     if (verifiedOldIndex?.exists()) verificationErrors.push("old email index removal");
-    if (linkedUser && normalizeEmail((await getDoc(linkedUser.ref)).data()?.playerEmailNormalized) !== candidate.email) verificationErrors.push("linked user");
-    for (const request of registrationSnapshot.docs) {
+    if (emailChanged && linkedUser && normalizeEmail((await getDoc(linkedUser.ref)).data()?.playerEmailNormalized) !== candidate.email) verificationErrors.push("linked user");
+    for (const request of emailChanged ? registrationSnapshot.docs : []) {
       const verifiedRequest = await getDoc(request.ref);
       if (normalizeEmail(verifiedRequest.data()?.playerEmailNormalized) !== candidate.email) verificationErrors.push(`registration ${request.id}`);
     }
-    if (verifiedLink.exists() && normalizeEmail(verifiedLink.data()?.emailAtApproval) !== candidate.email) verificationErrors.push("account link");
+    if (emailChanged && verifiedLink.exists() && normalizeEmail(verifiedLink.data()?.emailAtApproval) !== candidate.email) verificationErrors.push("account link");
     if (verificationErrors.length) throw new Error(`Player saved, but identity verification failed for: ${verificationErrors.join(", ")}.`);
     await bumpPlayerMasterVersion();
     closeDialog(editDialog); await loadPlayers();
-    window.alphaOpenAuthUI.showMessage(`${playerId} updated and all linked identity records verified`);
+    window.alphaOpenAuthUI.showMessage(emailChanged
+      ? `${playerId} updated and all linked identity records verified`
+      : `${playerId} private Player Master record updated`);
   } catch (error) { message.textContent = error.message; }
   finally { $("#saveEditedPlayer").disabled = false; }
 }
@@ -554,11 +568,33 @@ $("#playerLastName").addEventListener("input", updateFullName);
 function updateEditedFullName() {
   $("#editPlayerFullName").value = `${$("#editPlayerFirstName").value.trim()} ${$("#editPlayerLastName").value.trim()}`.trim();
 }
+
+async function refreshPlayerDirectory() {
+  if (!isAdmin()) return;
+  const button = $("#refreshPlayers");
+  button.disabled = true;
+  button.textContent = "Refreshing…";
+  try {
+    await bumpPlayerMasterVersion();
+    await loadPlayers();
+    window.alphaOpenAuthUI.showMessage(
+      `${playerCache.length} players published to the global Player Directory`,
+    );
+  } catch (error) {
+    console.error("Global Player Directory refresh failed", error);
+    window.alphaOpenAuthUI.showMessage(
+      `Player Directory refresh failed: ${error.message}`,
+    );
+  } finally {
+    button.disabled = false;
+    button.textContent = "Refresh Player List";
+  }
+}
 $("#editPlayerFirstName").addEventListener("input", updateEditedFullName);
 $("#editPlayerLastName").addEventListener("input", updateEditedFullName);
 $("#importPlayers").addEventListener("click", () => openDialog(importDialog));
 $("#exportPlayers").addEventListener("click", exportAllPlayers);
-$("#refreshPlayers").addEventListener("click", loadPlayers);
+$("#refreshPlayers").addEventListener("click", refreshPlayerDirectory);
 $("#playerMasterSearch").addEventListener("input", event => renderPlayers(event.target.value));
 playerPanel.addEventListener("click", event => {
   const button = event.target.closest("[data-edit-player]");

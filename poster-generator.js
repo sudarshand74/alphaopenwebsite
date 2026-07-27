@@ -35,7 +35,13 @@
   }
 
   function playerLines(players) {
-    return (players || []).filter(Boolean).slice(0, 2);
+    return (players || [])
+      .map((player) => {
+        const label = String(player || "").trim();
+        return /^P\d+$/i.test(label) ? "Player name unavailable" : label;
+      })
+      .filter(Boolean)
+      .slice(0, 2);
   }
 
   function drawCourt(ctx) {

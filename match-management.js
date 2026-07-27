@@ -2,7 +2,8 @@ import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/f
 import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=4";
 import { calculateMatchScore } from "./score-rules.js?v=1";
-import { loadCanonicalPlayers } from "./player-identity.js?v=1";
+import { formattedPlayerLabel, resolvedPlayerName, loadCanonicalPlayers } from "./player-identity.js?v=5";
+import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
 
 let state;
 const feedbackByLineId = new Map();
@@ -23,7 +24,27 @@ function isManager(user) {
   );
 }
 function playerPair(players) {
-  return (players || []).map(function (player) { return player.nameSnapshot || player.playerId; }).join(" / ");
+  return (players || []).map(function (player) {
+    const canonicalName = state?.canonicalPlayers?.get(player.playerId)?.displayName;
+    return formattedPlayerLabel(
+      player.playerId,
+      null,
+      canonicalName,
+      state?.rosterNamesById?.get(player.playerId),
+      player.nameSnapshot,
+      player.playerNameSnapshot,
+      player.name,
+    );
+  }).join(" / ");
+}
+function posterPlayerName(player) {
+  const playerId = String(player && player.playerId || "").trim();
+  const canonicalPlayer = state && state.canonicalPlayers && state.canonicalPlayers.get(playerId);
+  const canonicalName = canonicalPlayer && canonicalPlayer.displayName;
+  const snapshotName = String(
+    player && (player.nameSnapshot || player.playerNameSnapshot || player.name) || ""
+  ).trim();
+  return resolvedPlayerName(playerId, canonicalName, snapshotName) || "Player name unavailable";
 }
 function localValue(value) {
   if (!value) return "";
@@ -75,25 +96,25 @@ function rosterPlayers(teamId, currentPlayers) {
 function playerSelect(side, index, players, selectedId) {
   const select = document.createElement("select");
   select.dataset[side + "Player"] = String(index);
+  select.disabled = true;
+  select.setAttribute("aria-readonly", "true");
+  select.title = "Player assignments come from the approved lineup and cannot be changed here.";
   select.appendChild(option("", "Select player", !selectedId));
   players.forEach(function (player) {
-    const name = player.playerNameSnapshot || player.nameSnapshot || player.playerId;
-    select.appendChild(option(player.playerId, "R" + (player.rankNumber || "-") + " · " + name + " (" + player.playerId + ")", player.playerId === selectedId));
+    const canonicalName = state?.canonicalPlayers?.get(player.playerId)?.displayName;
+    select.appendChild(option(
+      player.playerId,
+      formattedPlayerLabel(
+        player.playerId,
+        player.rankNumber,
+        canonicalName,
+        player.playerNameSnapshot,
+        player.nameSnapshot,
+      ),
+      player.playerId === selectedId,
+    ));
   });
   return select;
-}
-function selectedPlayer(article, side, index, teamId, currentPlayers) {
-  const select = article.querySelector('[data-' + side + '-player="' + index + '"]');
-  const playerId = select && select.value;
-  const player = rosterPlayers(teamId, currentPlayers).find(function (item) { return item.playerId === playerId; });
-  if (!player) throw new Error("Select all four players. Match was not saved.");
-  const canonical = state.canonicalPlayers.get(player.playerId);
-  if (!canonical) throw new Error(`${player.playerId} does not exist in Player Master. Match was not saved.`);
-  return {
-    playerId: player.playerId,
-    nameSnapshot: canonical.displayName,
-    rankNumber: Number(player.rankNumber || player.rankSnapshot || 0)
-  };
 }
 function renderRecords() {
   const list = byId("matchManagementList");
@@ -179,6 +200,7 @@ function renderCard(record) {
     title.textContent = "Line " + line.lineNumber + ": " + (record.matchup.homeTeamNameSnapshot || record.matchup.homeTeamId) + " vs " + (record.matchup.awayTeamNameSnapshot || record.matchup.awayTeamId);
     playerGrid = document.createElement("div");
     playerGrid.className = "managed-player-grid";
+    playerGrid.dataset.readonlyPlayers = "";
     const homeRoster = rosterPlayers(record.matchup.homeTeamId, line.homePlayers);
     const awayRoster = rosterPlayers(record.matchup.awayTeamId, line.awayPlayers);
     [0, 1].forEach(function (index) {
@@ -188,6 +210,10 @@ function renderCard(record) {
       awayLabel.append("Away player " + (index + 1), playerSelect("away", index, awayRoster, line.awayPlayers && line.awayPlayers[index] && line.awayPlayers[index].playerId));
       playerGrid.append(homeLabel, awayLabel);
     });
+    const playerNotice = document.createElement("p");
+    playerNotice.className = "managed-player-readonly-note";
+    playerNotice.textContent = "Players are locked from the approved lineup. Use Update Lineup for authorized player corrections.";
+    playerGrid.appendChild(playerNotice);
   }
 
   const form = document.createElement("div");
@@ -278,8 +304,8 @@ function renderCard(record) {
       lineNumber: line.lineNumber,
       homeTeam: (state.teams.find(function (item) { return item.teamId === record.matchup.homeTeamId; }) || {}).name || record.matchup.homeTeamNameSnapshot || record.matchup.homeTeamId,
       awayTeam: (state.teams.find(function (item) { return item.teamId === record.matchup.awayTeamId; }) || {}).name || record.matchup.awayTeamNameSnapshot || record.matchup.awayTeamId,
-      homePlayers: (line.homePlayers || []).map(function (player) { return player.nameSnapshot || player.playerId; }),
-      awayPlayers: (line.awayPlayers || []).map(function (player) { return player.nameSnapshot || player.playerId; }),
+      homePlayers: (line.homePlayers || []).map(posterPlayerName),
+      awayPlayers: (line.awayPlayers || []).map(posterPlayerName),
       scheduledAt: line.scheduledAt && line.scheduledAt.toDate ? line.scheduledAt.toDate().toISOString() : line.scheduledAt || null,
       venueName: line.venueNameSnapshot || venue.venueName || venue.name || "Venue TBD",
       venueAddress: venueAddress,
@@ -315,6 +341,9 @@ function renderCard(record) {
   return article;
 }
 async function save(article, record) {
+  if (record.line.scoreEntryAllowed === false || record.line.lineupState === "awaitingReapproval") {
+    throw new Error("Score entry is disabled until both reset lineups are submitted and approved again.");
+  }
   const requestedStatus = article.querySelector("[data-status]").value;
   const venueId = article.querySelector("[data-venue]").value;
   const venue = state.venues.find(function (item) { return item.venueId === venueId; });
@@ -375,21 +404,10 @@ async function save(article, record) {
     winnerTeamId: winnerTeamId,
     updatedAt: serverTimestamp()
   };
-  if (isManager(auth.currentUser)) {
-    const homePlayers = [0, 1].map(function (index) {
-      return selectedPlayer(article, "home", index, record.matchup.homeTeamId, record.line.homePlayers);
-    });
-    const awayPlayers = [0, 1].map(function (index) {
-      return selectedPlayer(article, "away", index, record.matchup.awayTeamId, record.line.awayPlayers);
-    });
-    const playerIds = homePlayers.concat(awayPlayers).map(function (player) { return player.playerId; });
-    if (new Set(playerIds).size !== 4) throw new Error("All four players must be unique. Match was not saved.");
-    payload.homePlayers = homePlayers;
-    payload.awayPlayers = awayPlayers;
-  }
   const batch = writeBatch(db);
   batch.update(record.ref, payload);
   await batch.commit();
+  await publishPublicSeasonDashboard(state.seasonId);
   window.dispatchEvent(new CustomEvent("alphaopen:match-line-updated", {
     detail: { seasonId: state.seasonId, matchupId: record.matchup.matchupId, lineMatchId: record.line.lineMatchId }
   }));
@@ -442,6 +460,9 @@ async function load(user) {
     matchups: results[3].docs.map(function (item) { return Object.assign({ matchupId: item.id }, item.data()); }),
     venues: results[4].docs.map(function (item) { return Object.assign({ venueId: item.id }, item.data()); }),
     rostersByTeam: rostersByTeam,
+    rosterNamesById: new Map(results[5].docs.map(function (item) {
+      return [item.data().playerId, item.data().playerNameSnapshot];
+    })),
     canonicalPlayers: results[6]
   };
   const membershipRoles = Array.isArray(state.member.roles) ? state.member.roles : [];

@@ -1,7 +1,8 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=4";
-import { validatePlayerIds } from "./player-identity.js?v=1";
+import { formattedPlayerLabel, resolvedPlayerName, loadCanonicalPlayers, validatePlayerIds } from "./player-identity.js?v=5";
+import { newWorkflowOperationId, submitTeamLineup } from "./lineup-workflow-client.js?v=4";
 
 const byId = id => document.getElementById(id);
 let state = null;
@@ -61,16 +62,54 @@ function weekKey(matchup) {
 function weekLabel(key) {
   return { QF: "Qualifiers", SF: "Semifinals", F: "Finals" }[key] || "Week" + key.replace("W", "");
 }
+function assignmentTime(item = {}) {
+  const value = item.updatedAt || item.reconciledAt || item.createdAt || item.effectiveFrom;
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (Number.isFinite(Number(value?.seconds))) return Number(value.seconds) * 1000;
+  const parsed = Date.parse(value || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 function activeRoster(teamId) {
-  return state.assignments.filter(item => item.teamId === teamId && item.status === "active").sort((a, b) => Number(a.rankNumber) - Number(b.rankNumber));
+  const byRank = new Map();
+  state.assignments
+    .filter(item => item.teamId === teamId && item.status === "active")
+    .forEach(item => {
+      const rank = Number(item.rankNumber), current = byRank.get(rank);
+      if (
+        !current ||
+        assignmentTime(item) > assignmentTime(current) ||
+        (assignmentTime(item) === assignmentTime(current) &&
+          String(item.assignmentId || "").localeCompare(String(current.assignmentId || "")) > 0)
+      ) byRank.set(rank, item);
+    });
+  return [...byRank.values()].sort((a, b) => Number(a.rankNumber) - Number(b.rankNumber));
+}
+function rosterPlayerName(item = {}) {
+  return resolvedPlayerName(
+    item.playerId,
+    state?.players?.get(item.playerId)?.displayName,
+    item.playerNameSnapshot,
+    item.nameSnapshot,
+    item.name,
+  );
+}
+function rosterPlayerLabel(item = {}) {
+  return formattedPlayerLabel(
+    item.playerId,
+    item.rankNumber,
+    state?.players?.get(item.playerId)?.displayName,
+    item.playerNameSnapshot,
+    item.nameSnapshot,
+    item.name,
+  );
 }
 function selectedMatchup() { return state.matchups.find(item => item.matchupId === byId("lineupMatchup").value); }
 function lockedLineupStatus(value) {
-  return String(value || "").toLowerCase() === "approved";
+  return ["submitted", "approved"].includes(String(value || "").toLowerCase());
 }
 
 async function load(user) {
-  status("Reading the active season from Firebase...");
+  status("Reading the active season...");
   const control = await getDoc(doc(db, "systemConfig", "seasonControl"));
   const seasonId = control.data() && control.data().activeSeasonId;
   if (!seasonId) throw new Error("No active season is configured.");
@@ -81,13 +120,15 @@ async function load(user) {
     getDoc(doc(db, "users", user.uid)),
     getDocs(collection(seasonRef, "teams")),
     getDocs(collection(seasonRef, "rosterAssignments")),
-    getDocs(collection(seasonRef, "matchups"))
+    getDocs(collection(seasonRef, "matchups")),
+    loadCanonicalPlayers(),
   ]);
   if (!results[0].exists()) throw new Error("The configured active season does not exist.");
   let approver = null;
   const approverAccess = window.alphaOpenAuthorization && window.alphaOpenAuthorization.access && window.alphaOpenAuthorization.access.includes("approver");
   if (approverAccess && !isManager(user)) {
-    const approverSnapshot = await getDoc(doc(seasonRef, "approverAssignments", user.uid));
+    let approverSnapshot = await getDoc(doc(seasonRef, "approverAssignments", user.uid));
+    if (!approverSnapshot.exists()) approverSnapshot = await getDoc(doc(seasonRef, "approverAssignments", `season_${user.uid}`));
     approver = approverSnapshot.exists() ? approverSnapshot.data() : null;
   }
   state = {
@@ -97,13 +138,13 @@ async function load(user) {
     userRecord: results[2].exists() ? results[2].data() : null,
     approver,
     teams: results[3].docs.map(item => ({ teamId: item.id, ...item.data() })),
-    assignments: results[4].docs.map(item => ({ assignmentId: item.id, ...item.data() })),
-    matchups: results[5].docs.map(item => ({ matchupId: item.id, ...item.data() }))
+    assignments: results[4].docs.map(item => ({ ...item.data(), assignmentId: item.id })),
+    matchups: results[5].docs.map(item => ({ matchupId: item.id, ...item.data() })),
+    players: results[6],
   };
   const authorization = window.alphaOpenAuthorization || {};
   const playerId = String(authorization.playerId || state.member && state.member.playerId || "").trim();
   const captainTeamsFromTeamRecords = state.teams.filter(team =>
-    (Array.isArray(team.captainUids) && team.captainUids.includes(user.uid)) ||
     (playerId && Array.isArray(team.captainPlayerIds) && team.captainPlayerIds.includes(playerId))
   ).map(team => team.teamId);
   const captainTeamsFromMember = Array.isArray(state.member && state.member.teamIds) ? state.member.teamIds : [];
@@ -125,7 +166,7 @@ async function load(user) {
   if (captainOnly && teamIds.length === 1) byId("lineupTeam").value = teamIds[0];
   byId("lineupRoleBadge").textContent = isManager(user) ? "EC / Super Admin" : isApprover(user) ? "Season Approver" : "Captain";
   if (captainOnly && teamIds.length !== 1) {
-    clearBuilder(teamIds.length ? "Your Captain account is linked to multiple teams. Ask the Super Admin to correct the season assignment." : "Your Captain account is not linked to a Fall 2026 team. Ask the Super Admin to assign your Player ID as the team's captain.");
+    clearBuilder(teamIds.length ? "Your Captain account is linked to multiple teams. Ask the Super Admin to correct the season assignment." : "Your Captain account is not linked to an active-season team. Ask the Super Admin to assign your Player ID as the team's captain.");
     return;
   }
   status("Loaded " + (state.season.name || seasonId) + ": " + state.teams.length + " teams · " + state.matchups.length + " matchups · " + state.assignments.length + " roster assignments. Select a week.");
@@ -170,9 +211,12 @@ async function resolveContext() {
   const lineupData = lineup.exists() ? lineup.data() : null;
   renderLines(lineupData?.lines || [], lockedLineupStatus(lineupData?.status));
   submissionConfirmation(matchup, teamId, String(lineupData?.status || "").toLowerCase() === "submitted");
-  status(lockedLineupStatus(lineupData?.status)
+  const currentStatus = String(lineupData?.status || "").toLowerCase();
+  status(currentStatus === "approved"
     ? "Lineup approved. It is shown read-only and cannot be changed."
-    : String(lineupData?.status || "").toLowerCase() === "rejected"
+    : currentStatus === "submitted"
+      ? "Lineup submitted and sealed while it awaits approval."
+      : currentStatus === "rejected"
       ? "Lineup rejected: " + (lineupData.rejectionReason || "Changes are required before resubmission.") + " Update, validate, and resubmit it."
       : "Status: " + (lineupData ? lineupData.status : "New draft") + ".");
 }
@@ -189,10 +233,16 @@ function renderLines(existing, readOnly = false) {
     const first = document.createElement("select"); first.dataset.player = "1";
     const second = document.createElement("select"); second.dataset.player = "2";
     [first, second].forEach((select, playerIndex) => {
-      setOptions(select, "Select player", roster.map(item => ({ value: item.playerId, label: "R" + item.rankNumber + " · " + (item.playerNameSnapshot || item.playerId) })));
+      setOptions(select, "Select player", roster.map(item => ({ value: item.playerId, label: rosterPlayerLabel(item) })));
       const saved = existing[index] && existing[index][playerIndex === 0 ? "player1Id" : "player2Id"];
       const savedName = existing[index] && existing[index][playerIndex === 0 ? "player1Name" : "player2Name"];
-      if (saved && ![...select.options].some(item => item.value === saved)) select.appendChild(option(saved, savedName || saved));
+      if (saved && ![...select.options].some(item => item.value === saved)) {
+        const savedRank = existing[index]?.[playerIndex === 0 ? "player1Rank" : "player2Rank"];
+        select.appendChild(option(
+          saved,
+          formattedPlayerLabel(saved, savedRank, state?.players?.get(saved)?.displayName, savedName),
+        ));
+      }
       if (saved) select.value = saved;
       select.disabled = readOnly;
       select.addEventListener("change", () => { validation = null; submissionConfirmation(null, "", false); byId("submitLineup").disabled = true; updateSor(); });
@@ -211,7 +261,7 @@ function lines() {
   return [...byId("lineupRows").querySelectorAll(".lineup-row")].map((row, index) => {
     const values = [...row.querySelectorAll("select")].map(item => item.value);
     const first = roster.get(values[0]); const second = roster.get(values[1]);
-    return { lineNumber: index + 1, player1Id: values[0], player2Id: values[1], player1Name: first ? first.playerNameSnapshot : "", player2Name: second ? second.playerNameSnapshot : "", player1Rank: Number(first ? first.rankNumber : 0), player2Rank: Number(second ? second.rankNumber : 0), sor: Number(first ? first.rankNumber : 0) + Number(second ? second.rankNumber : 0) };
+    return { lineNumber: index + 1, player1Id: values[0], player2Id: values[1], player1Name: first ? rosterPlayerName(first) : "", player2Name: second ? rosterPlayerName(second) : "", player1Rank: Number(first ? first.rankNumber : 0), player2Rank: Number(second ? second.rankNumber : 0), sor: Number(first ? first.rankNumber : 0) + Number(second ? second.rankNumber : 0) };
   });
 }
 function updateSor() { lines().forEach((line, index) => { byId("lineupRows").querySelectorAll("[data-sor]")[index].textContent = line.sor || "—"; }); }
@@ -238,26 +288,51 @@ async function save(nextStatus) {
   const selectedIds = selectedLines.flatMap(line => [line.player1Id, line.player2Id]);
   const canonicalPlayers = await validatePlayerIds(selectedIds);
   selectedLines.forEach(line => {
-    line.player1Name = canonicalPlayers.get(line.player1Id).displayName;
-    line.player2Name = canonicalPlayers.get(line.player2Id).displayName;
+    const rosterById = new Map(activeRoster(teamId).map((item) => [item.playerId, item]));
+    line.player1Name = resolvedPlayerName(
+      line.player1Id,
+      canonicalPlayers.get(line.player1Id)?.displayName,
+      rosterById.get(line.player1Id)?.playerNameSnapshot,
+      line.player1Name,
+    );
+    line.player2Name = resolvedPlayerName(
+      line.player2Id,
+      canonicalPlayers.get(line.player2Id)?.displayName,
+      rosterById.get(line.player2Id)?.playerNameSnapshot,
+      line.player2Name,
+    );
   });
+  if (nextStatus === "submitted") {
+    status("Submitting and validating the lineup in a secure Firestore transaction...");
+    const result = await submitTeamLineup({
+      seasonId: state.seasonId,
+      matchupId: matchup.matchupId,
+      teamId,
+      ruleVersionId: state.season.activeRuleVersionId || "v1",
+      lines: selectedLines,
+      operationId: newWorkflowOperationId("submit"),
+    });
+    const side = matchup.homeTeamId === teamId ? "home" : "away";
+    matchup[`${side}LineupStatus`] = "submitted";
+    matchup[`${side}LineupRevisionNumber`] = result.revisionNumber;
+    matchup.lineupApprovalStatus = result.lineupApprovalStatus;
+    byId("submitLineup").disabled = true;
+    submissionConfirmation(matchup, teamId, true);
+    status(`Lineup revision ${result.revisionNumber} submitted and pending approval.`);
+    await resolveContext();
+    return;
+  }
   const lineupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineups", teamId);
   const matchupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId);
   await runTransaction(db, async transaction => {
     const current = await transaction.get(lineupRef);
     if (current.exists() && lockedLineupStatus(current.data().status)) throw new Error("This lineup has been approved and cannot be changed.");
-    transaction.set(lineupRef, { seasonId: state.seasonId, matchupId: matchup.matchupId, teamId, status: nextStatus, revisionNumber: Number(current.data() && current.data().revisionNumber || 0) + 1, ruleVersionId: state.season.activeRuleVersionId || "v1", lines: selectedLines, validation: nextStatus === "draft" ? null : validation, submittedByUid: nextStatus === "submitted" ? user.uid : current.data() && current.data().submittedByUid || null, submittedAt: nextStatus === "submitted" ? serverTimestamp() : current.data() && current.data().submittedAt || null, rejectionReason: null, rejectedByUid: null, rejectedAt: null, updatedByUid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
+    transaction.set(lineupRef, { seasonId: state.seasonId, matchupId: matchup.matchupId, teamId, status: "draft", revisionNumber: Number(current.data() && current.data().revisionNumber || 0), ruleVersionId: state.season.activeRuleVersionId || "v1", lines: selectedLines, validation: null, submittedByUid: current.data() && current.data().submittedByUid || null, submittedAt: current.data() && current.data().submittedAt || null, rejectionReason: null, rejectedByUid: null, rejectedAt: null, updatedByUid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
     const lineupStatusField = matchup.homeTeamId === teamId ? "homeLineupStatus" : "awayLineupStatus";
-    transaction.update(matchupRef, { [lineupStatusField]: nextStatus === "submitted" ? "submitted" : "draft", updatedAt: serverTimestamp() });
+    transaction.update(matchupRef, { [lineupStatusField]: "pendingSubmission", updatedAt: serverTimestamp() });
   });
-  if (nextStatus === "submitted") {
-    byId("submitLineup").disabled = true;
-    submissionConfirmation(matchup, teamId, true);
-    status("Lineup submitted and pending approval.");
-  } else {
-    submissionConfirmation(null, "", false);
-    status("Draft lineup saved.");
-  }
+  submissionConfirmation(null, "", false);
+  status("Draft lineup saved.");
 }
 
 byId("lineupWeek").addEventListener("change", () => resolveContext().catch(error => status(error.message)));
@@ -267,5 +342,5 @@ byId("saveDraft").addEventListener("click", () => save("draft").catch(error => s
 byId("submitLineup").addEventListener("click", () => save("submitted").catch(error => status(error.message)));
 onAuthStateChanged(auth, user => {
   if (!user) { byId("lineupRoleBadge").textContent = "Sign in required"; byId("lineupSeason").replaceChildren(option("", "Sign in required")); status("Sign in to load active-season lineup data."); return; }
-  load(user).catch(error => { byId("lineupRoleBadge").textContent = "Load failed"; byId("lineupSeason").replaceChildren(option("", "Firebase load failed")); status("Unable to load lineup data: " + error.message); });
+  load(user).catch(error => { byId("lineupRoleBadge").textContent = "Load failed"; byId("lineupSeason").replaceChildren(option("", "Season load failed")); status("Unable to load lineup data: " + error.message); });
 });

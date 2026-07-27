@@ -14,9 +14,12 @@
       ".git/**",
       ".firebase",
       ".firebase/**",
+      "functions",
+      "functions/**",
       "**/.*",
       "**/node_modules/**",
-      "scripts/**",
+      "output/**",
+      "tmp/**",
       "outputs/**",
       ".artifact_runtime/**"
     ],

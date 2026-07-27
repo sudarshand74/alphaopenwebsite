@@ -1,7 +1,7 @@
 import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {
-  collection, doc, getDoc, getDocs, getFirestore, runTransaction,
+  collection, deleteField, doc, getDoc, getDocs, getFirestore, runTransaction,
   serverTimestamp, setDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
@@ -23,11 +23,6 @@ const normalizeEmail = value => String(value || "").trim().toLowerCase();
 const parseList = value => Array.isArray(value) ? value : [];
 let auditState = null;
 let auditRunning = false;
-let auditReadOnly = false;
-const RETIRED_PLAYER_FIELDS = new Set([
-  "displayName", "photoUrl", "publicProfileEnabled", "globalScore",
-  "emergencyContact", "accountStatus"
-]);
 
 function isSuperAdmin() {
   const authorization = window.alphaOpenAuthorization;
@@ -45,80 +40,6 @@ function issue(type, severity, title, detail, context = {}, repair = null) {
 async function readCollection(path, ...segments) {
   const snapshot = await getDocs(collection(db, path, ...segments));
   return snapshot.docs.map(item => ({ id: item.id, ref: item.ref, ...item.data() }));
-}
-
-function canonicalPlayerRecord(playerId, privateRecord) {
-  return Object.fromEntries(Object.entries({
-    ...privateRecord,
-    playerId,
-    fullName: privateRecord.fullName ||
-      [privateRecord.firstName, privateRecord.lastName].filter(Boolean).join(" "),
-    status: privateRecord.status || "active"
-  }).filter(([key]) => key !== "id" && key !== "ref" && !RETIRED_PLAYER_FIELDS.has(key)));
-}
-
-async function consolidatePlayerMaster() {
-  if (!isSuperAdmin()) return;
-  const button = $("#consolidatePlayerMaster");
-  const summary = $("#identityAuditSummary");
-  button.disabled = true;
-  summary.innerHTML = "<b>Validating Player Master…</b><span>No records have changed.</span>";
-  try {
-    const [players, privatePlayers, emailIndexes] = await Promise.all([
-      readCollection("players"), readCollection("players"), readCollection("playerEmailIndex")
-    ]);
-    const playersById = new Map(players.map(record => [record.id, record]));
-    const privateById = new Map(privatePlayers.map(record => [record.id, record]));
-    const indexesByPlayerId = new Map(emailIndexes.map(record => [record.playerId, record]));
-    const errors = [];
-    if (players.length !== privatePlayers.length)
-      errors.push(`Player Master read counts differ: ${players.length} / ${privatePlayers.length}.`);
-    players.forEach(record => {
-      if (!privateById.has(record.id)) errors.push(`${record.id} is missing from Player Master.`);
-    });
-    privatePlayers.forEach(record => {
-      const email = normalizeEmail(record.emailNormalized);
-      const index = indexesByPlayerId.get(record.id);
-      if (!playersById.has(record.id)) errors.push(`${record.id} is missing from players.`);
-      if (!email) errors.push(`${record.id} has no normalized email.`);
-      if (!index || normalizeEmail(index.emailNormalized) !== email)
-        errors.push(`${record.id} does not match playerEmailIndex.`);
-    });
-    const uniqueEmails = new Set(privatePlayers.map(record => normalizeEmail(record.emailNormalized)));
-    if (uniqueEmails.size !== privatePlayers.length) errors.push("Player Master contains duplicate emails.");
-    if (errors.length) throw new Error(`Migration stopped before writing: ${errors.slice(0, 8).join(" ")}`);
-    if (!window.confirm(
-      `Consolidate ${privatePlayers.length} verified player records into players/{playerId}?\n\n` +
-      "This copies the private Player Master fields, retains accountUid, and removes retired fields. " +
-      "The source collection is not deleted by this step."
-    )) return;
-    const batch = writeBatch(db);
-    privatePlayers.forEach(record => {
-      batch.set(doc(db, "players", record.id), {
-        ...canonicalPlayerRecord(record.id, record),
-        migratedFromPlayerPrivateAt: serverTimestamp(),
-        migratedByUid: auth.currentUser.uid
-      });
-    });
-    await batch.commit();
-    const verifiedPlayers = await readCollection("players");
-    const verifiedById = new Map(verifiedPlayers.map(record => [record.id, record]));
-    const verificationErrors = privatePlayers.filter(record => {
-      const target = verifiedById.get(record.id);
-      return !target ||
-        normalizeEmail(target.emailNormalized) !== normalizeEmail(record.emailNormalized) ||
-        target.fullName !== canonicalPlayerRecord(record.id, record).fullName ||
-        [...RETIRED_PLAYER_FIELDS].some(field => Object.prototype.hasOwnProperty.call(target, field));
-    });
-    if (verificationErrors.length)
-      throw new Error(`Write completed, but verification failed for ${verificationErrors.slice(0, 8).map(record => record.id).join(", ")}.`);
-    summary.innerHTML = `<b>${verifiedPlayers.length} canonical player records verified</b><span>Player data is consolidated in players/{playerId}.</span>`;
-  } catch (error) {
-    console.error("Player Master consolidation failed", error);
-    summary.innerHTML = `<b>Player Master consolidation stopped</b><span>${esc(error.message || "No records were changed.")} Session UID: ${esc(auth.currentUser?.uid || "unavailable")}.</span>`;
-  } finally {
-    button.disabled = false;
-  }
 }
 
 const normalizeName = value => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -139,19 +60,19 @@ async function collectLineIdentityUpdates(oldPlayerId, newPlayerId, expectedName
   const seasons = await readCollection("seasons");
   const updates = [];
   for (const season of seasons) {
-    const matchups = await readCollection("seasons", season.id, "matchups");
-    for (const matchup of matchups) {
-      const records = await readCollection("seasons", season.id, "matchups", matchup.id, "lineMatches");
-      records.forEach(record => {
-        const home = correctLinePlayer(record.homePlayers, oldPlayerId, newPlayerId, expectedName);
-        const away = correctLinePlayer(record.awayPlayers, oldPlayerId, newPlayerId, expectedName);
-        if (home.changed || away.changed)
-          updates.push({
-            ref: record.ref,
-            data: { homePlayers: home.players, awayPlayers: away.players }
-          });
-      });
-    }
+      const matchups = await readCollection("seasons", season.id, "matchups");
+      for (const matchup of matchups) {
+        const records = await readCollection("seasons", season.id, "matchups", matchup.id, "lineMatches");
+        records.forEach(record => {
+          const home = correctLinePlayer(record.homePlayers, oldPlayerId, newPlayerId, expectedName);
+          const away = correctLinePlayer(record.awayPlayers, oldPlayerId, newPlayerId, expectedName);
+          if (home.changed || away.changed)
+            updates.push({
+              ref: record.ref,
+              data: { homePlayers: home.players, awayPlayers: away.players }
+            });
+        });
+      }
   }
   return updates;
 }
@@ -171,8 +92,8 @@ async function reconcileHistoricalPlayerId(event) {
   message.textContent = "Checking Player Master and season references…";
   try {
     const [oldMaster, newMaster] = await Promise.all([
-      getDoc(doc(db, "players", oldPlayerId)),
-      getDoc(doc(db, "players", newPlayerId))
+      getDoc(doc(db, "playerPrivate", oldPlayerId)),
+      getDoc(doc(db, "playerPrivate", newPlayerId))
     ]);
     if (!newMaster.exists()) throw new Error(`${newPlayerId} does not exist in Player Master.`);
     const canonicalName = newMaster.data()?.fullName ||
@@ -188,7 +109,7 @@ async function reconcileHistoricalPlayerId(event) {
     if (!window.confirm(
       `Correct line-player entries where ${oldPlayerId} is paired with the name ${newName}?\n\n` +
       `Those entries will use ${newPlayerId}. ${oldPlayerId} remains assigned to ${oldName}. ` +
-      `${updates.length} canonical line records will be updated. Scores and points will not change.`
+      `${updates.length} operational/public line records will be updated. Scores and points will not change.`
     )) {
       message.textContent = "Historical Player ID reconciliation canceled.";
       return;
@@ -251,6 +172,11 @@ function rosterIdentityFields(record) {
   };
 }
 
+function rosterParityDiffers(operational, published) {
+  if (!published) return true;
+  return JSON.stringify(rosterIdentityFields(operational)) !== JSON.stringify(rosterIdentityFields(published));
+}
+
 function playerReferenceFinding(privateById, privatePlayers, playerId, storedName) {
   const master = privateById.get(playerId);
   const canonicalName = masterName(master);
@@ -289,8 +215,9 @@ async function readMatchupIdentityTree(root, seasonId) {
 }
 
 async function collectAudit() {
-  const [privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
+  const [players, privatePlayers, emailIndexes, users, links, registrations, seasons] = await Promise.all([
     readCollection("players"),
+    readCollection("playerPrivate"),
     readCollection("playerEmailIndex"),
     readCollection("users"),
     readCollection("playerAccountLinks"),
@@ -298,17 +225,17 @@ async function collectAudit() {
     readCollection("seasons")
   ]);
   const seasonTrees = await Promise.all(seasons.map(async season => {
-    const [members, teams, rosterAssignments, weeks, matchups] = await Promise.all([
+    const [members, teams, rosterAssignments, matchups] = await Promise.all([
       readCollection("seasons", season.id, "members"),
       readCollection("seasons", season.id, "teams"),
       readCollection("seasons", season.id, "rosterAssignments"),
-      readCollection("seasons", season.id, "weeks"),
       readMatchupIdentityTree("seasons", season.id)
     ]);
     return {
-      season, members, teams, rosterAssignments, weeks, matchups
+      season, members, teams, rosterAssignments, matchups
     };
   }));
+  const publicById = new Map(players.map(record => [record.id, record]));
   const privateById = new Map(privatePlayers.map(record => [record.id, record]));
   const indexByEmail = new Map(emailIndexes.map(record => [normalizeEmail(record.emailNormalized), record]));
   const userByUid = new Map(users.map(record => [record.id, record]));
@@ -322,16 +249,27 @@ async function collectAudit() {
   links.filter(record => record.status === "active").forEach(record => addMapList(linksByUid, record.uid, record));
 
   const issues = [];
-  const allPlayerIds = new Set(privateById.keys());
+  const allPlayerIds = new Set([...publicById.keys(), ...privateById.keys()]);
   allPlayerIds.forEach(playerId => {
+    const publicRecord = publicById.get(playerId);
     const privateRecord = privateById.get(playerId);
-    const obsoleteFields = ["globalScore", "emergencyContact", "accountStatus"]
-      .filter(field => Object.prototype.hasOwnProperty.call(privateRecord, field));
-    if (obsoleteFields.length)
-      issues.push(issue("PLAYER_OBSOLETE_FIELDS", "info",
-        `${playerId}: fields scheduled for migration`,
-        `Player Master still contains ${obsoleteFields.join(", ")}. The audit is read-only; no fields were removed.`,
-        { playerId, fields: obsoleteFields.join(",") }));
+    if (!privateRecord) {
+      issues.push(issue("PRIVATE_MISSING", "error", `${playerId}: private master missing`,
+        "The public Player Master record has no playerPrivate source record.", { playerId }));
+      return;
+    }
+    if (!publicRecord) {
+      issues.push(issue("PUBLIC_MISSING", "warning", `${playerId}: public profile missing`,
+        "The private master exists, but the players mirror is missing.", { playerId }, "syncPublicPlayer"));
+    } else {
+      const differs = String(publicRecord.displayName || "").trim() !== String(privateRecord.fullName || "").trim() ||
+        String(publicRecord.status || "") !== String(privateRecord.status || "") ||
+        publicRecord.playerId !== playerId;
+      if (differs)
+        issues.push(issue("PUBLIC_MISMATCH", "warning", `${playerId}: public profile differs`,
+          `Expected ${privateRecord.fullName || playerId} / ${privateRecord.status || "unknown"} from Player Master.`,
+          { playerId }, "syncPublicPlayer"));
+    }
     const email = normalizeEmail(privateRecord.emailNormalized);
     if (!email) {
       issues.push(issue("EMAIL_MISSING", "error", `${playerId}: email missing`,
@@ -395,9 +333,9 @@ async function collectAudit() {
       issues.push(issue("REGISTRATION_MISMATCH", "warning", `${playerId}: registration differs`,
         `registrationRequests/${user.id} does not identify ${playerId}.`,
         { uid: user.id, playerId }, userEmail === playerEmail && uniqueEmailUser ? "syncAccountTree" : null));
-    if (privateRecord.accountUid !== user.id)
+    if (privateRecord.accountUid !== user.id || privateRecord.accountStatus !== "active")
       issues.push(issue("PRIVATE_ACCOUNT_MISMATCH", "warning", `${playerId}: Player Master account link differs`,
-        `players/${playerId} stores ${privateRecord.accountUid || "no UID"}.`,
+        `playerPrivate/${playerId} stores ${privateRecord.accountUid || "no UID"} (${privateRecord.accountStatus || "no status"}).`,
         { uid: user.id, playerId }, userEmail === playerEmail && uniqueEmailUser ? "syncPrivateAccount" : null));
   });
 
@@ -416,37 +354,7 @@ async function collectAudit() {
       }
     });
     tree.teams.forEach(team => {
-      const captainIds = team.captainPlayerId
-        ? [team.captainPlayerId]
-        : parseList(team.captainPlayerIds);
-      if (captainIds.length > 1)
-        issues.push(issue("TEAM_MULTIPLE_CAPTAINS", "warning",
-          `${tree.season.id} · ${team.name || team.id}: multiple captain IDs`,
-          `${captainIds.join(", ")} are stored; the simplified schema permits one captainPlayerId.`,
-          { seasonId: tree.season.id, teamId: team.id }));
-      const legacyCaptainFields = ["captainPlayerIds", "captainUids", "captainNameSnapshot", "captainEmailsNormalized"]
-        .filter(field => Object.prototype.hasOwnProperty.call(team, field));
-      if (legacyCaptainFields.length)
-        issues.push(issue("TEAM_LEGACY_CAPTAIN_FIELDS", "info",
-          `${tree.season.id} · ${team.name || team.id}: legacy captain fields`,
-          `${legacyCaptainFields.join(", ")} will be replaced by captainPlayerId after reconciliation.`,
-          { seasonId: tree.season.id, teamId: team.id, fields: legacyCaptainFields.join(",") }));
-      captainIds.forEach(playerId => {
-        const master = privateById.get(playerId);
-        if (!master) {
-          issues.push(issue("CAPTAIN_UNKNOWN_PLAYER", "error",
-            `${tree.season.id} · ${team.name || team.id}: captain is missing from Player Master`,
-            `${playerId} does not exist in players.`,
-            { seasonId: tree.season.id, teamId: team.id, playerId }));
-          return;
-        }
-        const storedName = String(team.captainNameSnapshot || "").trim();
-        const canonicalName = masterName(master);
-        if (storedName && normalizeName(storedName) !== normalizeName(canonicalName))
-          issues.push(issue("CAPTAIN_PLAYER_ID_NAME_CONFLICT", "error",
-            `${tree.season.id} · ${team.name || team.id}: captain Player ID/name conflict`,
-            `${playerId} belongs to ${canonicalName}; the team snapshot says ${storedName}.`,
-            { seasonId: tree.season.id, teamId: team.id, playerId }));
+      parseList(team.captainPlayerIds).forEach(playerId => {
         const link = linkByPlayer.get(playerId);
         if (!link || link.status !== "active" || !link.uid || !userByUid.has(link.uid)) {
           issues.push(issue("CAPTAIN_ACCOUNT_MISSING", "warning",
@@ -456,10 +364,9 @@ async function collectAudit() {
           return;
         }
         const member = memberByUid.get(link.uid), roles = parseList(member?.roles);
-        const teamIds = parseList(member?.teamIds), teamUids = parseList(team.captainUids);
+        const teamIds = parseList(member?.teamIds);
         if (!member || member.status !== "active" || member.playerId !== playerId ||
-          !roles.includes("captain") || !roles.includes("player") || !teamIds.includes(team.id) ||
-          !teamUids.includes(link.uid))
+          !roles.includes("captain") || !roles.includes("player") || !teamIds.includes(team.id))
           issues.push(issue("CAPTAIN_MEMBERSHIP_MISMATCH", "warning",
             `${tree.season.id} · ${team.name || team.id}: captain access incomplete`,
             `${playerId} is linked to ${link.uid}, but the team/member authorization trees differ.`,
@@ -584,7 +491,7 @@ async function collectAudit() {
   return {
     scannedAt: new Date(),
     counts: {
-      players: privatePlayers.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
+      players: players.length, privatePlayers: privatePlayers.length, emailIndexes: emailIndexes.length,
       users: users.length, accountLinks: links.length, seasons: seasons.length,
       teams: seasonTrees.reduce((sum, tree) => sum + tree.teams.length, 0),
       members: seasonTrees.reduce((sum, tree) => sum + tree.members.length, 0),
@@ -593,9 +500,25 @@ async function collectAudit() {
       lineMatches: seasonTrees.reduce((sum, tree) => sum + tree.matchups.reduce((inner, matchup) => inner + matchup.lineMatches.length, 0), 0)
     },
     issues,
-    maps: { privateById, userByUid, linkByPlayer, registrationByUid },
+    maps: { publicById, privateById, userByUid, linkByPlayer, registrationByUid },
     seasonTrees
   };
+}
+
+async function syncPublicPlayer(context) {
+  const record = auditState.maps.privateById.get(context.playerId);
+  if (!record) throw new Error("Private Player Master record no longer exists.");
+  await runTransaction(db, async transaction => {
+    const target = doc(db, "players", context.playerId);
+    const snapshot = await transaction.get(target);
+    transaction.set(target, {
+      playerId: context.playerId,
+      displayName: record.fullName || [record.firstName, record.lastName].filter(Boolean).join(" "),
+      status: record.status || "active",
+      publicProfileEnabled: snapshot.exists() ? snapshot.data().publicProfileEnabled === true : false,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  });
 }
 
 async function syncEmailIndex(context) {
@@ -622,7 +545,7 @@ async function syncAccountTree(context) {
     throw new Error("Login email does not match Player Master. Use the email-transfer workflow.");
   const seasons = auditState.seasonTrees.map(tree => tree.season.id);
   const userRef = doc(db, "users", context.uid), linkRef = doc(db, "playerAccountLinks", context.playerId);
-  const privateRef = doc(db, "players", context.playerId);
+  const privateRef = doc(db, "playerPrivate", context.playerId);
   const registrationRef = doc(db, "registrationRequests", context.uid);
   await runTransaction(db, async transaction => {
     const [userSnapshot, linkSnapshot, registrationSnapshot, ...memberSnapshots] = await Promise.all([
@@ -644,7 +567,7 @@ async function syncAccountTree(context) {
       revokedByUid: null, revokedAt: null, reason: "Reconciled by Super Admin"
     }, { merge: true });
     transaction.set(privateRef, {
-      accountUid: context.uid,
+      accountUid: context.uid, accountStatus: "active",
       updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
     }, { merge: true });
     if (registrationSnapshot.exists())
@@ -669,13 +592,14 @@ async function syncPrivateAccount(context) {
   if (!link || link.status !== "active" || link.uid !== context.uid)
     throw new Error("The active player account link does not match this UID. Reconcile the account link first.");
   await runTransaction(db, async transaction => {
-    const privateRef = doc(db, "players", context.playerId);
+    const privateRef = doc(db, "playerPrivate", context.playerId);
     const snapshot = await transaction.get(privateRef);
     if (!snapshot.exists()) throw new Error("Player Master record no longer exists.");
     if (normalizeEmail(snapshot.data().emailNormalized) !== normalizeEmail(user.email))
       throw new Error("Player Master email changed; repair stopped.");
     transaction.set(privateRef, {
       accountUid: context.uid,
+      accountStatus: "active",
       updatedByUid: auth.currentUser.uid,
       updatedAt: serverTimestamp()
     }, { merge: true });
@@ -685,7 +609,7 @@ async function syncPrivateAccount(context) {
 async function syncMembershipIdentity(context) {
   const memberRef = doc(db, "seasons", context.seasonId, "members", context.uid);
   const userRef = doc(db, "users", context.uid);
-  const privateRef = doc(db, "players", context.playerId);
+  const privateRef = doc(db, "playerPrivate", context.playerId);
   const linkRef = doc(db, "playerAccountLinks", context.playerId);
   await runTransaction(db, async transaction => {
     const [memberSnapshot, userSnapshot, privateSnapshot, linkSnapshot] = await Promise.all([
@@ -729,8 +653,10 @@ async function syncCaptainAccess(context) {
     assignedByUid: auth.currentUser.uid, assignedAt: serverTimestamp(), updatedAt: serverTimestamp()
   }, { merge: true });
   batch.set(teamRef, {
-    captainPlayerIds: [context.playerId], captainUids: [link.uid],
+    captainPlayerIds: [context.playerId],
     captainNameSnapshot: user.displayName || team.captainNameSnapshot || context.playerId,
+    captainUids: deleteField(),
+    captainEmailsNormalized: deleteField(),
     updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
   }, { merge: true });
   await batch.commit();
@@ -821,7 +747,7 @@ async function syncLineMatchPlayerIdentity(context) {
 }
 
 const repairs = {
-  syncEmailIndex, syncAccountTree, syncPrivateAccount,
+  syncPublicPlayer, syncEmailIndex, syncAccountTree, syncPrivateAccount,
   syncMembershipIdentity, syncCaptainAccess, syncRosterIdentity,
   syncLineupPlayerIdentity, syncLineMatchPlayerIdentity
 };
@@ -832,24 +758,22 @@ function renderAudit() {
   const errors = auditState.issues.filter(item => item.severity === "error").length;
   const warnings = auditState.issues.filter(item => item.severity === "warning").length;
   summary.innerHTML = `<b>${auditState.issues.length ? `${errors} conflicts · ${warnings} warnings` : "All checked identity trees are synchronized"}</b>
-    <span>${auditState.counts.players} player profiles · ${auditState.counts.privatePlayers} player masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.seasons} seasons · ${auditState.counts.teams} teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
-    <small>Scanned ${esc(auditState.scannedAt.toLocaleString())}. No data was changed by the audit.${auditReadOnly ? " Migration-readiness mode disables every repair action." : ""}</small>`;
+    <span>${auditState.counts.players} public players · ${auditState.counts.privatePlayers} private masters · ${auditState.counts.emailIndexes} email indexes · ${auditState.counts.users} users · ${auditState.counts.teams} season teams · ${auditState.counts.rosterAssignments} roster rows · ${auditState.counts.lineups} lineups · ${auditState.counts.lineMatches} line matches</span>
+    <small>Scanned ${esc(auditState.scannedAt.toLocaleString())}. No data was changed by the audit.</small>`;
   panel.innerHTML = auditState.issues.length ? auditState.issues.map(item => `
     <article class="identity-audit-row ${item.severity}">
       <div><span class="badge ${item.severity === "error" ? "red" : "orange"}">${esc(item.severity)}</span>
         <b>${esc(item.title)}</b><p>${esc(item.detail)}</p></div>
-      ${item.repair && !auditReadOnly ? `<button type="button" class="secondary compact-button" data-identity-repair="${esc(item.id)}">Repair</button>` : `<span class="identity-manual-review">${auditReadOnly ? "Read-only finding" : "Manual review"}</span>`}
+      ${item.repair ? `<button type="button" class="secondary compact-button" data-identity-repair="${esc(item.id)}">Repair</button>` : `<span class="identity-manual-review">Manual review</span>`}
     </article>`).join("") :
-    '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, captain, roster, lineup, or line-match conflicts were found.</p></div>';
+    '<div class="empty-state compact"><b>Identity trees are synchronized</b><p>No Player Master, email-index, account-link, registration, membership, captain, roster, lineup, line-match, or public-parity conflicts were found.</p></div>';
 }
 
-async function runAudit(options = {}) {
+async function runAudit() {
   if (auditRunning || !isSuperAdmin()) return;
   auditRunning = true;
-  auditReadOnly = options.readOnly === true;
-  const buttons = [$("#runIdentityAudit"), $("#runMigrationReadinessAudit")].filter(Boolean);
-  const panel = $("#identityAuditResults");
-  buttons.forEach(button => { button.disabled = true; });
+  const button = $("#runIdentityAudit"), panel = $("#identityAuditResults");
+  button.disabled = true;
   panel.innerHTML = '<div class="empty-state compact"><b>Scanning live Firebase identity trees…</b><p>This is one controlled read of each required collection.</p></div>';
   try {
     auditState = await collectAudit();
@@ -858,7 +782,7 @@ async function runAudit(options = {}) {
     panel.innerHTML = `<div class="empty-state compact"><b>Identity audit failed</b><p>${esc(error.message || "Refresh and try again.")}</p></div>`;
   } finally {
     auditRunning = false;
-    buttons.forEach(button => { button.disabled = false; });
+    button.disabled = false;
   }
 }
 
@@ -878,8 +802,7 @@ async function repairIssue(issueId) {
   }
 }
 
-$("#runIdentityAudit")?.addEventListener("click", () => runAudit());
-$("#runMigrationReadinessAudit")?.addEventListener("click", () => runAudit({ readOnly: true }));
+$("#runIdentityAudit")?.addEventListener("click", runAudit);
 $("#historicalPlayerIdForm")?.addEventListener("submit", reconcileHistoricalPlayerId);
 $("#identityAuditResults")?.addEventListener("click", event => {
   const button = event.target.closest("[data-identity-repair]");

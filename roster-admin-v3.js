@@ -10,7 +10,8 @@ import {
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=4";
-import { canonicalPlayerName, validatePlayerIds } from "./player-identity.js?v=1";
+import { formattedPlayerLabel, resolvedPlayerName, validatePlayerIds } from "./player-identity.js?v=5";
+import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
 
 const ADMIN = "sudarshandesai74@gmail.com";
 const $ = (value) => document.querySelector(value),
@@ -36,23 +37,51 @@ const isAdmin = () =>
       window.alphaOpenAuthorization?.access?.includes("ec")),
   );
 const nameOf = (player) =>
-  player?.displayName ||
-  player?.fullName ||
-  `${player?.firstName || ""} ${player?.lastName || ""}`.trim() ||
-  player?.playerNameSnapshot ||
-  player?.playerId ||
-  "Name unavailable";
+  resolvedPlayerName(
+    player?.playerId,
+    player?.fullName,
+    `${player?.firstName || ""} ${player?.lastName || ""}`.trim(),
+    player?.displayName,
+    player?.playerNameSnapshot,
+  ) || "Name unavailable";
+const labelOf = (playerId, rankNumber, ...candidates) =>
+  formattedPlayerLabel(
+    playerId,
+    rankNumber,
+    nameOf(playerById.get(playerId)),
+    ...candidates,
+  );
 const canonicalId = (seasonId, teamId, rank) =>
   `${seasonId}-${teamId.replace(`${seasonId}-`, "")}-R${rank}`;
-const priority = (item) =>
-  (item.sourceOfTruth === "Spring 2026 match line snapshots" ? 4 : 0) +
-  (item.reconciledAt ? 2 : 0) +
-  (item.updatedAt ? 1 : 0);
+const timestampValue = (value) => {
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (Number.isFinite(Number(value?.seconds))) return Number(value.seconds) * 1000;
+  const parsed = Date.parse(value || "");
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+const assignmentTime = (item) =>
+  Math.max(
+    timestampValue(item.updatedAt),
+    timestampValue(item.reconciledAt),
+    timestampValue(item.createdAt),
+    timestampValue(item.effectiveFrom),
+  );
+const isNewerAssignment = (candidate, current) =>
+  assignmentTime(candidate) > assignmentTime(current) ||
+  (assignmentTime(candidate) === assignmentTime(current) &&
+    String(candidate.assignmentId || "").localeCompare(String(current.assignmentId || "")) > 0);
 let players = [],
   playerById = new Map(),
   teamsById = new Map(),
   assignmentsById = new Map(),
+  activeAssignmentsByRank = new Map(),
+  historyAssignmentsByRank = new Map(),
+  activeSeasonIds = new Set(),
   xlsxModule;
+
+function isActiveSeasonSelection() {
+  return Boolean(seasonSelect.value && activeSeasonIds.has(seasonSelect.value));
+}
 
 function excelValue(value) {
   if (value == null) return "";
@@ -75,7 +104,10 @@ function appendSheet(XLSX, workbook, name, rows) {
 }
 
 async function exportTeamRoster() {
-  if (!isAdmin() || !seasonSelect.value) return;
+  if (!isAdmin() || !isActiveSeasonSelection()) {
+    statusBox.textContent = "Select an active season before exporting its team roster.";
+    return;
+  }
   const button = $("#exportTeamRoster"), seasonId = seasonSelect.value;
   button.disabled = true;
   statusBox.textContent = "Preparing complete team roster workbook...";
@@ -88,7 +120,7 @@ async function exportTeamRoster() {
       (xlsxModule ||= import("https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs")),
     ]);
     const teams = teamSnapshot.docs.map((item) => ({ teamId: item.id, ...item.data() })),
-      assignments = assignmentSnapshot.docs.map((item) => ({ assignmentId: item.id, ...item.data() })),
+      assignments = assignmentSnapshot.docs.map((item) => ({ ...item.data(), assignmentId: item.id })),
       slots = slotSnapshot.docs.map((item) => ({ rosterSlotId: item.id, ...item.data() })),
       allPlayers = playerSnapshot.docs.map((item) => ({ playerId: item.id, ...item.data() })),
       teamMap = new Map(teams.map((item) => [item.teamId, item])),
@@ -113,12 +145,12 @@ async function exportTeamRoster() {
           ...prefixed(slot, "Slot"),
           ...prefixed(player, "Player"),
         };
-      });
+    });
     const captainRows = teams.flatMap((team) => {
-      const playerIds = team.captainPlayerIds || [], uids = team.captainUids || [], count = Math.max(playerIds.length, uids.length, team.captainNameSnapshot ? 1 : 0);
+      const playerIds = team.captainPlayerIds || [], count = Math.max(playerIds.length, team.captainNameSnapshot ? 1 : 0);
       return Array.from({ length: count }, (_, index) => {
         const playerId = playerIds[index] || "", player = playerMap.get(playerId) || {};
-        return { "Season ID": seasonId, "Team ID": team.teamId, "Team Name": team.name || "", "Captain Player ID": playerId, "Captain UID": uids[index] || "", "Captain Name": playerId ? nameOf(player) : team.captainNameSnapshot || "", ...prefixed(player, "Player") };
+        return { "Season ID": seasonId, "Team ID": team.teamId, "Team Name": team.name || "", "Captain Player ID": playerId, "Captain Name": playerId ? nameOf(player) : team.captainNameSnapshot || "", ...prefixed(player, "Player") };
       });
     });
     const workbook = XLSX.utils.book_new();
@@ -163,16 +195,28 @@ async function loadPlayers() {
     players
       .map(
         (item) =>
-          `<option value="${esc(item.playerId)}">${esc(item.playerId)} · ${esc(nameOf(item))}</option>`,
+          `<option value="${esc(item.playerId)}">${esc(formattedPlayerLabel(item.playerId, null, nameOf(item)))}</option>`,
       )
       .join("");
 }
 
 function historyHtml(history) {
-  return `<div class="roster-replaced-players">${history.length ? history.map((item) => `<div class="roster-replaced-player">${esc(item.playerId || "Unknown ID")} · ${esc(nameOf(playerById.get(item.playerId)) || item.playerNameSnapshot)}</div>`).join("") : '<span class="roster-no-history">None</span>'}</div>`;
+  const unique = new Map();
+  history.forEach((item) => {
+    const key = item.playerId || item.playerNameSnapshot || item.assignmentId;
+    const current = unique.get(key);
+    if (!current || isNewerAssignment(item, current)) unique.set(key, item);
+  });
+  const rows = [...unique.values()];
+  return `<div class="roster-replaced-players">${rows.length ? rows.map((item) => `<div class="roster-replaced-player">${esc(labelOf(item.playerId, null, item.playerNameSnapshot))}</div>`).join("") : '<span class="roster-no-history">None</span>'}</div>`;
 }
 async function loadRoster() {
-  if (!isAdmin() || !seasonSelect.value) return;
+  if (!isAdmin()) return;
+  if (!isActiveSeasonSelection()) {
+    panel.innerHTML = '<div class="empty-state compact"><b>No active season available</b><p>Activate a season in Season Management before managing team rosters.</p></div>';
+    statusBox.textContent = "Manage Team Roster only loads active-season data.";
+    return;
+  }
   panel.innerHTML = '<p class="muted">Loading Firebase team rosters...</p>';
   try {
     await loadPlayers();
@@ -188,17 +232,22 @@ async function loadRoster() {
       ]),
     );
     const all = assignmentSnapshot.docs.map((item) => ({
-        assignmentId: item.id,
         ...item.data(),
+        assignmentId: item.id,
       })),
       active = all.filter((item) => item.status === "active"),
       history = all.filter((item) => item.status === "replaced"),
       activeByRank = new Map(),
       historyByRank = new Map();
+    activeAssignmentsByRank = new Map();
+    historyAssignmentsByRank = historyByRank;
     active.forEach((item) => {
       const key = `${item.teamId}|${Number(item.rankNumber)}`,
-        current = activeByRank.get(key);
-      if (!current || priority(item) > priority(current))
+        current = activeByRank.get(key),
+        list = activeAssignmentsByRank.get(key) || [];
+      list.push(item);
+      activeAssignmentsByRank.set(key, list);
+      if (!current || isNewerAssignment(item, current))
         activeByRank.set(key, item);
     });
     history.forEach((item) => {
@@ -226,7 +275,7 @@ async function loadRoster() {
                 status: "unassigned",
               };
             assignmentsById.set(id, item);
-            return `<div class="roster-admin-row"><span>R${rank}</span><div class="roster-current-player">${current ? `<b>${esc(current.playerId)} · ${esc(nameOf(playerById.get(current.playerId)) || current.playerNameSnapshot)}</b><small>Active player</small>` : `<b class="roster-empty-rank">No player assigned</b><small>Rank ${rank} is available</small>`}</div>${historyHtml((historyByRank.get(key) || []).sort((a, b) => String(a.replacedAt || a.assignmentId).localeCompare(String(b.replacedAt || b.assignmentId))))}<button type="button" class="secondary compact-button" data-manage-assignment="${esc(id)}">Manage rank</button></div>`;
+            return `<div class="roster-admin-row"><span>R${rank}</span><div class="roster-current-player">${current ? `<b>${esc(labelOf(current.playerId, null, current.playerNameSnapshot))}</b><small>Active player</small>` : `<b class="roster-empty-rank">No player assigned</b><small>Rank ${rank} is available</small>`}</div>${historyHtml((historyByRank.get(key) || []).sort((a, b) => String(a.replacedAt || a.assignmentId).localeCompare(String(b.replacedAt || b.assignmentId))))}<button type="button" class="secondary compact-button" data-manage-assignment="${esc(id)}">Manage rank</button></div>`;
           })
           .join("");
         return `<details class="roster-admin-team" ${index === 0 ? "open" : ""}><summary><div><b>${esc(team.name || team.teamId)}</b><small>Captain · ${esc(team.captainNameSnapshot || "Not recorded")}</small></div><span class="badge navy">14 ranks</span></summary><div><div class="roster-admin-row roster-admin-head"><span>Rank</span><span>Active Player ID &amp; Name</span><span>Replaced Player IDs &amp; Names</span><span>Action</span></div>${rows}</div></details>`;
@@ -263,15 +312,24 @@ function startAssignment(id) {
 form?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!isAdmin()) return;
+  if (!isActiveSeasonSelection()) {
+    $("#rosterReplacementMessage").textContent =
+      "This roster is no longer active. Refresh the season list before making changes.";
+    return;
+  }
   const assignment = assignmentsById.get($("#replacementAssignmentId").value),
     next = playerById.get(playerSelect.value),
     seasonId = seasonSelect.value;
   if (!assignment || !next) return;
   await validatePlayerIds([next.playerId]);
   const preserve = assignment.status === "active" && recordReplacement.checked,
-    nextName = await canonicalPlayerName(next.playerId),
+    nextName = nameOf(next),
     batch = writeBatch(db),
     id = canonicalId(seasonId, assignment.teamId, assignment.rankNumber),
+    rankKey = `${assignment.teamId}|${Number(assignment.rankNumber)}`,
+    rankActive = activeAssignmentsByRank.get(rankKey) || [assignment],
+    rankHistory = historyAssignmentsByRank.get(rankKey) || [],
+    historicalPlayerIds = new Set(rankHistory.map((item) => item.playerId).filter(Boolean)),
     data = {
       assignmentId: id,
       seasonId,
@@ -292,7 +350,33 @@ form?.addEventListener("submit", async (event) => {
       updatedAt: serverTimestamp(),
       updatedByUid: auth.currentUser.uid,
     };
-  if (preserve && assignment.playerId !== next.playerId) {
+  rankActive.forEach((item) => {
+    if (item.assignmentId === id) return;
+    const keepAsHistory =
+      preserve &&
+      item.playerId !== next.playerId &&
+      !historicalPlayerIds.has(item.playerId);
+    batch.set(
+      doc(db, "seasons", seasonId, "rosterAssignments", item.assignmentId),
+      {
+        status: keepAsHistory ? "replaced" : "revoked",
+        replacementPlayerId: next.playerId,
+        replacementPlayerNameSnapshot: nextName,
+        replacedAt: serverTimestamp(),
+        replacedByUid: auth.currentUser.uid,
+        updatedAt: serverTimestamp(),
+        updatedByUid: auth.currentUser.uid,
+      },
+      { merge: true },
+    );
+    if (keepAsHistory && item.playerId) historicalPlayerIds.add(item.playerId);
+  });
+  if (
+    preserve &&
+    assignment.playerId !== next.playerId &&
+    assignment.assignmentId === id &&
+    !historicalPlayerIds.has(assignment.playerId)
+  ) {
     const historyId = `${id}-H-${Date.now()}`,
       history = {
         seasonId,
@@ -321,6 +405,7 @@ form?.addEventListener("submit", async (event) => {
     await batch.commit();
     closeDialog();
     await loadRoster();
+    await publishPublicSeasonDashboard(seasonId);
   } catch (error) {
     $("#rosterReplacementMessage").textContent =
       error.message || "Roster save failed.";
@@ -330,30 +415,56 @@ form?.addEventListener("submit", async (event) => {
 });
 async function loadSeasons() {
   if (!isAdmin()) return;
-  const [snapshot, control] = await Promise.all([
-    getDocs(collection(db, "seasons")),
-    getDoc(doc(db, "systemConfig", "seasonControl")),
-  ]),
-    seasons = snapshot.docs
-      .map((item) => ({ seasonId: item.id, ...item.data() }))
-      .sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
-  seasonSelect.innerHTML = seasons
-    .map(
-      (item) =>
-        `<option value="${esc(item.seasonId)}">${esc(item.name || item.seasonId)}</option>`,
-    )
-    .join("");
-  const activeSeasonId = control.data()?.activeSeasonId || "";
-  if (seasons.some((item) => item.seasonId === activeSeasonId))
+  statusBox.textContent = "Loading the active season...";
+  try {
+    const control = await getDoc(doc(db, "systemConfig", "seasonControl"));
+    const activeSeasonId =
+      window.alphaOpenAuthorization?.activeSeasonId ||
+      control.data()?.activeSeasonId ||
+      "";
+    if (!activeSeasonId) throw new Error("No active season is configured.");
+    const snapshot = await getDoc(doc(db, "seasons", activeSeasonId));
+    if (
+      !snapshot.exists() ||
+      String(snapshot.data().status || "").toLowerCase() !== "active"
+    ) {
+      throw new Error("The configured season is not active.");
+    }
+    const season = {
+      seasonId: snapshot.id,
+      ...snapshot.data(),
+    };
+    activeSeasonIds = new Set([activeSeasonId]);
+    seasonSelect.innerHTML =
+      `<option value="${esc(activeSeasonId)}">${esc(season.name || activeSeasonId)}</option>`;
     seasonSelect.value = activeSeasonId;
-  await loadRoster();
+    seasonSelect.disabled = false;
+    $("#exportTeamRoster").disabled = false;
+    await loadRoster();
+  } catch (error) {
+    console.error("Active roster season load failed", error);
+    activeSeasonIds = new Set();
+    seasonSelect.innerHTML = '<option value="">Active season unavailable</option>';
+    seasonSelect.disabled = true;
+    $("#exportTeamRoster").disabled = true;
+    statusBox.textContent = error.message || "The active season could not be loaded.";
+    panel.innerHTML =
+      `<div class="empty-state compact"><b>Roster could not be loaded</b><p>${esc(error.message || "Refresh and try again.")}</p></div>`;
+  }
 }
 seasonSelect?.addEventListener("change", loadRoster);
 $("#exportTeamRoster")?.addEventListener("click", exportTeamRoster);
-$("#refreshRosterAdmin")?.addEventListener("click", loadRoster);
+$("#refreshRosterAdmin")?.addEventListener("click", loadSeasons);
 $("#closeRosterReplacement")?.addEventListener("click", closeDialog);
 $("#cancelRosterReplacement")?.addEventListener("click", closeDialog);
 onAuthStateChanged(auth, (user) => {
-  if (user?.emailVerified && user.email?.toLowerCase() === ADMIN) loadSeasons();
+  if (user && window.alphaOpenAuthorization && isAdmin()) {
+    loadSeasons();
+  }
 });
-window.addEventListener("alphaopen:profile-ready", loadSeasons);
+window.addEventListener("alphaopen:profile-ready", () => {
+  if (isAdmin()) loadSeasons();
+});
+window.addEventListener("alphaopen:authorization-changed", (event) => {
+  if (event.detail?.user && isAdmin()) loadSeasons();
+});

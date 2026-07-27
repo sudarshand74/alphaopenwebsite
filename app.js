@@ -11,14 +11,19 @@ const accounts = {
 
 let leagueSeason = null;
 let activeWorkspaceSeason = null;
-let workspacePublicSeasons = [];
+let workspaceSeasons = [];
 let standings = [];
 let matchups = [];
 let lineMatches = [];
 let teamsById = new Map();
+let playerNamesById = new Map();
 let leagueDataLoaded = false;
 let historySeasons = [];
 let historyDataLoaded = false;
+let historyPlayerDirectory = new Map();
+let completedSeasonOptions = [];
+let previousSeasonListLoaded = false;
+let selectedPreviousSeasonLoading = false;
 let springSeasonData = null;
 let fallSeasonData = null;
 let springLineEditIndex = new Map();
@@ -146,28 +151,48 @@ function renderWorkspace(account) {
       (item) => String(item.season?.status || "").toLowerCase() === "active",
     ) || fallSeasonData;
   const activeSeasonRecord = activeSeason?.season || null;
-  const activeSeasonRoute = "fall2026";
+  const activeSeasonRoute = "current-season";
   const activeSeasonLabel = activeSeasonRecord
     ? `Active season: ${activeSeasonRecord.seasonId} · ${activeSeasonRecord.name || activeSeasonRecord.seasonId}`
-    : "Active season: Loading…";
-  const completedSeasons = workspacePublicSeasons.filter(
-    (season) => String(season.status || "").toLowerCase() === "completed",
-  );
+    : account.role === "Guest"
+      ? "Active season: Unavailable"
+      : "Active season: Loading…";
+  const completedSeason = [...workspaceSeasons]
+    .filter((season) => String(season.status || "").toLowerCase() === "completed")
+    .sort(
+      (a, b) =>
+        String(b.endDate || "").localeCompare(String(a.endDate || "")) ||
+        Number(b.year || 0) - Number(a.year || 0),
+    )[0];
   const actions = [
+    [
+      activeSeasonRoute,
+      activeSeasonLabel,
+      "Click here to see current season’s teams, schedule, ranking and match results.",
+    ],
     [
       "matches",
       "Matches",
       "Click here to see today’s, upcoming and recently completed matches and generate posters on the fly.",
     ],
   ];
-  if (activeSeasonRecord || account.role !== "Guest")
-    actions.unshift([
-      activeSeasonRoute,
-      activeSeasonLabel,
-      "Click here to see current season’s teams, schedule, ranking and match results.",
-    ]);
-  if (account.role !== "Super Admin" && account.access.includes("captain"))
+  if (
+    account.role === "Super Admin" ||
+    account.access.includes("captain") ||
+    account.access.includes("ec") ||
+    account.access.includes("approver")
+  )
     actions.push(["lineup", "Build & Submit Lineup", "Run SOR checks"]);
+  if (
+    account.role === "Super Admin" ||
+    account.access.includes("captain") ||
+    account.access.includes("ec")
+  )
+    actions.push([
+      "ec-lineup-status",
+      "Lineup Dashboard",
+      "Track submissions and approval status by week",
+    ]);
   if (account.role === "Super Admin" || account.access.includes("approver")) {
     const countIsReady = Number.isFinite(pendingApprovalLineupCount);
     const pendingLineupCount = countIsReady ? pendingApprovalLineupCount : 0;
@@ -183,16 +208,21 @@ function renderWorkspace(account) {
       "",
       countIsReady && pendingLineupCount > 0 ? "pending-approval-alert" : "",
     ]);
+    actions.push([
+      "reset-approved-lineup",
+      "Reset Approved Lineup",
+      "Exceptionally withdraw both approved lineups before score activity",
+    ]);
   }
   if (account.role === "Super Admin")
     actions.push(["admin", "Season admin", "Manage people and data"]);
   if (account.access.includes("player"))
     actions.push(["history", "My Player History", "View all matches played by me", "my-player-history"]);
-  if (completedSeasons.length)
+  if (completedSeason)
     actions.push([
       "schedule",
-      "Previous Seasons",
-      "Select a completed season to view its dashboards and results.",
+      `Past season: ${completedSeason.seasonId} · ${completedSeason.name || completedSeason.seasonId}`,
+      "Click here to see completed-season teams, standings, playoffs and match results.",
       "",
       "past-season-action",
     ]);
@@ -207,11 +237,12 @@ function renderWorkspace(account) {
 }
 
 function navigate(route) {
+  if (route === "fall2026") route = "current-season";
   const target = $(`.view[data-view="${route}"]`);
   if (!target || target.hidden) return;
   mountAdminFeature(route, target);
   if (route === "history" && $("#historySeasonFilter")) {
-    $("#historySeasonFilter").value = "";
+    $("#historySeasonFilter").value = "all";
     renderHistory(accounts[currentAccountKey]);
   }
   if(route==="ec-roster") mountRosterPanel("ecRosterMount");
@@ -393,6 +424,7 @@ function playerPair(players = []) {
     players
       .map(
         (player) =>
+          historyPlayerDirectory.get(player.playerId) ||
           player.nameSnapshot ||
           player.playerNameSnapshot ||
           player.name ||
@@ -406,6 +438,7 @@ function playerPairMarkup(players = [], selectedPlayerId = "") {
   const names = players
     .map((player) => {
       const name =
+        historyPlayerDirectory.get(player.playerId) ||
         player.nameSnapshot ||
         player.playerNameSnapshot ||
         player.name ||
@@ -517,10 +550,53 @@ function openSeasonPlayerMatches(playerName, filterId, resultsSelector) {
     }),
   );
 }
+function resolvedDisplayName(playerId, ...candidates) {
+  const normalizedId = String(playerId || "").trim();
+  return candidates
+    .map((value) => String(value || "").trim())
+    .find(
+      (value) =>
+        value &&
+        value !== normalizedId &&
+        value.toLowerCase() !== "player name unavailable" &&
+        value.toLowerCase() !== "name unavailable",
+    ) || "";
+}
+function playerNameIdLabel(player = {}, rankNumber) {
+  const playerId = String(player.playerId || "").trim(),
+    name = resolvedDisplayName(
+      playerId,
+      playerNamesById.get(playerId),
+      player.nameSnapshot,
+      player.playerNameSnapshot,
+      player.playerName,
+      player.name,
+      player.displayName,
+      player.fullName,
+    ),
+    identity = name && playerId
+      ? `${name} (${playerId})`
+      : name || playerId || "Player name unavailable";
+  return rankNumber !== undefined && rankNumber !== null && rankNumber !== ""
+    ? `R${Number(rankNumber)}-${identity}`
+    : identity;
+}
+function regularSeasonStages(data = springSeasonData) {
+  const stages = [
+    ...new Set(
+      (data?.matchups || [])
+        .map((matchup) => canonicalStage(matchup.weekId))
+        .filter((stage) => /^W\d+$/.test(stage)),
+    ),
+  ].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  return stages.length
+    ? stages
+    : ["W1", "W2", "W3", "W4", "W5", "W6", "W7"];
+}
 function renderSpringJourney(teamMap) {
   const panel = $("#springSeasonJourney");
   if (!panel || !springSeasonData) return;
-  const weeklyStages = ["W1", "W2", "W3", "W4", "W5", "W6", "W7"],
+  const weeklyStages = regularSeasonStages(),
     linesByMatchup = new Map(),
     weekDates = {},
     weekStartDates = {},
@@ -641,8 +717,9 @@ function renderSpringJourney(teamMap) {
       .join("");
   const scheduleRow = (label, dates) =>
     `<div class="journey-standing-row journey-date-row"><span></span><b>${label}</b>${weeklyStages.map((stage) => `<span>${safeText(dates[stage] ? formatDate(dates[stage]) : "TBD")}</span>`).join("")}<span></span><span></span></div>`;
-  panel.innerHTML = `<div class="dashboard-card journey-standings"><div class="journey-card-heading"><div><h3>Regular Season Standings</h3><p>Points earned by week</p></div><span class="badge navy">7 weeks</span></div><div class="journey-table"><div class="journey-standing-row journey-standing-head"><span>Seed</span><span>Team</span>${weeklyStages.map((stage) => `<span>${stage}</span>`).join("")}<span>Total</span><span>Avg</span></div>${scheduleRow("Lineup submission", lineupSubmissionDates)}${scheduleRow("Week start", weekStartDates)}${scheduleRow("Play by", weekDates)}${standingRows}</div></div><div class="dashboard-card playoff-journey"><div class="journey-card-heading"><div><h3>Playoff Path</h3><p>Quarterfinals through the championship</p></div><span class="badge lime">Team Rohit won</span></div><div class="playoff-bracket">${playoffColumns}</div></div>`;
-  const isFallContext = Boolean(panel.closest('[data-view="fall2026"]'));
+  panel.style.setProperty("--season-week-count", weeklyStages.length);
+  panel.innerHTML = `<div class="dashboard-card journey-standings"><div class="journey-card-heading"><div><h3>Regular Season Standings</h3><p>Points earned by week</p></div><span class="badge navy">${weeklyStages.length} weeks</span></div><div class="journey-table"><div class="journey-standing-row journey-standing-head"><span>Seed</span><span>Team</span>${weeklyStages.map((stage) => `<span>${stage}</span>`).join("")}<span>Total</span><span>Avg</span></div>${scheduleRow("Lineup submission", lineupSubmissionDates)}${scheduleRow("Week start", weekStartDates)}${scheduleRow("Play by", weekDates)}${standingRows}</div></div><div class="dashboard-card playoff-journey"><div class="journey-card-heading"><div><h3>Playoff Path</h3><p>Quarterfinals through the championship</p></div><span class="badge gray">Season playoffs</span></div><div class="playoff-bracket">${playoffColumns}</div></div>`;
+  const isFallContext = Boolean(panel.closest('[data-view="current-season"]'));
   $$("[data-open-spring-matchup]", panel).forEach((button) =>
     button.addEventListener("click", () =>
       isFallContext
@@ -653,16 +730,30 @@ function renderSpringJourney(teamMap) {
 }
 function springActiveRosterAssignments() {
   const chosen = new Map(),
-    priority = (item) =>
-      (item.sourceOfTruth === "Spring 2026 match line snapshots" ? 4 : 0) +
-      (item.reconciledAt ? 2 : 0) +
-      (item.updatedAt ? 1 : 0);
+    timestampValue = (value) => {
+      if (typeof value?.toMillis === "function") return value.toMillis();
+      if (Number.isFinite(Number(value?.seconds))) return Number(value.seconds) * 1000;
+      const parsed = Date.parse(value || "");
+      return Number.isFinite(parsed) ? parsed : 0;
+    },
+    recency = (item) =>
+      Math.max(
+        timestampValue(item.updatedAt),
+        timestampValue(item.reconciledAt),
+        timestampValue(item.createdAt),
+        timestampValue(item.effectiveFrom),
+      );
   (springSeasonData?.rosterAssignments || [])
     .filter((item) => item.status === "active")
     .forEach((item) => {
       const key = `${item.teamId}|${Number(item.rankNumber)}`,
         current = chosen.get(key);
-      if (!current || priority(item) > priority(current)) chosen.set(key, item);
+      if (
+        !current ||
+        recency(item) > recency(current) ||
+        (recency(item) === recency(current) &&
+          String(item.assignmentId || "").localeCompare(String(current.assignmentId || "")) > 0)
+      ) chosen.set(key, item);
     });
   return [...chosen.values()];
 }
@@ -676,7 +767,7 @@ function renderSpringRosters(teamMap) {
     return;
   }
   const byTeam = new Map(),
-    weeklyStages = ["W1", "W2", "W3", "W4", "W5", "W6", "W7"],
+    weeklyStages = regularSeasonStages(),
     matchupById = new Map(
       (springSeasonData.matchups || []).map((matchup) => [
         matchup.matchupId,
@@ -737,7 +828,7 @@ function renderSpringRosters(teamMap) {
           const replaced =
             item.assignmentType === "replacement" &&
             item.originalPlayerNameSnapshot;
-          return `<div class="spring-rank-row"><span>R${Number(item.rankNumber)}</span><div>${replaced ? `<small>${safeText(item.originalPlayerNameSnapshot)}</small><i>→</i>` : ""}<b>${safeText(item.playerNameSnapshot || item.playerId)}</b>${replaced ? "<em>Replacement</em>" : ""}</div></div>`;
+          return `<div class="spring-rank-row"><span>R${Number(item.rankNumber)}</span><div>${replaced ? `<small>${safeText(item.originalPlayerNameSnapshot)}</small><i>→</i>` : ""}<b>${safeText(playerNameIdLabel(item))}</b>${replaced ? "<em>Replacement</em>" : ""}</div></div>`;
         })
         .join("");
       return `<details class="dashboard-card spring-team-card" ${index === 0 ? "open" : ""}><summary><span class="team-mark ${index % 2 ? "orange" : "blue"}">${safeText((team.name || "T").replace(/^Team\s+/i, "")[0])}</span><div><h3>${safeText(team.name || team.teamId)}</h3><small>Captain · ${safeText(captain?.playerNameSnapshot || team.captainNameSnapshot || "Not recorded")}</small></div><span class="badge navy">14 ranks</span></summary><div class="spring-rank-list">${rows}</div></details>`;
@@ -752,7 +843,7 @@ function renderSpringTeamDashboards(teamMap) {
     renderSpringRosters(teamMap);
     return;
   }
-  const weeklyStages = ["W1", "W2", "W3", "W4", "W5", "W6", "W7"],
+  const weeklyStages = regularSeasonStages(),
     byTeam = new Map(),
     matchupById = new Map(
       (springSeasonData.matchups || []).map((matchup) => [
@@ -760,6 +851,7 @@ function renderSpringTeamDashboards(teamMap) {
         matchup,
       ]),
     );
+  panel.style.setProperty("--season-week-count", weeklyStages.length);
   assignments.forEach((item) => {
     const list = byTeam.get(item.teamId) || [];
     list.push(item);
@@ -859,7 +951,7 @@ function renderSpringTeamDashboards(teamMap) {
                     played: 0,
                   }
                 : playerStats(item);
-          return `<div class="team-player-stat-row"><span>R${Number(item.rankNumber)}</span><div class="team-player-name">${replaced ? `<small>${safeText(item.originalPlayerNameSnapshot)}</small><i>→</i>` : ""}<b>${safeText(item.playerNameSnapshot || item.playerId)}</b>${replaced ? "<em>Replacement</em>" : ""}</div>${weeklyStages
+          return `<div class="team-player-stat-row"><span>R${Number(item.rankNumber)}</span><div class="team-player-name">${replaced ? `<small>${safeText(item.originalPlayerNameSnapshot)}</small><i>→</i>` : ""}<b>${safeText(playerNameIdLabel(item))}</b>${replaced ? "<em>Replacement</em>" : ""}</div>${weeklyStages
             .map((stage) => {
               const result = stats.weekly[stage];
               return `<span class="player-week-result ${result.includes("W") ? "win" : result.includes("L") ? "loss" : "empty"}">${result.length ? result.join("/") : "—"}</span>`;
@@ -903,13 +995,28 @@ function renderSpringTeamDashboards(teamMap) {
 }
 function renderFallSeason() {
   const fallResults = $("#fallSeasonResults");
+  const seasonName =
+    fallSeasonData?.season?.name ||
+    activeWorkspaceSeason?.name ||
+    activeWorkspaceSeason?.seasonId ||
+    "Active season";
+  const seasonId =
+    fallSeasonData?.season?.seasonId ||
+    activeWorkspaceSeason?.seasonId ||
+    "";
   if (!fallResults) return;
+  if ($("#fallMatchesSeasonLabel"))
+    $("#fallMatchesSeasonLabel").textContent = seasonId
+      ? `Season · ${seasonName} (${seasonId})`
+      : `Season · ${seasonName}`;
+  if ($("#fallMatchesTitle"))
+    $("#fallMatchesTitle").textContent = `${seasonName} Matches by Round`;
   if (!historyDataLoaded) {
-    fallResults.innerHTML = '<div class="dashboard-card empty-state"><b>Loading Fall 2026 from Firebase…</b></div>';
+    fallResults.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active season from Firebase…</b></div>';
     return;
   }
   if (!fallSeasonData) {
-    fallResults.innerHTML = '<div class="dashboard-card empty-state"><b>Fall 2026 setup is not published yet</b><p>Teams and matchups will appear automatically after the season upload.</p></div>';
+    fallResults.innerHTML = `<div class="dashboard-card empty-state"><b>${safeText(seasonName)} setup is not published yet</b><p>Teams and matchups will appear automatically after the season upload.</p></div>`;
     return;
   }
   const idPairs = [
@@ -921,13 +1028,17 @@ function renderFallSeason() {
       ["springStatusFilter", "fallStatusFilter"],
       ["springSeasonResults", "fallSeasonResults"],
     ],
-    originalData = springSeasonData;
+    originalData = springSeasonData,
+    originalPreviousSeasonListLoaded = previousSeasonListLoaded,
+    originalSelectedPreviousSeasonLoading = selectedPreviousSeasonLoading;
   idPairs.forEach(([springId, fallId]) => {
     const springElement = $(`#${springId}`), fallElement = $(`#${fallId}`);
     if (springElement) springElement.id = `stored-${springId}`;
     if (fallElement) fallElement.id = springId;
   });
   springSeasonData = fallSeasonData;
+  previousSeasonListLoaded = true;
+  selectedPreviousSeasonLoading = false;
   try {
     renderSpringSeason();
     const journey = $("#springSeasonJourney"),
@@ -938,6 +1049,8 @@ function renderFallSeason() {
     }
   } finally {
     springSeasonData = originalData;
+    previousSeasonListLoaded = originalPreviousSeasonListLoaded;
+    selectedPreviousSeasonLoading = originalSelectedPreviousSeasonLoading;
     [...idPairs].reverse().forEach(([springId, fallId]) => {
       const fallElement = $(`#${springId}`), springElement = $(`#stored-${springId}`);
       if (fallElement) fallElement.id = fallId;
@@ -953,11 +1066,11 @@ function renderSeasonDashboard() {
     panel = panels[0];
   if (!panel) return;
   if (!historyDataLoaded) {
-    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading Fall 2026 season dashboard from Firebase…</b></div>';
+    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active-season dashboard from Firebase…</b></div>';
     return;
   }
   if (!fallSeasonData) {
-    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Fall 2026 season data is unavailable</b></div>';
+    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Active-season data is unavailable</b></div>';
     return;
   }
   const teamMap = new Map((fallSeasonData.teams || []).map((team) => [team.teamId, team])),
@@ -1031,7 +1144,7 @@ function renderSeasonDashboard() {
     return `<details class="season-dashboard-week"><summary>${summary}</summary><div class="season-dashboard-drilldown">${drilldownRows}${totalRow}</div></details>`;
   }).join("");
   const grand = weeks.flatMap(([, matchups]) => matchups.map(summarizeMatchup)).reduce((total, row) => ({ completed: total.completed + row.completed, scheduled: total.scheduled + row.scheduled, tbs: total.tbs + row.tbs, total: total.total + row.total, homePoints: total.homePoints + row.homePoints, awayPoints: total.awayPoints + row.awayPoints }), { completed: 0, scheduled: 0, tbs: 0, total: 0, homePoints: 0, awayPoints: 0 });
-  panel.innerHTML = `<div class="dashboard-card season-dashboard-card"><div class="journey-card-heading"><div><h2>${safeText(fallSeasonData.season?.name || "AlphaOpen Fall 2026")} Match Tracker</h2><p>Expand a week to view its team matchups. Weeks awaiting all lineups remain summary-only.</p></div><span class="badge navy">${weeks.length} weeks</span></div><div class="season-dashboard-table">${columnHeader}${weekCards}<div class="season-dashboard-grid season-dashboard-grand"><b>Grand Total</b><span></span><span></span><span></span><strong>${grand.completed}</strong><strong>${grand.scheduled}</strong><strong>${grand.tbs}</strong><strong>${grand.total}</strong><span></span><span></span></div></div></div>`;
+  panel.innerHTML = `<div class="dashboard-card season-dashboard-card"><div class="journey-card-heading"><div><h2>${safeText(fallSeasonData.season?.name || fallSeasonData.season?.seasonId || "Active Season")} Match Tracker</h2><p>Expand a week to view its team matchups. Weeks awaiting all lineups remain summary-only.</p></div><span class="badge navy">${weeks.length} weeks</span></div><div class="season-dashboard-table">${columnHeader}${weekCards}<div class="season-dashboard-grid season-dashboard-grand"><b>Grand Total</b><span></span><span></span><span></span><strong>${grand.completed}</strong><strong>${grand.scheduled}</strong><strong>${grand.tbs}</strong><strong>${grand.total}</strong><span></span><span></span></div></div></div>`;
   panels.slice(1).forEach((target) => target.innerHTML = panel.innerHTML);
   panels.forEach((target) =>
     $$("[data-dashboard-status]", target).forEach((button) =>
@@ -1046,7 +1159,7 @@ function renderSeasonDashboard() {
         if (teamFilter) teamFilter.value = button.dataset.dashboardTeam || "all";
         if (playerFilter) playerFilter.value = "all";
         if (statusFilter) statusFilter.value = button.dataset.dashboardStatus || "all";
-        navigate("fall2026");
+        navigate("current-season");
         renderFallSeason();
         $(".fall-live-results")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }),
@@ -1056,16 +1169,37 @@ function renderSeasonDashboard() {
 function renderSpringSeason() {
   const panel = $("#springSeasonResults");
   if (!panel) return;
-  if (!historyDataLoaded) {
-    panel.innerHTML =
-      '<div class="dashboard-card empty-state"><b>Loading Spring 2026 from Firebase…</b></div>';
+  const journey = $("#springSeasonJourney"),
+    rosters = $("#springRosterTeams"),
+    setEmpty = (heading, detail) => {
+      const markup = `<div class="dashboard-card empty-state"><b>${safeText(heading)}</b>${detail ? `<p>${safeText(detail)}</p>` : ""}</div>`;
+      if (journey) journey.innerHTML = markup;
+      if (rosters) rosters.innerHTML = markup;
+      panel.innerHTML = markup;
+    };
+  if (!previousSeasonListLoaded) {
+    setEmpty("Loading completed seasons from Firebase…", "");
+    return;
+  }
+  if (selectedPreviousSeasonLoading) {
+    setEmpty(
+      "Loading selected completed season…",
+      "Standings, playoffs, teams, rosters, and matches are being loaded.",
+    );
     return;
   }
   if (!springSeasonData) {
-    panel.innerHTML =
-      '<div class="dashboard-card empty-state"><b>Spring 2026 results are unavailable</b><p>Published results will appear here automatically.</p></div>';
+    setEmpty(
+      completedSeasonOptions.length
+        ? "Select a completed season"
+        : "No completed seasons are available",
+      completedSeasonOptions.length
+        ? "Choose a season above to load its complete dashboard."
+        : "Seasons marked Completed will appear here automatically.",
+    );
     return;
   }
+  const renderedSeasonName = seasonDisplayName(springSeasonData.season);
   const teamMap = new Map(
       (springSeasonData.teams || []).map((team) => [team.teamId, team]),
     ),
@@ -1078,7 +1212,7 @@ function renderSpringSeason() {
     playerFilter = $("#springPlayerFilter"),
     statusFilter = $("#springStatusFilter"),
     selectedTeam = teamFilter?.value || "all",
-    selectedWeek = weekFilter?.value || "all",
+    requestedWeek = weekFilter?.value || "all",
     selectedPlayer = playerFilter?.value || "all",
     selectedStatus = statusFilter?.value || "all";
   if (teamFilter) {
@@ -1093,40 +1227,85 @@ function renderSpringSeason() {
       .join("")}`;
     teamFilter.value = teamMap.has(selectedTeam) ? selectedTeam : "all";
   }
+  const stageRank = (stage) =>
+      ({ F: 100, SF: 90, QF: 80 })[stage] ||
+      (/^W\d+$/.test(stage) ? Number(stage.slice(1)) : 0),
+    availableStages = [
+      ...new Set(
+        (springSeasonData.matchups || []).map((matchup) =>
+          canonicalStage(matchup.weekId),
+        ),
+      ),
+    ].sort((a, b) => stageRank(b) - stageRank(a));
+  if (weekFilter) {
+    weekFilter.innerHTML = `<option value="all">All weeks</option>${availableStages
+      .map(
+        (stage) =>
+          `<option value="${safeText(stage)}">${safeText(seasonStageTitle(stage))}</option>`,
+      )
+      .join("")}`;
+    weekFilter.value = availableStages.includes(requestedWeek)
+      ? requestedWeek
+      : "all";
+  }
   (springSeasonData.lineMatches || []).forEach((line) => {
     const list = linesByMatchup.get(line.matchupId) || [];
     list.push(line);
     linesByMatchup.set(line.matchupId, list);
   });
-  const playerNames = new Map();
-  (springSeasonData.lineMatches || []).forEach((line) =>
-    [...(line.homePlayers || []), ...(line.awayPlayers || [])].forEach(
-      (player) => {
-        const name =
-            player.nameSnapshot ||
-            player.playerNameSnapshot ||
-            player.name ||
-            player.playerId,
-          key = normalizeSpringPlayer(name);
-        if (key && !playerNames.has(key)) playerNames.set(key, name);
-      },
-    ),
-  );
+  const playerNames = new Map(),
+    playerNamesById = new Map(
+      springSeasonData.canonicalPlayers instanceof Map
+        ? [...springSeasonData.canonicalPlayers].map(([playerId, player]) => [
+            playerId,
+            player.displayName || playerId,
+          ])
+        : [],
+    );
+  springActiveRosterAssignments().forEach((player) => {
+    const playerId = player.playerId || player.currentPlayerId || "",
+      canonicalName = String(playerNamesById.get(playerId) || "").trim(),
+      snapshotName = String(
+        player.playerNameSnapshot ||
+          player.playerName ||
+          player.nameSnapshot ||
+          player.name ||
+          "",
+      ).trim(),
+      name =
+        (canonicalName && canonicalName !== playerId ? canonicalName : "") ||
+        (snapshotName && snapshotName !== playerId ? snapshotName : "") ||
+        playerId,
+      key = normalizeSpringPlayer(name);
+    if (playerId && name !== playerId && !playerNamesById.has(playerId))
+      playerNamesById.set(playerId, name);
+    if (key && !playerNames.has(key))
+      playerNames.set(key, {
+        name,
+        playerId,
+        label:
+          playerId && name !== playerId ? `${name} (${playerId})` : name,
+      });
+  });
   if (playerFilter) {
-    playerFilter.innerHTML = `<option value="all">All players</option>${[
+    const isActiveSeasonFilter = Boolean(
+      playerFilter.closest('[data-view="current-season"]'),
+    );
+    playerFilter.innerHTML = `<option value="all">${isActiveSeasonFilter ? "All roster players" : "All players"}</option>${[
       ...playerNames.entries(),
     ]
-      .sort((a, b) => String(a[1]).localeCompare(String(b[1])))
+      .sort((a, b) => String(a[1].name).localeCompare(String(b[1].name)))
       .map(
-        ([key, name]) =>
-          `<option value="${safeText(key)}">${safeText(name)}</option>`,
+        ([key, player]) =>
+          `<option value="${safeText(key)}">${safeText(player.label)}</option>`,
       )
       .join("")}`;
     playerFilter.value = playerNames.has(selectedPlayer)
       ? selectedPlayer
       : "all";
   }
-  const activePlayer = playerFilter?.value || "all",
+  const selectedWeek = weekFilter?.value || "all",
+    activePlayer = playerFilter?.value || "all",
     lineFilterStatus = (line) => {
       const scheduleStatus = String(line.scheduleStatus || "").toLowerCase(),
         scoreStatus = String(line.scoreStatus || "").toLowerCase();
@@ -1139,12 +1318,28 @@ function renderSpringSeason() {
       filter?.closest("label")?.classList.toggle("active-season-filter", isActive);
       filter?.classList.toggle("active-season-filter-select", isActive);
     },
+    linePlayerName = (player = {}) =>
+      resolvedDisplayName(
+        player.playerId,
+        playerNamesById.get(player.playerId),
+        player.nameSnapshot,
+        player.playerNameSnapshot,
+        player.name,
+      ) ||
+      player.playerId ||
+      "",
+    linePlayerLabel = (player = {}) => {
+      const playerId = player.playerId || "",
+        name = linePlayerName(player);
+      return name && playerId && name !== playerId ? `${name} (${playerId})` : name;
+    },
     playerMarkup = (players = []) =>
       players
         .map((player) => {
-          const name = player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId;
+          const name = linePlayerName(player),
+            label = linePlayerLabel(player);
           if (!name) return "";
-          const markup = safeText(name);
+          const markup = safeText(label);
           return activePlayer !== "all" && normalizeSpringPlayer(name) === activePlayer
             ? `<mark class="selected-season-player">${markup}</mark>`
             : markup;
@@ -1157,10 +1352,7 @@ function renderSpringSeason() {
         [...(line.homePlayers || []), ...(line.awayPlayers || [])].some(
           (player) =>
             normalizeSpringPlayer(
-              player.nameSnapshot ||
-                player.playerNameSnapshot ||
-                player.name ||
-                player.playerId,
+              linePlayerName(player),
             ) === activePlayer,
         ),
       ),
@@ -1181,18 +1373,7 @@ function renderSpringSeason() {
   updateFilterHighlight(teamFilter, selectedTeam !== "all");
   updateFilterHighlight(playerFilter, activePlayer !== "all");
   updateFilterHighlight(statusFilter, selectedStatus !== "all");
-  const stageOrder = [
-      "F",
-      "SF",
-      "QF",
-      "W7",
-      "W6",
-      "W5",
-      "W4",
-      "W3",
-      "W2",
-      "W1",
-    ],
+  const stageOrder = availableStages,
     grouped = new Map(stageOrder.map((stage) => [stage, []]));
   (springSeasonData.matchups || []).forEach((matchup) => {
     const stage = canonicalStage(matchup.weekId);
@@ -1231,7 +1412,7 @@ function renderSpringSeason() {
               visibleLines = allLines.filter((line) =>
                   (activePlayer === "all" ||
                     [...(line.homePlayers || []), ...(line.awayPlayers || [])].some(
-                      (player) => normalizeSpringPlayer(player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId) === activePlayer,
+                      (player) => normalizeSpringPlayer(linePlayerName(player)) === activePlayer,
                     )) &&
                   (selectedStatus === "all" || lineFilterStatus(line) === selectedStatus),
                 );
@@ -1364,7 +1545,7 @@ function renderSpringSeason() {
                       editKey = `${matchup.matchupId}|${line.lineMatchId}`;
                     springLineEditIndex.set(editKey, { line, matchup });
                     return matchDetailMarkup({
-                      seasonName: springSeasonData?.season?.name || "AlphaOpen Spring 2026",
+                      seasonName: renderedSeasonName,
                       week: seasonStageTitle(matchup.weekId),
                       matchupId: matchup.matchupId,
                       homeTeam: home,
@@ -1391,7 +1572,7 @@ function renderSpringSeason() {
           .join("")}</div></section>`;
       })
       .join("") ||
-    '<div class="dashboard-card empty-state"><b>No Spring 2026 matchups found</b></div>';
+    `<div class="dashboard-card empty-state"><b>No ${safeText(renderedSeasonName)} matchups found</b></div>`;
   $$("[data-edit-spring-line]", panel).forEach((button) =>
     button.addEventListener("click", () => {
       const record = springLineEditIndex.get(button.dataset.editSpringLine);
@@ -1493,9 +1674,19 @@ function matchesPageTeam(teamId, snapshot) {
 
 function matchesPagePlayers(players) {
   return (players || [])
-    .map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId)
+    .map((player) => playerNameIdLabel(player))
     .filter(Boolean)
     .join(" / ") || "TBD";
+}
+
+function posterPlayerName(player) {
+  const playerId = String(player?.playerId || "").trim();
+  const canonicalName = String(playerNamesById.get(playerId) || "").trim();
+  const snapshotName = String(
+    player?.nameSnapshot || player?.playerNameSnapshot || player?.name || "",
+  ).trim();
+  return resolvedDisplayName(playerId, canonicalName, snapshotName) ||
+    "Player name unavailable";
 }
 
 function matchesPageScore(line) {
@@ -1555,7 +1746,12 @@ function renderMatchesPage() {
   const matchupIndex = new Map(matchups.map((matchup) => [matchup.matchupId, matchup]));
   const records = lineMatches
     .map((line) => ({ line, matchup: matchupIndex.get(line.matchupId) }))
-    .filter((record) => record.matchup)
+    .filter(({ line, matchup }) =>
+      matchup &&
+      ["tobescheduled", "scheduled", "completed"].includes(
+        String(line.scheduleStatus || "").toLowerCase(),
+      )
+    )
     .sort((left, right) => {
       const leftDate = matchesPageDate(left.line.scheduledAt);
       const rightDate = matchesPageDate(right.line.scheduledAt);
@@ -1567,15 +1763,16 @@ function renderMatchesPage() {
   const today = new Date();
   const sameDay = (date) => date && date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
   const todayMatches = records.filter(({ line }) => {
-    const status = line.scheduleStatus || "toBeScheduled";
-    return !["completed", "canceled"].includes(status) && sameDay(matchesPageDate(line.scheduledAt));
+    const status = String(line.scheduleStatus || "").toLowerCase();
+    return status === "scheduled" && sameDay(matchesPageDate(line.scheduledAt));
   });
   const upcomingMatches = records.filter(({ line }) => {
-    const status = line.scheduleStatus || "toBeScheduled";
-    return !["completed", "canceled"].includes(status) && !sameDay(matchesPageDate(line.scheduledAt));
+    const status = String(line.scheduleStatus || "").toLowerCase();
+    return status === "tobescheduled" ||
+      (status === "scheduled" && !sameDay(matchesPageDate(line.scheduledAt)));
   });
   const completedMatches = records
-    .filter(({ line }) => line.scheduleStatus === "completed")
+    .filter(({ line }) => String(line.scheduleStatus || "").toLowerCase() === "completed")
     .sort((left, right) => (matchesPageDate(right.line.scheduledAt)?.getTime() || 0) - (matchesPageDate(left.line.scheduledAt)?.getTime() || 0));
   panel.innerHTML = [
     matchesPageSection("Today’s Matches", "Matches scheduled for today", todayMatches, "today"),
@@ -1596,8 +1793,8 @@ function renderMatchesPage() {
         lineNumber: line.lineNumber,
         homeTeam: matchesPageTeam(matchup.homeTeamId, matchup.homeTeamNameSnapshot),
         awayTeam: matchesPageTeam(matchup.awayTeamId, matchup.awayTeamNameSnapshot),
-        homePlayers: (line.homePlayers || []).map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId),
-        awayPlayers: (line.awayPlayers || []).map((player) => player.nameSnapshot || player.playerNameSnapshot || player.name || player.playerId),
+        homePlayers: (line.homePlayers || []).map(posterPlayerName),
+        awayPlayers: (line.awayPlayers || []).map(posterPlayerName),
         scheduledAt: matchesPageDate(line.scheduledAt)?.toISOString() || null,
         venueName: line.venueNameSnapshot || "Venue TBD",
         venueAddress: line.venueAddressSnapshot || "",
@@ -1712,31 +1909,7 @@ function renderHistory(account) {
       '<div class="empty-state"><b>Loading all-season Firebase history…</b></div>';
     return;
   }
-  if (!historySeasons.length) {
-    $("#historyRows").innerHTML =
-      '<div class="empty-state"><b>Select a completed season</b><p>No historical data is loaded until a completed season is selected.</p></div>';
-    return;
-  }
-  const playerIndex = new Map();
-  historySeasons.forEach((item) =>
-    (item.lineMatches || [])
-      .filter((line) => line.scoreStatus === "published")
-      .forEach((line) =>
-        [...(line.homePlayers || []), ...(line.awayPlayers || [])].forEach(
-          (player) => {
-            if (!player.playerId) return;
-            const name =
-              player.nameSnapshot ||
-              player.playerNameSnapshot ||
-              player.name ||
-              player.playerId;
-            playerIndex.set(player.playerId, name);
-          },
-        ),
-      ),
-  );
-  if (account?.playerId && !playerIndex.has(account.playerId))
-    playerIndex.set(account.playerId, account.name || account.playerId);
+  const playerIndex = new Map(historyPlayerDirectory);
   const playerFilter = $("#historyPlayerFilter"),
     priorPlayerId = playerFilter?.value || "",
     preferredPlayerId = playerFilter?.dataset.preferredPlayerId || "",
@@ -1755,9 +1928,10 @@ function renderHistory(account) {
   }
   const selectedPlayerId = playerFilter?.value || "",
     selectedPlayerName = playerIndex.get(selectedPlayerId) || "Select a player";
-  const selectedSeason = $("#historySeasonFilter")?.value || "";
+  const selectedSeason = $("#historySeasonFilter")?.value || "all";
   const included = historySeasons.filter(
-    (item) => item.season.seasonId === selectedSeason,
+    (item) =>
+      selectedSeason === "all" || item.season.seasonId === selectedSeason,
   );
   const rows = included
     .flatMap((item) => {
@@ -1770,7 +1944,7 @@ function renderHistory(account) {
       return item.lineMatches
         .filter(
           (line) =>
-            line.scoreStatus === "published" &&
+            String(line.scheduleStatus || "").toLowerCase() === "completed" &&
             selectedPlayerId &&
             [...(line.homePlayers || []), ...(line.awayPlayers || [])].some(
               (player) => player.playerId === selectedPlayerId,
@@ -1879,10 +2053,10 @@ function renderHistory(account) {
 function renderFirebaseOnlyStates() {
   if ($("#lineupRows"))
     $("#lineupRows").innerHTML =
-      '<div class="empty-state compact"><b>No Firebase lineup selected</b><p>Lineup controls appear after a registered captain is linked to a Fall team and matchup.</p></div>';
+      '<div class="empty-state compact"><b>No lineup selected</b><p>Lineup controls appear after a registered captain is linked to a team and matchup.</p></div>';
   if ($("#rankProgress"))
     $("#rankProgress").innerHTML =
-      '<p class="muted">Participation loads from Firebase roster slots.</p>';
+      '<p class="muted">Participation loads from active roster slots.</p>';
   if ($("#approvalRows"))
     $("#approvalRows").innerHTML =
       '<div class="empty-state compact"><b>No Firebase lineup pair ready</b></div>';
@@ -1906,11 +2080,6 @@ function initCommunityCarousel() {
   const dotButtons = $$("button", dots);
   const show = (index) => {
     current = (index + slides.length) % slides.length;
-    const image = slides[current].querySelector("img[data-src]");
-    if (image) {
-      image.src = image.dataset.src;
-      image.removeAttribute("data-src");
-    }
     track.style.transform = `translateX(-${current * 100}%)`;
     slides.forEach((slide, i) => {
       slide.classList.toggle("active", i === current);
@@ -1993,29 +2162,125 @@ function initials(name) {
     .toUpperCase();
 }
 
+function seasonDisplayName(season) {
+  return season?.name || season?.seasonName || season?.seasonId || "Season unavailable";
+}
+
+function updateCurrentSeasonContext(season) {
+  const name = seasonDisplayName(season);
+  const headingName = /\bseason$/i.test(name) ? name : `${name} Season`;
+  const seasonId = season?.seasonId || "";
+  const status = String(season?.status || "active").toUpperCase();
+  const filter = $("#currentSeasonFilter");
+  if (filter)
+    filter.replaceChildren(
+      Object.assign(document.createElement("option"), {
+        value: seasonId,
+        textContent: seasonId ? `${name} (${seasonId})` : name,
+      }),
+    );
+  if ($("#currentSeasonTitle")) $("#currentSeasonTitle").textContent = headingName;
+  if ($("#currentSeasonKicker"))
+    $("#currentSeasonKicker").textContent = season
+      ? `Current Season · ${name}`
+      : "Current Season · Season unavailable";
+  if ($("#currentSeasonDescription"))
+    $("#currentSeasonDescription").textContent = seasonId
+      ? `${seasonId} teams, schedule, standings and match results.`
+      : "No active season is currently configured.";
+  if ($("#currentSeasonStatus")) $("#currentSeasonStatus").textContent = status;
+  if ($("#currentSeasonJourneyLabel"))
+    $("#currentSeasonJourneyLabel").textContent = `${name} season journey`;
+  if ($("#currentSeasonTeamsLabel"))
+    $("#currentSeasonTeamsLabel").textContent = `${name} teams`;
+  if ($("#seasonDashboardDescription"))
+    $("#seasonDashboardDescription").textContent =
+      `Weekly completion, scheduling readiness, and team points for ${name}.`;
+  const rulesUrl =
+    season?.rulesUrl ||
+    (seasonId === "AO-F-2026"
+      ? "https://docs.google.com/spreadsheets/d/1C3jAIwqstSheV3XRP6Mzko4VuORZvLA_Vpj8DH2Uo_Y/htmlembed?gid=1352745040&single=true&widget=false&headers=false"
+      : "");
+  if ($("#seasonRulesNotice")) $("#seasonRulesNotice").hidden = !rulesUrl;
+  if ($("#seasonRulesEmbed") && rulesUrl) {
+    $("#seasonRulesEmbed").src = rulesUrl;
+    $("#seasonRulesEmbed").title = `${name} Rules`;
+  }
+}
+
+function resetPreviousSeasonDashboardFilters() {
+  [
+    "#springWeekFilter",
+    "#springTeamFilter",
+    "#springPlayerFilter",
+    "#springStatusFilter",
+  ].forEach((selector) => {
+    const filter = $(selector);
+    if (filter) filter.value = "all";
+  });
+}
+
+function updatePreviousSeasonHeading() {
+  const name = seasonDisplayName(springSeasonData?.season);
+  if ($("#previousSeasonTitle"))
+    $("#previousSeasonTitle").textContent = springSeasonData
+      ? name
+      : "Previous Season";
+  if ($("#previousSeasonJourneyLabel"))
+    $("#previousSeasonJourneyLabel").textContent = springSeasonData
+      ? `${name} season journey`
+      : "Completed season journey";
+  if ($("#previousSeasonTeamsLabel"))
+    $("#previousSeasonTeamsLabel").textContent = springSeasonData
+      ? `${name} teams`
+      : "Completed season teams";
+  const isSpring2026 = springSeasonData?.season?.seasonId === "AO-S-2026";
+  if ($("#spring2026Champion")) $("#spring2026Champion").hidden = !isSpring2026;
+  if ($("#spring2026Highlights")) $("#spring2026Highlights").hidden = !isSpring2026;
+}
+
+function applyCompletedSeasonOptions(seasons = []) {
+  completedSeasonOptions = seasons
+    .map((item) => item.season || item)
+    .filter(
+      (season) =>
+        String(season?.status || "").toLowerCase() === "completed",
+    )
+    .sort(
+      (a, b) =>
+        Number(b.year || 0) - Number(a.year || 0) ||
+        String(b.term || "").localeCompare(String(a.term || "")),
+    );
+  previousSeasonListLoaded = true;
+  selectedPreviousSeasonLoading = false;
+  springSeasonData = null;
+  const filter = $("#previousSeasonFilter");
+  if (filter) {
+    filter.innerHTML = `<option value="">Select Completed Season</option>${
+      completedSeasonOptions.length
+      ? completedSeasonOptions
+          .map(
+            (season) =>
+              `<option value="${safeText(season.seasonId)}">${safeText(seasonDisplayName(season))} (${safeText(season.seasonId)})</option>`,
+          )
+          .join("")
+      : ""}`;
+    filter.value = "";
+    filter.disabled = !completedSeasonOptions.length;
+  }
+  resetPreviousSeasonDashboardFilters();
+  updatePreviousSeasonHeading();
+  renderSpringSeason();
+}
+
 window.alphaOpenDataUI = {
-  applyPublicSeasons(seasons) {
-    workspacePublicSeasons = seasons || [];
-    const completed = [...workspacePublicSeasons]
-      .filter((season) => String(season.status || "").toLowerCase() === "completed")
-      .sort(
-        (a, b) =>
-          String(b.endDate || "").localeCompare(String(a.endDate || "")) ||
-          Number(b.year || 0) - Number(a.year || 0),
-      );
-    ["completedSeasonSelect", "historySeasonFilter"].forEach((id) => {
-      const select = $(`#${id}`);
-      if (!select) return;
-      const selected = select.value || "";
-      select.innerHTML = `<option value="">Select a completed season</option>${completed
-        .map((season) => `<option value="${safeText(season.seasonId)}">${safeText(season.name || season.seasonId)}</option>`)
-        .join("")}`;
-      select.value = completed.some((season) => season.seasonId === selected) ? selected : "";
-    });
+  applySeasons(seasons) {
+    workspaceSeasons = seasons || [];
     renderWorkspace(accounts[currentAccountKey]);
   },
   applyActiveSeason(season) {
     activeWorkspaceSeason = season || null;
+    updateCurrentSeasonContext(activeWorkspaceSeason);
     renderWorkspace(accounts[currentAccountKey]);
   },
   applyPendingApprovalCount(count) {
@@ -2025,6 +2290,20 @@ window.alphaOpenDataUI = {
   applyLeagueData(data) {
     leagueSeason = data.season || null;
     teamsById = new Map((data.teams || []).map((team) => [team.teamId, team]));
+    playerNamesById = new Map();
+    if (data.canonicalPlayers instanceof Map) {
+      data.canonicalPlayers.forEach((player, playerId) => {
+        const name = String(player?.displayName || "").trim();
+        if (name && name !== playerId) playerNamesById.set(playerId, name);
+      });
+    }
+    (data.rosterAssignments || []).forEach((assignment) => {
+      const playerId = String(assignment.playerId || "").trim();
+      const name = String(assignment.playerNameSnapshot || "").trim();
+      if (playerId && name && name !== playerId && !playerNamesById.has(playerId)) {
+        playerNamesById.set(playerId, name);
+      }
+    });
     renderWorkspace(accounts[currentAccountKey]);
     standings = [...(data.standings || [])].sort(
       (a, b) =>
@@ -2059,28 +2338,53 @@ window.alphaOpenDataUI = {
         String(b.season.term || "").localeCompare(String(a.season.term || "")),
     );
     historyDataLoaded = true;
-    springSeasonData = historySeasons.find(
-      (item) => String(item.season.status || "").toLowerCase() === "completed",
-    ) || null;
-    fallSeasonData = historySeasons.find(
-      (item) => String(item.season.status || "").toLowerCase() === "active",
-    ) || null;
-    $(".view[data-view='schedule']")?.classList.toggle(
-      "completed-season-loaded",
-      Boolean(springSeasonData),
-    );
-    if (springSeasonData?.season) {
-      const completedSeason = springSeasonData.season;
-      if ($("#completedSeasonTitle"))
-        $("#completedSeasonTitle").textContent = completedSeason.name || completedSeason.seasonId;
-      if ($("#completedSeasonBadge"))
-        $("#completedSeasonBadge").textContent = "Completed";
+    const activeSeasonId = activeWorkspaceSeason?.seasonId;
+    fallSeasonData =
+      historySeasons.find((item) => item.season?.seasonId === activeSeasonId) ||
+      historySeasons.find(
+        (item) =>
+          String(item.season?.status || "").toLowerCase() === "active",
+      ) ||
+      null;
+    updateCurrentSeasonContext(fallSeasonData?.season || activeWorkspaceSeason);
+    const filter = $("#historySeasonFilter");
+    if (filter) {
+      const selected = filter.value || "all";
+      filter.innerHTML = `<option value="all">All Seasons</option>${historySeasons.map((item) => {
+        const status = String(item.season?.status || "").toLowerCase() === "active"
+          ? "Active"
+          : "Completed";
+        return `<option value="${item.season.seasonId}">${item.season.name || item.season.seasonId} (${status})</option>`;
+      }).join("")}`;
+      filter.value = [...filter.options].some(
+        (option) => option.value === selected,
+      )
+        ? selected
+        : "all";
     }
     renderHistory(accounts[currentAccountKey]);
     renderWorkspace(accounts[currentAccountKey]);
     renderSpringSeason();
     renderFallSeason();
     renderSeasonDashboard();
+  },
+  applyPlayerDirectory(players) {
+    historyPlayerDirectory = new Map(
+      (players || [])
+        .filter((player) => player.playerId && player.displayName)
+        .map((player) => [player.playerId, player.displayName]),
+    );
+    renderHistory(accounts[currentAccountKey]);
+  },
+  applyCompletedSeasonOptions(seasons) {
+    applyCompletedSeasonOptions(seasons);
+  },
+  applySelectedCompletedSeason(data, errorMessage = "") {
+    selectedPreviousSeasonLoading = false;
+    springSeasonData = data || null;
+    updatePreviousSeasonHeading();
+    renderSpringSeason();
+    if (errorMessage) showToast(errorMessage);
   },
   showHistoryError(message) {
     historyDataLoaded = true;
@@ -2170,15 +2474,21 @@ $("#fallWeekFilter")?.addEventListener("change", renderFallSeason);
 $("#fallTeamFilter")?.addEventListener("change", renderFallSeason);
 $("#fallPlayerFilter")?.addEventListener("change", renderFallSeason);
 $("#fallStatusFilter")?.addEventListener("change", renderFallSeason);
-function requestCompletedSeason(event) {
-  const seasonId = event.target.value || "";
-  window.alphaOpenDataUI.applyHistoryData([]);
-  window.dispatchEvent(new CustomEvent("alphaopen:completed-season-selected", {
-    detail: { seasonId },
-  }));
-}
-$("#completedSeasonSelect")?.addEventListener("change", requestCompletedSeason);
-$("#historySeasonFilter")?.addEventListener("change", requestCompletedSeason);
+$("#previousSeasonFilter")?.addEventListener("change", (event) => {
+  resetPreviousSeasonDashboardFilters();
+  springSeasonData = null;
+  selectedPreviousSeasonLoading = Boolean(event.target.value);
+  updatePreviousSeasonHeading();
+  renderSpringSeason();
+  window.dispatchEvent(
+    new CustomEvent("alphaopen:completed-season-selected", {
+      detail: { seasonId: event.target.value || "" },
+    }),
+  );
+});
+$("#historySeasonFilter").addEventListener("change", () =>
+  renderHistory(accounts[currentAccountKey]),
+);
 $("#historyPlayerFilter")?.addEventListener("change", () =>
   renderHistory(accounts[currentAccountKey]),
 );
@@ -2219,9 +2529,8 @@ $("#springLineEditorForm")?.addEventListener("submit", (event) => {
       (set) => set.homeScore > set.awayScore,
     ).length,
     awaySetWins = sets.filter((set) => set.awayScore > set.homeScore).length;
-    const payload = {
-      seasonId: springSeasonData?.season?.seasonId,
-      matchupId,
+  const payload = {
+    matchupId,
     lineMatchId,
     homeTeamId: record.line.homeTeamId,
     awayTeamId: record.line.awayTeamId,

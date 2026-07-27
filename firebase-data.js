@@ -1,19 +1,29 @@
 import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { formattedPlayerLabel, resolvedPlayerName, loadCanonicalPlayers } from "./player-identity.js?v=5";
+import {
+  loadPublicCompletedSeasonDashboard,
+  loadPublicCompletedSeasons,
+  loadPublicMatchLines,
+  loadPublicSeasonDashboard,
+  publishPublicSeasonDashboard,
+} from "./public-season-dashboard.js?v=14";
 import {
   collection,
   doc,
   getDoc,
   getDocFromCache,
-  getCountFromServer,
   getDocs,
   getDocsFromCache,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   getFirestore,
+  writeBatch,
   where
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 
@@ -34,7 +44,6 @@ const readCache = new Map();
 const PUBLIC_READ_TTL_MS = 5 * 60 * 1000;
 const OPERATIONAL_READ_TTL_MS = 60 * 1000;
 const CACHE_STAMP_PREFIX = "alphaopen:firestore-cache:";
-const ACTIVE_SEASON_SNAPSHOT_KEY = "alphaopen:active-season-snapshot";
 
 function cacheTimestamp(key) {
   try { return Number(localStorage.getItem(CACHE_STAMP_PREFIX + key) || 0); }
@@ -70,18 +79,16 @@ function seasonsOnce() {
   const reference = collection(db, "seasons"),
     mapSnapshot = (snapshot) => snapshot.docs.map((item) => ({ seasonId: item.id, ref: item.ref, ...item.data() }));
   return cacheFirstRead(
-    "canonical-seasons",
+    "seasons",
     async () => mapSnapshot(await getDocs(reference)),
     async () => mapSnapshot(await getDocsFromCache(reference)),
   );
 }
 
 function seasonTree(seasonRef, cacheKey, includeStandings = false) {
-  const ttl = cacheKey.startsWith("operational-tree:")
+  const ttl = cacheKey.startsWith("operational-")
     ? OPERATIONAL_READ_TTL_MS
-    : cacheKey.startsWith("canonical-live:")
-      ? 15 * 1000
-      : PUBLIC_READ_TTL_MS;
+    : PUBLIC_READ_TTL_MS;
   const loadTree = async (fromCache = false) => {
     const readDoc = fromCache ? getDocFromCache : getDoc,
       readDocs = fromCache ? getDocsFromCache : getDocs;
@@ -91,9 +98,10 @@ function seasonTree(seasonRef, cacheKey, includeStandings = false) {
       readDocs(collection(seasonRef, "matchups")),
       readDocs(collection(seasonRef, "rosterAssignments")),
       readDocs(collection(seasonRef, "weeks")),
+      loadCanonicalPlayers(),
     ];
     if (includeStandings) baseReads.push(readDocs(collection(seasonRef, "standings")));
-    const [seasonSnapshot, teamsSnapshot, matchupsSnapshot, rosterSnapshot, weeksSnapshot, standingsSnapshot] =
+    const [seasonSnapshot, teamsSnapshot, matchupsSnapshot, rosterSnapshot, weeksSnapshot, canonicalPlayers, standingsSnapshot] =
       await Promise.all(baseReads);
     if (!seasonSnapshot.exists()) throw new Error(`Season ${seasonRef.id} was not found.`);
     const matchups = matchupsSnapshot.docs.map((snapshot) => ({ matchupId: snapshot.id, ...snapshot.data() }));
@@ -107,8 +115,9 @@ function seasonTree(seasonRef, cacheKey, includeStandings = false) {
       matchups,
       lineMatches: lineGroups.flat(),
       weeks: weeksSnapshot.docs.map((snapshot) => ({ weekId: snapshot.id, ...snapshot.data() })),
-      rosterAssignments: rosterSnapshot.docs.map((snapshot) => ({ assignmentId: snapshot.id, ...snapshot.data() })),
+      rosterAssignments: rosterSnapshot.docs.map((snapshot) => ({ ...snapshot.data(), assignmentId: snapshot.id })),
       standings: standingsSnapshot?.docs.map((snapshot) => ({ teamId: snapshot.id, ...snapshot.data() })) || [],
+      canonicalPlayers,
     };
   };
   return cacheFirstRead(
@@ -119,47 +128,54 @@ function seasonTree(seasonRef, cacheKey, includeStandings = false) {
   );
 }
 
-async function loadPublicActiveSeason() {
+async function loadActiveSeason(user = auth.currentUser) {
   try {
-    if (!auth.currentUser) {
-      window.alphaOpenDataUI?.applyPublicSeasons([]);
-      window.alphaOpenDataUI?.applyActiveSeason(null);
-      return null;
+    if (!user) {
+      const snapshot = await getDoc(PUBLIC_ACTIVE_SEASON_REF);
+      const active = applyPublicActiveSeasonSnapshot(snapshot);
+      watchPublicActiveSeason();
+      return active;
     }
-    try {
-      const cachedActive = JSON.parse(localStorage.getItem(ACTIVE_SEASON_SNAPSHOT_KEY) || "null");
-      if (cachedActive?.seasonId) window.alphaOpenDataUI?.applyActiveSeason(cachedActive);
-    } catch { /* Ignore malformed or unavailable browser storage. */ }
+    stopWatchingPublicActiveSeason();
     const control = await getDoc(SEASON_CONTROL_REF);
-    const activeSeasonId = control.data()?.activeSeasonId || null;
-    const activeSnapshot = activeSeasonId
-      ? await getDoc(doc(db, "seasons", activeSeasonId))
-      : null;
-    const active = activeSnapshot?.exists()
-      ? { seasonId: activeSnapshot.id, ref: activeSnapshot.ref, ...activeSnapshot.data() }
-      : null;
-    window.alphaOpenDataUI?.applyActiveSeason(active);
-    if (active?.seasonId) {
-      try { localStorage.setItem(ACTIVE_SEASON_SNAPSHOT_KEY, JSON.stringify(active)); }
-      catch { /* Storage can be unavailable in private browsing. */ }
+    const seasonId = control.data()?.activeSeasonId || "";
+    if (!seasonId) throw new Error("No active season is configured.");
+    const snapshot = await getDoc(doc(db, "seasons", seasonId));
+    if (!snapshot.exists()) throw new Error(`Season ${seasonId} was not found.`);
+    const active = { seasonId: snapshot.id, ref: snapshot.ref, ...snapshot.data() };
+    if (
+      user.emailVerified &&
+      (
+        user.email?.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL ||
+        window.alphaOpenAuthorization?.roles?.includes("superAdmin")
+      )
+    ) {
+      await setDoc(PUBLIC_ACTIVE_SEASON_REF, {
+        seasonId: active.seasonId,
+        name: active.name || active.seasonName || active.seasonId,
+        status: "active",
+        updatedAt: serverTimestamp(),
+      });
     }
+    window.alphaOpenDataUI?.applySeasons([active]);
+    window.alphaOpenDataUI?.applyActiveSeason(active);
     return active;
   } catch (error) {
-    console.error("Public active season lookup failed", error);
+    console.error("Active season lookup failed", error);
     return null;
   }
 }
 
 async function loadActiveSeasonMatches() {
-  const active = await loadPublicActiveSeason();
+  const active = await loadActiveSeason(null);
   if (!active?.seasonId) throw new Error("No active season is configured.");
-  window.alphaOpenDataUI?.applyLeagueData(
-    await seasonTree(
-      doc(db, "seasons", active.seasonId),
-      `canonical-live:${active.seasonId}`,
-      true,
-    ),
+  const dashboard = await loadPublicSeasonDashboard(active.seasonId);
+  if (!dashboard) throw new Error("Public active-season details have not been published yet.");
+  const lineMatches = await loadPublicMatchLines(
+    active.seasonId,
+    dashboard.matchups || [],
   );
+  window.alphaOpenDataUI?.applyLeagueData({...dashboard, lineMatches});
 }
 
 async function loadPendingApprovalCount(user, authorization = window.alphaOpenAuthorization) {
@@ -175,17 +191,9 @@ async function loadPendingApprovalCount(user, authorization = window.alphaOpenAu
     window.alphaOpenDataUI?.applyPendingApprovalCount(0);
     return;
   }
-  const matchups = collection(db, "seasons", seasonId, "matchups");
-  const count = await cachedRead(
-    `pending-approval-count:${seasonId}`,
-    async () => {
-      const [home, away] = await Promise.all([
-        getCountFromServer(query(matchups, where("homeLineupStatus", "==", "submitted"))),
-        getCountFromServer(query(matchups, where("awayLineupStatus", "==", "submitted"))),
-      ]);
-      return home.data().count + away.data().count;
-    },
-    15 * 1000,
+  const snapshot = await getDocs(collection(db, "seasons", seasonId, "matchups"));
+  const count = window.alphaOpenCountSubmittedLineups(
+    snapshot.docs.map((item) => item.data()),
   );
   window.alphaOpenDataUI?.applyPendingApprovalCount(count);
 }
@@ -193,60 +201,184 @@ async function loadPendingApprovalCount(user, authorization = window.alphaOpenAu
 window.addEventListener("alphaopen:match-line-updated", (event) => {
   const seasonId = event.detail?.seasonId;
   if (!seasonId) return;
-  [`operational-tree:${seasonId}`, `canonical-live:${seasonId}`, `canonical-league:${seasonId}`, `canonical-tree:${seasonId}`].forEach((key) => {
+  [`operational-tree:${seasonId}`, `operational-live:${seasonId}`, `league:${seasonId}`, `season-tree:${seasonId}`].forEach((key) => {
     readCache.delete(key);
     try { localStorage.removeItem(CACHE_STAMP_PREFIX + key); }
     catch { /* Storage can be unavailable in private browsing. */ }
   });
-  readCache.delete(`pending-approval-count:${seasonId}`);
 });
-async function loadActiveSeasonDashboardData() {
+async function loadPublishedHistoryData() {
   try {
-    const active = await loadPublicActiveSeason();
-    if (!active?.seasonId) throw new Error("No active season is configured.");
-    const data = await seasonTree(
-      doc(db, "seasons", active.seasonId),
-      `operational-tree:${active.seasonId}`,
-      true,
-    );
-    window.alphaOpenDataUI?.applyHistoryData([data]);
-    window.alphaOpenDataUI?.applyLeagueData(data);
+    const completedPublicDashboards = (await Promise.all(
+      (await loadPublicCompletedSeasons()).map(async (season) => {
+        const dashboard = await loadPublicCompletedSeasonDashboard(
+          season.seasonId,
+        );
+        if (!dashboard) return null;
+        return {
+          ...dashboard,
+          lineMatches: await loadPublicMatchLines(
+            season.seasonId,
+            dashboard.matchups || [],
+          ),
+        };
+      }),
+    )).filter(Boolean);
+    publishedHistorySeasons = completedPublicDashboards;
+    window.alphaOpenDataUI?.applyHistoryData(completedPublicDashboards);
   } catch (error) {
-    console.error("Active-season dashboard load failed", error);
-    window.alphaOpenDataUI?.showHistoryError(error.message || "The active season could not be loaded.");
+    console.error("All-season player history load failed", error);
+    window.alphaOpenDataUI?.showHistoryError(error.message || "Player history could not be loaded.");
   }
 }
 
-async function loadCompletedSeason(seasonId) {
+async function loadGlobalActiveSeasonDashboard({ includeCompleted = false } = {}) {
   try {
-    if (!seasonId) {
-      window.alphaOpenDataUI?.applyHistoryData([]);
+    const current = await loadActiveSeason(null);
+    const seasonId = current?.seasonId || "";
+    if (!seasonId) throw new Error("No active season is configured.");
+    let dashboard = await loadPublicSeasonDashboard(seasonId);
+    const refreshed = await publishPublicSeasonDashboard(seasonId).catch((error) => {
+      console.error("Active-season public dashboard refresh failed", error);
+      return false;
+    });
+    if (refreshed) {
+      readCache.delete(`public-active-dashboard:${seasonId}`);
+      dashboard = await loadPublicSeasonDashboard(seasonId);
+    }
+    if (!dashboard) throw new Error(`The global dashboard for active season ${seasonId} has not been published yet.`);
+    if (dashboard.season?.seasonId !== seasonId) {
+      throw new Error(`The active-season dashboard does not match ${seasonId}.`);
+    }
+    dashboard = {
+      ...dashboard,
+      lineMatches: await loadPublicMatchLines(
+        seasonId,
+        dashboard.matchups || [],
+      ),
+    };
+    const seasons = includeCompleted
+      ? [
+          ...publishedHistorySeasons.filter(
+            (item) => item.season?.seasonId !== seasonId,
+          ),
+          dashboard,
+        ]
+      : [dashboard];
+    window.alphaOpenDataUI?.applyHistoryData(seasons);
+  } catch (error) {
+    console.error("Global active-season dashboard load failed", error);
+    window.alphaOpenDataUI?.showHistoryError(
+      error.message || "The global active-season dashboard could not be loaded.",
+    );
+  }
+}
+
+async function loadGlobalPlayerDirectory() {
+  const players = await loadCanonicalPlayers();
+  window.alphaOpenDataUI?.applyPlayerDirectory([...players.values()]);
+}
+
+async function loadCompletedSeasonOptions() {
+  try {
+    const [completedSeasons, activeSnapshot] = await Promise.all([
+      loadPublicCompletedSeasons(),
+      getDoc(PUBLIC_ACTIVE_SEASON_REF),
+    ]);
+    const activeSeasonId = activeSnapshot.exists() &&
+      String(activeSnapshot.data().status || "").toLowerCase() === "active"
+      ? activeSnapshot.data().seasonId || ""
+      : "";
+    const seasons = completedSeasons.filter(
+      (season) => season.seasonId !== activeSeasonId,
+    );
+    window.alphaOpenDataUI?.applyCompletedSeasonOptions(seasons);
+  } catch (error) {
+    console.error("Completed-season list load failed", error);
+    window.alphaOpenDataUI?.applyCompletedSeasonOptions([]);
+    window.alphaOpenDataUI?.showHistoryError(
+      error.message || "Completed seasons could not be loaded.",
+    );
+  }
+}
+
+async function loadSelectedCompletedSeason(seasonId) {
+  if (!seasonId) {
+    window.alphaOpenDataUI?.applySelectedCompletedSeason(null);
+    return;
+  }
+  try {
+    const dashboard = await loadPublicCompletedSeasonDashboard(seasonId);
+    const data = dashboard
+      ? {
+          ...dashboard,
+          lineMatches: await loadPublicMatchLines(
+            seasonId,
+            dashboard.matchups || [],
+          ),
+        }
+      : null;
+    if (
+      !data ||
+      String(data.season?.status || "").toLowerCase() !== "completed"
+    ) {
+      throw new Error(`${seasonId} is not available as a completed season.`);
+    }
+    window.alphaOpenDataUI?.applySelectedCompletedSeason(data);
+  } catch (error) {
+    console.error("Completed-season dashboard load failed", error);
+    window.alphaOpenDataUI?.applySelectedCompletedSeason(null, error.message);
+  }
+}
+
+async function loadLeagueData() {
+  try {
+    const active = await loadActiveSeason(auth.currentUser);
+    if (!active?.seasonId) throw new Error("No active season is configured.");
+    if (!auth.currentUser) {
+      const dashboard = await loadPublicSeasonDashboard(active.seasonId);
+      if (!dashboard) throw new Error("Public active-season details have not been published yet.");
+      window.alphaOpenDataUI?.applyLeagueData(dashboard);
       return;
     }
-    const seasons = await seasonsOnce();
-    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
-    const selected = seasons.find(
-      (season) =>
-        season.seasonId === seasonId &&
-        String(season.status || "").toLowerCase() === "completed",
+    window.alphaOpenDataUI?.applyLeagueData(
+      await seasonTree(doc(db, "seasons", active.seasonId), `league:${active.seasonId}`, true),
     );
-    if (!selected) throw new Error("Select a completed season.");
-    const data = await seasonTree(
-      selected.ref,
-      `completed-tree:${selected.seasonId}`,
-      true,
-    );
-    publishedHistorySeasons = [data];
-    window.alphaOpenDataUI?.applyHistoryData([data]);
-    window.alphaOpenDataUI?.applyLeagueData(data);
   } catch (error) {
-    console.error("Completed-season load failed", error);
-    window.alphaOpenDataUI?.showHistoryError(error.message || "The completed season could not be loaded.");
+    console.error("Firebase league data load failed",error);
+    window.alphaOpenDataUI?.showError(error.message||"Please refresh and try again.");
   }
 }
 
 const BOOTSTRAP_ADMIN_EMAIL = "sudarshandesai74@gmail.com";
 const SEASON_CONTROL_REF = doc(db, "systemConfig", "seasonControl");
+const PUBLIC_ACTIVE_SEASON_REF = doc(db, "publicConfig", "activeSeason");
+let publicActiveSeasonUnsubscribe = null;
+
+function applyPublicActiveSeasonSnapshot(snapshot) {
+  const active = snapshot.exists() && snapshot.data().status === "active"
+    ? { ...snapshot.data(), ref: snapshot.ref }
+    : null;
+  window.alphaOpenDataUI?.applySeasons(active ? [active] : []);
+  window.alphaOpenDataUI?.applyActiveSeason(active);
+  return active;
+}
+
+function watchPublicActiveSeason() {
+  if (publicActiveSeasonUnsubscribe) return;
+  publicActiveSeasonUnsubscribe = onSnapshot(
+    PUBLIC_ACTIVE_SEASON_REF,
+    (snapshot) => {
+      if (!auth.currentUser) applyPublicActiveSeasonSnapshot(snapshot);
+    },
+    (error) => console.error("Live guest active-season lookup failed", error),
+  );
+}
+
+function stopWatchingPublicActiveSeason() {
+  publicActiveSeasonUnsubscribe?.();
+  publicActiveSeasonUnsubscribe = null;
+}
 const dialog = document.querySelector("#createSeasonDialog");
 const form = document.querySelector("#createSeasonForm");
 const openButton = document.querySelector("#openCreateSeason");
@@ -453,17 +585,43 @@ async function saveSeason(event) {
         transaction.set(SEASON_CONTROL_REF, {
           activeSeasonId: seasonId, updatedByUid: user.uid, updatedAt: serverTimestamp()
         }, { merge: true });
+        transaction.set(PUBLIC_ACTIVE_SEASON_REF, {
+          seasonId,
+          name: season.name || seasonId,
+          status: "active",
+          updatedAt: serverTimestamp(),
+        });
       } else if (controlSnapshot.exists() && controlSnapshot.data().activeSeasonId === seasonId) {
         transaction.set(SEASON_CONTROL_REF, {
           activeSeasonId: null, updatedByUid: user.uid, updatedAt: serverTimestamp()
         }, { merge: true });
+        transaction.set(PUBLIC_ACTIVE_SEASON_REF, {
+          seasonId: null,
+          name: null,
+          status: "inactive",
+          updatedAt: serverTimestamp(),
+        });
       }
     });
-
     closeDialog();
     window.alphaOpenAuthUI.showMessage(editingSeasonId ? `${seasonId} updated` : `${seasonId} created`);
     editingSeasonId = null;
     await loadSeasons();
+    const publishSeasonIds = new Set(
+      ["active", "completed", "archived"].includes(season.status)
+        ? [seasonId]
+        : [],
+    );
+    if (season.status === "active") {
+      otherActiveRefs.forEach((reference) => publishSeasonIds.add(reference.id));
+    }
+    await Promise.all(
+      [...publishSeasonIds].map((publishSeasonId) =>
+        publishPublicSeasonDashboard(publishSeasonId).catch((error) =>
+          console.error("Guest season dashboard publish failed", publishSeasonId, error),
+        ),
+      ),
+    );
   } catch (error) {
     console.error("Season save failed", error);
     message.textContent = error.message || "The season could not be saved.";
@@ -478,7 +636,7 @@ async function loadSeasons() {
   try {
     const snapshot = await getDocs(query(collection(db, "seasons"), orderBy("year", "desc")));
     if (snapshot.empty) {
-      seasonList.innerHTML = '<div class="empty-state compact"><b>No Firestore seasons yet</b><p>Create Fall 2026 to begin the live league setup.</p></div>';
+      seasonList.innerHTML = '<div class="empty-state compact"><b>No Firestore seasons yet</b><p>Create a season to begin the live league setup.</p></div>';
       return;
     }
     seasonRecords = snapshot.docs.map(item => ({ ...item.data(), seasonId: item.id }));
@@ -541,14 +699,15 @@ async function loadRegisteredUsers() {
       "Firestore did not respond in time. Check your connection and retry."
     );
     const playerNames = new Map(
-      playersSnapshot.docs.map(item => {
-        const player = item.data();
-        const name =
-          player.displayName ||
-          player.fullName ||
-          [player.firstName, player.lastName].filter(Boolean).join(" ");
-        return [item.id, name || ""];
-      })
+      playersSnapshot.docs.map(item => [
+        item.id,
+        resolvedPlayerName(
+          item.id,
+          item.data().fullName,
+          [item.data().firstName, item.data().lastName].filter(Boolean).join(" "),
+          item.data().displayName,
+        )
+      ])
     );
     seasonRecords = seasonsSnapshot.docs.map(item => ({ ...item.data(), seasonId: item.id }));
     if (loadId !== registeredUsersLoadId) return;
@@ -617,11 +776,11 @@ function renderRegisteredUsers(records, filter = "") {
       const actions = protectedAccount ? '<span class="badge navy">Protected account</span>' : status === "pending"
         ? `<button class="primary" data-user-action="approve" data-uid="${record.uid}">Approve</button><button class="secondary" data-user-action="reject" data-uid="${record.uid}">Reject</button>${deleteAction}`
         : `<button class="secondary" data-user-action="manage" data-uid="${record.uid}">Manage access</button>${deleteAction}`;
-      const identityHeading = record.user.playerId
-        ? `${escapeHtml(record.user.playerId)} · ${escapeHtml(record.playerName || record.user.displayName || "Player name unavailable")}`
-        : escapeHtml(record.user.displayName || record.user.email);
-      const missingPlayerLink = record.user.playerId ? "" : "<small>No Player Master link</small>";
-      return `<div class="registered-user-row"><div><b>${identityHeading}</b><small>${escapeHtml(record.user.email)}</small>${missingPlayerLink}</div><div><span class="badge ${status === "active" ? "lime" : status === "rejected" ? "orange" : "gray"}">${escapeHtml(status)}</span><small>${escapeHtml(profileLabel(profile))}</small></div><div class="registered-user-actions">${actions}</div></div>`;
+      const playerId = record.user.playerId || "";
+      const playerIdentity = playerId
+        ? formattedPlayerLabel(playerId, null, record.playerName)
+        : "No Player Master link";
+      return `<div class="registered-user-row"><div><b>${escapeHtml(record.user.email || "Email unavailable")}</b><small>Player: ${escapeHtml(playerIdentity)}</small></div><div><span class="badge ${status === "active" ? "lime" : status === "rejected" ? "orange" : "gray"}">${escapeHtml(status)}</span><small>${escapeHtml(profileLabel(profile))}</small></div><div class="registered-user-actions">${actions}</div></div>`;
     }).join("");
     registeredUsersPanel.querySelectorAll("[data-user-action]").forEach(button => button.addEventListener("click", () => handleUserAction(button.dataset.userAction, button.dataset.uid)));
 }
@@ -686,6 +845,30 @@ async function deleteUserProfile(record) {
   }
 }
 
+async function captainSeasonAccessForPlayer(playerId) {
+  if (!playerId) return [];
+  const activeSeasons = await getDocs(
+    query(collection(db, "seasons"), where("status", "==", "active")),
+  );
+  const access = [];
+  for (const season of activeSeasons.docs) {
+    const teamSnapshot = await getDocs(
+      query(
+        collection(season.ref, "teams"),
+        where("captainPlayerIds", "array-contains", playerId),
+      ),
+    );
+    if (!teamSnapshot.empty) {
+      access.push({
+        seasonId: season.id,
+        roles: ["player", "captain"],
+        teamIds: teamSnapshot.docs.map((team) => team.id),
+      });
+    }
+  }
+  return access;
+}
+
 async function approveRegistration(record) {
   const currentUser = auth.currentUser;
   if (!isBootstrapAdmin(currentUser)) {
@@ -698,7 +881,8 @@ async function approveRegistration(record) {
     if (playerMatches.size > 1) throw new Error("Multiple Player Master records match this email. Resolve the duplicates before approval.");
     if (playerMatches.empty) throw new Error("Cannot approve this registration: the Google email is not in Player Master. Add the player first, then retry approval.");
     const playerId = playerMatches.docs[0].id;
-    const assignedProfileType = "player";
+    const captainSeasonAccess = await captainSeasonAccessForPlayer(playerId);
+    const assignedProfileType = captainSeasonAccess.length ? "captain" : "player";
     const userRef = doc(db, "users", record.uid);
     const requestRef = doc(db, "registrationRequests", record.uid);
     const accountLinkRef = doc(db, "playerAccountLinks", playerId);
@@ -716,6 +900,9 @@ async function approveRegistration(record) {
       const restoredGlobalRoles = isEmailTransfer
         ? (previousLink.pendingGlobalRoles || []).filter(role => role !== "superAdmin")
         : (userSnapshot.data().globalRoles || []);
+      const seasonAccess = isEmailTransfer
+        ? previousLink.pendingSeasonAccess || []
+        : captainSeasonAccess;
       transaction.update(userRef, {
         status: "active",
         profileType: assignedProfileType,
@@ -752,22 +939,22 @@ async function approveRegistration(record) {
           transferCompletedByUid: isEmailTransfer ? currentUser.uid : null
         }, { merge: true });
       }
+      seasonAccess.forEach(access => {
+        if (!access.seasonId) return;
+        transaction.set(doc(db, "seasons", access.seasonId, "members", record.uid), {
+          uid: record.uid,
+          playerId,
+          roles: access.roles || ["player"],
+          teamIds: access.teamIds || [],
+          status: "active",
+          effectiveFrom: serverTimestamp(),
+          effectiveTo: null,
+          assignedByUid: currentUser.uid,
+          assignedAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      });
       if (isEmailTransfer) {
-        (previousLink.pendingSeasonAccess || []).forEach(access => {
-          if (!access.seasonId) return;
-          transaction.set(doc(db, "seasons", access.seasonId, "members", record.uid), {
-            uid: record.uid,
-            playerId,
-            roles: access.roles || ["player"],
-            teamIds: access.teamIds || [],
-            status: "active",
-            effectiveFrom: serverTimestamp(),
-            effectiveTo: null,
-            assignedByUid: currentUser.uid,
-            assignedAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          }, { merge: true });
-        });
         (previousLink.pendingApproverAccess || []).forEach(access => {
           if (!access.seasonId) return;
           transaction.set(doc(db, "seasons", access.seasonId, "approverAssignments", record.uid), {
@@ -789,7 +976,11 @@ async function approveRegistration(record) {
     });
     window.alphaOpenAuthUI.showMessage(
       `${record.user.displayName || record.user.email} linked to ${playerId} and approved.` +
-      (completedEmailTransfer ? " Preserved season access was restored." : " Use Manage access for active-season roles."),
+      (completedEmailTransfer
+        ? " Preserved season access was restored."
+        : captainSeasonAccess.length
+          ? " Captain team access was assigned from the Team record."
+          : " Use Manage access for active-season roles."),
     );
     await loadRegisteredUsers();
   } catch (error) {
@@ -955,14 +1146,13 @@ window.addEventListener("alphaopen:update-spring-line",async event=>{
   const reply=(ok,message="")=>window.dispatchEvent(new CustomEvent("alphaopen:spring-line-updated",{detail:{ok,message}}));
   try {
     const user=auth.currentUser;if(!user)throw new Error("Super Admin sign-in is required.");
-    const item=event.detail||{},seasonId=item.seasonId;
-    if(!seasonId)throw new Error("The completed season ID is missing.");
+    const item=event.detail||{},seasonId="AO-S-2026";
     if(!item.matchupId||!item.lineMatchId)throw new Error("The Spring line record is missing its ID.");
     const operationalMatch=doc(db,"seasons",seasonId,"matchups",item.matchupId);
     const operationalLine=doc(operationalMatch,"lineMatches",item.lineMatchId);
     await runTransaction(db,async transaction=>{
       const [oldOperational,operationalParent]=await Promise.all([transaction.get(operationalLine),transaction.get(operationalMatch)]);
-      if(!oldOperational.exists())throw new Error("The canonical line record was not found.");
+      if(!oldOperational.exists())throw new Error("The line record was not found.");
       const playedAt=item.scheduledAt?new Date(item.scheduledAt):null,payload={homePlayers:item.homePlayers,awayPlayers:item.awayPlayers,scheduledAt:playedAt,venueNameSnapshot:item.venueNameSnapshot,sets:item.sets,homePoints:item.homePoints,awayPoints:item.awayPoints,winnerTeamId:item.winnerTeamId,scoreStatus:"published",scheduleStatus:"completed",updatedAt:serverTimestamp()};
       transaction.update(operationalLine,payload);
       if(operationalParent.exists()){const parent=operationalParent.data(),old=oldOperational.data();transaction.update(operationalMatch,{homeTeamPoints:Number(parent.homeTeamPoints||0)-Number(old.homePoints||0)+Number(item.homePoints||0),awayTeamPoints:Number(parent.awayTeamPoints||0)-Number(old.awayPoints||0)+Number(item.awayPoints||0),updatedAt:serverTimestamp()});}
@@ -972,50 +1162,42 @@ window.addEventListener("alphaopen:update-spring-line",async event=>{
 });
 
 function currentRoute() {
-  return location.hash.slice(1) || "home";
+  const route = location.hash.slice(1) || "home";
+  return route === "fall2026" ? "current-season" : route;
 }
 
 async function loadForRoute(route, user = auth.currentUser) {
-  if (!user && ["home", "fall2026", "season-dashboard", "matches", "schedule", "history"].includes(route)) {
-    window.alphaOpenDataUI?.applyPublicSeasons([]);
-    window.alphaOpenDataUI?.applyActiveSeason(null);
-    window.alphaOpenDataUI?.applyLeagueData({
-      season: null, teams: [], standings: [], matchups: [], lineMatches: [],
-    });
-    window.alphaOpenDataUI?.applyHistoryData([]);
-    return;
-  }
   if (route === "home") {
-    await Promise.all([
-      loadPublicActiveSeason(),
-      loadPendingApprovalCount(user),
-    ]);
+    await loadActiveSeason(user);
+    await loadPendingApprovalCount(user);
     return;
   }
-  if (route === "fall2026" || route === "season-dashboard") {
-    await loadActiveSeasonDashboardData();
+  if (route === "current-season" || route === "season-dashboard") {
+    await loadGlobalActiveSeasonDashboard();
     return;
   }
   if (route === "matches") {
-    await loadActiveSeasonMatches();
+    await loadActiveSeasonMatches(user);
     return;
   }
   if (route === "schedule") {
-    const seasons = await seasonsOnce();
-    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
-    window.alphaOpenDataUI?.applyHistoryData([]);
+    await loadCompletedSeasonOptions();
     return;
   }
   if (route === "history") {
-    const seasons = await seasonsOnce();
-    window.alphaOpenDataUI?.applyPublicSeasons(seasons);
-    window.alphaOpenDataUI?.applyHistoryData([]);
+    await loadGlobalPlayerDirectory();
+    await loadPublishedHistoryData();
+    await loadGlobalActiveSeasonDashboard({ includeCompleted: true });
     return;
   }
   if (route === "admin") {
     startAdminLoads(user);
   }
 }
+
+window.addEventListener("alphaopen:completed-season-selected", (event) => {
+  loadSelectedCompletedSeason(event.detail?.seasonId || "");
+});
 
 onAuthStateChanged(auth, user => {
   loadForRoute(currentRoute(), user).catch((error) =>
@@ -1034,20 +1216,17 @@ window.addEventListener("alphaopen:authorization-changed", (event) => {
     console.error("Pending lineup approval count failed", error);
     window.alphaOpenDataUI?.applyPendingApprovalCount(null);
   });
-});
-
-window.addEventListener("alphaopen:completed-season-selected", (event) => {
-  loadCompletedSeason(event.detail?.seasonId || "").catch((error) =>
-    console.error("Completed-season selection failed", error),
-  );
+  if (currentRoute() === "schedule") {
+    loadCompletedSeasonOptions();
+  }
 });
 
 window.addEventListener("alphaopen:refresh-matches", async () => {
   try {
     for (const key of [...readCache.keys()])
-      if (key.startsWith("operational-tree:") || key.startsWith("canonical-live:"))
+      if (key.startsWith("operational-"))
         readCache.delete(key);
-    await loadActiveSeasonMatches();
+    await loadActiveSeasonMatches(auth.currentUser);
     window.dispatchEvent(new CustomEvent("alphaopen:matches-refreshed", { detail: { ok: true } }));
   } catch (error) {
     console.error("Matches refresh failed", error);

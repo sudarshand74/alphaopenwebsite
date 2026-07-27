@@ -24,6 +24,9 @@ provider.setCustomParameters({ prompt: "select_account" });
 const ui = window.alphaOpenAuthUI;
 const continueButton = document.querySelector("#continueGoogle");
 const signInDialog = document.querySelector("#signInDialog");
+const registrationPendingDialog = document.querySelector("#registrationPendingDialog");
+const registrationPendingMessage = document.querySelector("#registrationPendingMessage");
+const acknowledgeRegistrationPending = document.querySelector("#acknowledgeRegistrationPending");
 const registrationBlockedDialog = document.querySelector("#registrationBlockedDialog");
 const registrationBlockedMessage = document.querySelector("#registrationBlockedMessage");
 const acknowledgeRegistrationBlocked = document.querySelector("#acknowledgeRegistrationBlocked");
@@ -113,11 +116,39 @@ async function eligiblePlayerId(user) {
   const indexRef = doc(db, "playerEmailIndex", encodeURIComponent(normalizedEmail));
   const indexSnapshot = await getDoc(indexRef);
   if (!indexSnapshot.exists() || indexSnapshot.data().emailNormalized?.toLowerCase() !== normalizedEmail || String(indexSnapshot.data().status || "active").toLowerCase() === "inactive") {
-    const error = new Error("Your Gmail account was authenticated successfully. However, this Gmail address does not have an AlphaOpen Player Master record, so it cannot be registered for the AlphaOpen application. Please register as an AlphaOpen player or contact AlphaOpen Administration.");
+    const error = new Error("Thank you for trying to register for the AO website. Unfortunately, at this time we are only allowing players to register. Please contact Administration if you think you need to register.");
     error.code = "registration/not-in-player-master";
     throw error;
   }
   return indexSnapshot.data().playerId;
+}
+
+function showRegistrationPending(userData) {
+  const playerId = String(userData.playerId || "").trim();
+  const playerName = String(userData.displayName || "").trim() || "Player";
+  const identity = playerId ? `${playerName} (${playerId})` : playerName;
+  registrationPendingMessage.textContent =
+    `Thank you for registering. This email address is associated with ${identity}. ` +
+    "Your request has been sent to AO Admin for approval. Once approved, you can sign in. " +
+    "As a Player, you do not receive any additional access beyond what is available to a Guest.";
+  return new Promise(resolve => {
+    const acknowledge = () => {
+      acknowledgeRegistrationPending.removeEventListener("click", acknowledge);
+      if (registrationPendingDialog.open) registrationPendingDialog.close();
+      resolve();
+    };
+    acknowledgeRegistrationPending.addEventListener("click", acknowledge);
+    try {
+      if (signInDialog.open) signInDialog.close();
+      if (typeof registrationPendingDialog.showModal === "function") registrationPendingDialog.showModal();
+      else registrationPendingDialog.setAttribute("open", "");
+      acknowledgeRegistrationPending.focus();
+    } catch (dialogError) {
+      acknowledgeRegistrationPending.removeEventListener("click", acknowledge);
+      window.alert(registrationPendingMessage.textContent);
+      resolve();
+    }
+  });
 }
 
 function showRegistrationBlocked(message) {
@@ -143,6 +174,7 @@ function showRegistrationBlocked(message) {
 }
 
 registrationBlockedDialog.addEventListener("cancel", event => event.preventDefault());
+registrationPendingDialog.addEventListener("cancel", event => event.preventDefault());
 
 async function ensureBootstrapAdminPlayerLink(user, userRef, common) {
   const playerRef = doc(db, "players", BOOTSTRAP_ADMIN_PLAYER_ID);
@@ -278,6 +310,14 @@ onAuthStateChanged(auth, async user => {
   try {
     await user.getIdTokenResult(true);
     const userData = await ensureUserProfile(user);
+    if (userData.status === "pending") {
+      window.alphaOpenProfileReady = { uid: user.uid, status: "pending" };
+      await showRegistrationPending(userData);
+      await signOut(auth);
+      ui.applyGuest();
+      window.location.hash = "home";
+      return;
+    }
     const authorization = await authorizationFor(user, userData);
     window.alphaOpenProfileReady = { uid: user.uid, status: "ready" };
     ui.applyUser(user, authorization, true);
@@ -302,9 +342,11 @@ onAuthStateChanged(auth, async user => {
       window.location.hash = "home";
       return;
     }
-    ui.applyUser(user, { role: "Pending approval", access: [], playerId: null, status: "pending" });
-    if (accountChanged) window.location.hash = "home";
-    ui.showMessage(`Google sign-in succeeded, but registration could not be saved (${error.code || "unknown"}). ${error.message || "Please sign out and try again."}`);
-    window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
+    await showRegistrationBlocked(
+      "Sorry we could not complete your AO website registration. Please try again or contact Administration.",
+    );
+    await signOut(auth);
+    ui.applyGuest();
+    window.location.hash = "home";
   }
 });
