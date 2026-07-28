@@ -1,33 +1,16 @@
 import {
-  getApp,
-  getApps,
-  initializeApp,
-} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import {
   collection,
   doc,
   getDoc,
   getDocs,
-  getFirestore,
   serverTimestamp,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { auth, db, firebaseProjectId } from "./firebase-client.js?v=5";
 import "./season-reset.js?v=2";
 import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=15";
 import { refreshSeasonPublicRecords } from "./season-public-sync.js?v=1";
-const config = {
-    projectId: "alphaopen-development-2026",
-    appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-    storageBucket: "alphaopen-development-2026.firebasestorage.app",
-    apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-    authDomain: "alphaopen-development-2026.firebaseapp.com",
-    messagingSenderId: "128657830722",
-  },
-  app = getApps().length ? getApp() : initializeApp(config),
-  auth = getAuth(app),
-  db = getFirestore(app),
-  ADMIN = "sudarshandesai74@gmail.com",
+const ADMIN = "sudarshandesai74@gmail.com",
   $ = (s) => document.querySelector(s),
   dialog = $("#seasonImportDialog"),
   form = $("#seasonImportForm"),
@@ -212,14 +195,18 @@ async function prepare(file) {
     if (!m.weekStartDate || !m.playByDate || !m.lineupSubmissionDate)
       errors.push(`${m.matchupId} has an invalid date.`);
   }
-  const [playerSnap, linkSnap] = await Promise.all([
+  const [playerSnap, linkSnap, accessSnap] = await Promise.all([
       getDocs(collection(db, "players")),
       getDocs(collection(db, "playerAccountLinks")),
+      getDocs(collection(db, "operationsAccess")),
     ]),
     players = new Map(
       playerSnap.docs.map((d) => [d.id, { playerId: d.id, ...d.data() }]),
     ),
-    links = new Map(linkSnap.docs.map((d) => [d.id, d.data().uid || null]));
+    links = new Map(linkSnap.docs.map((d) => [d.id, d.data().uid || null])),
+    accessByEmail = new Map(
+      accessSnap.docs.map((d) => [email(d.data().emailNormalized || d.id), d.data()]),
+    );
   for (const row of roster) {
     const p = players.get(row.playerId);
     if (!p) errors.push(`${row.playerId} is missing from Player Master.`);
@@ -235,6 +222,7 @@ async function prepare(file) {
       );
     row.captainName = p?.fullName || p?.displayName || row.playerId;
     row.uid = links.get(row.playerId) || null;
+    row.existingAccess = accessByEmail.get(row.playerEmail) || null;
   }
   prepared = {
     season,
@@ -377,6 +365,36 @@ async function processImport(event) {
         updatedAt: now,
       };
       push("seasons", ["teams", captain.teamId], team);
+      const existingAccess = captain.existingAccess || {};
+      const accessRoles = [
+        ...new Set([
+          ...(existingAccess.roles || []).filter((role) =>
+            ["captain", "ec", "neutralApprover"].includes(role)
+          ),
+          "captain",
+        ]),
+      ];
+      operations.push({
+        type: "set",
+        ref: doc(db, "operationsAccess", captain.playerEmail),
+        data: {
+          emailNormalized: captain.playerEmail,
+          playerId: captain.playerId,
+          displayNameSnapshot: captain.captainName,
+          roles: accessRoles,
+          membershipRoles: ["player", ...accessRoles],
+          seasonId: season.seasonId,
+          teamIds: existingAccess.seasonId === season.seasonId
+            ? [...new Set([...(existingAccess.teamIds || []), captain.teamId])]
+            : [captain.teamId],
+          status: "approved",
+          createdAt: existingAccess.createdAt || now,
+          createdByUid: existingAccess.createdByUid || auth.currentUser.uid,
+          updatedAt: now,
+          updatedByUid: auth.currentUser.uid,
+        },
+        options: { merge: true },
+      });
       if (captain.uid) {
         const memberRef = doc(
             db,
@@ -539,10 +557,41 @@ function excelValue(value) {
   }
   return value;
 }
+const EXCEL_CELL_TEXT_LIMIT = 30000;
+function splitExcelText(value) {
+  const chunks = [];
+  let start = 0;
+  while (start < value.length) {
+    let end = Math.min(start + EXCEL_CELL_TEXT_LIMIT, value.length);
+    if (end < value.length && /[\uD800-\uDBFF]/.test(value[end - 1])) end -= 1;
+    chunks.push(value.slice(start, end));
+    start = end;
+  }
+  return chunks;
+}
+function excelFields(field, value) {
+  const serialized = excelValue(value);
+  if (typeof serialized !== "string" || serialized.length <= EXCEL_CELL_TEXT_LIMIT) {
+    return { [field]: serialized };
+  }
+  const chunks = splitExcelText(serialized);
+  return {
+    [`${field}__chunkEncoding`]:
+      typeof value === "string" ? "text-chunks-v1" : "json-chunks-v1",
+    [`${field}__chunkCount`]: chunks.length,
+    ...Object.fromEntries(
+      chunks.map((chunk, index) => [
+        `${field}__part_${String(index + 1).padStart(3, "0")}`,
+        chunk,
+      ]),
+    ),
+  };
+}
 function appendSnapshotRows(target, snapshot, context = {}) {
   snapshot.docs.forEach((item) => {
-    const values = Object.fromEntries(
-      Object.entries(item.data()).map(([field, value]) => [field, excelValue(value)]),
+    const values = Object.entries(item.data()).reduce(
+      (result, [field, value]) => Object.assign(result, excelFields(field, value)),
+      {},
     );
     target.push({
       "Document Path": item.ref.path,
@@ -569,16 +618,23 @@ async function exportEntireDatabase() {
     };
     const globalCollections = [
       ["Users", "users"],
-      ["Players Public", "players"],
-      ["Player Private", "playerPrivate"],
+      ["Player Master", "players"],
+      ["Player Private (Legacy)", "playerPrivate"],
       ["Email Index", "playerEmailIndex"],
       ["Account Links", "playerAccountLinks"],
       ["Player Link Requests", "playerLinkRequests"],
       ["Registrations", "registrationRequests"],
-      ["Venues", "venues"],
-      ["Venue Private", "venuePrivate"],
+      ["Operations Access", "operationsAccess"],
+      ["Venue Master", "venues"],
+      ["Venue Private (Optional)", "venuePrivate"],
       ["System Config", "systemConfig"],
       ["System Counters", "systemCounters"],
+      ["Public Config", "publicConfig"],
+      ["Public Season Dashboards", "publicSeasonDashboards"],
+      ["Public Completed Seasons", "publicCompletedSeasons"],
+      ["AO Content", "aoContent"],
+      ["AO FAQ Categories", "aoFaqCategories"],
+      ["AO FAQs", "aoFaqs"],
     ];
     const globalSnapshots = await Promise.all(
       globalCollections.map(([, collectionName]) => getDocs(collection(db, collectionName))),
@@ -626,6 +682,8 @@ async function exportEntireDatabase() {
       ["Schedule Proposals", "scheduleProposals"],
       ["Score Submissions", "scoreSubmissions"],
       ["Score Decisions", "scoreDecisions"],
+      ["Player Overrides", "playerOverrides"],
+      ["Corrections", "corrections"],
     ];
     for (const season of seasonSnapshot.docs) {
       const snapshots = await Promise.all(
@@ -683,8 +741,9 @@ async function exportEntireDatabase() {
     const summaryRows = [
       ["AlphaOpen Firebase Database Export"],
       ["Exported At", new Date()],
-      ["Firebase Project", config.projectId],
+      ["Firebase Project", firebaseProjectId],
       ["Exported By", auth.currentUser.email || auth.currentUser.uid],
+      ["Oversized Field Encoding", "Lossless 30,000-character text-chunks-v1 / json-chunks-v1 columns"],
       [],
       ["Worksheet", "Records", "Purpose"],
       ...[...sheets.entries()].map(([name, records]) => [

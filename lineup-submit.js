@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=4";
+import { auth, db } from "./firebase-client.js?v=5";
 import { formattedPlayerLabel, resolvedPlayerName, loadCanonicalPlayers, validatePlayerIds } from "./player-identity.js?v=5";
 import { newWorkflowOperationId, submitTeamLineup } from "./lineup-workflow-client.js?v=4";
 

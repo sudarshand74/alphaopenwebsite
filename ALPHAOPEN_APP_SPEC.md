@@ -148,9 +148,10 @@ Limited operations access workflow:
 
 1. Public navigation contains no sign-in or registration control.
 2. Approved operations personnel receive the private `#operations` address.
-3. Google authentication must resolve to an existing active user with a Captain, Neutral Approver, EC, or Super Admin assignment.
-4. Unknown, inactive, and player-only identities are signed out without creating a registration request.
-5. Firestore rules enforce the role assignment; knowing the private URL never grants access.
+3. Super Admin pre-approves the exact Player Master email and Captain, Neutral Approver, or EC role in `operationsAccess`.
+4. The person's first verified Google sign-in creates the production UID, account link, and active-season membership from that grant.
+5. Unknown, revoked, and player-only identities are signed out without creating a registration request.
+6. Firestore rules enforce both the email grant and resulting role assignment; knowing the private URL never grants access.
 
 Players can:
 
@@ -904,7 +905,7 @@ All identifiers are immutable. Display names may be edited without changing rela
 |---|---|---|---|
 | Venue | `V` + three digits | `V101` | Unique `Venue_ID` |
 | Season | `AO-{S\|F}-{YYYY}` | `AO-S-2026`, `AO-F-2026` | `S` means Spring; `F` means Fall |
-| Player | `P` + four digits | `P1001` | One ID per real person |
+| Player | Production: `AO-` + numeric sequence; legacy development: `P` + numeric sequence | `AO-1001` (`legacyPlayerId: P1001`) | One ID per real person |
 | Team | `{Season_ID}-T{n}` | `AO-S-2026-T1` | Composite ownership by `Season_ID + Team_ID` |
 | Roster assignment | `AO` + four digits | `AO1001` | Composite key: `Season_ID + Team_ID + Assignment_ID` |
 | Season matchup | `{Season_ID}-W{n}-M{n}` | `AO-S-2026-W1-M1` | Composite key: `Season_ID + Season_Matchup_ID`; `Match_Week` stores `Week1` through `Week7`, `QF`, `SF`, or `F` |

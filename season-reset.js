@@ -3,7 +3,7 @@ import {
   getDocs,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=4";
+import { auth, db } from "./firebase-client.js?v=5";
 
 const OPERATIONAL_COLLECTIONS = [
   "teams", "members", "rosterSlots", "rosterAssignments", "weeks",

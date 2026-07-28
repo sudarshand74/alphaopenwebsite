@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   where,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import {auth, db} from "./firebase-client.js?v=4";
+import {auth, db} from "./firebase-client.js?v=5";
 
 const SUPER_ADMIN_EMAIL = "sudarshandesai74@gmail.com";
 const TEAM_STATUSES = new Set(["pendingSubmission", "submitted", "approved", "rejected"]);

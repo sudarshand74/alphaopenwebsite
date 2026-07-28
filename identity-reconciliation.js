@@ -1,20 +1,8 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { auth, db } from "./firebase-client.js?v=5";
 import {
-  collection, deleteField, doc, getDoc, getDocs, getFirestore, runTransaction,
+  collection, deleteField, doc, getDoc, getDocs, runTransaction,
   serverTimestamp, setDoc, writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-
-const config = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722"
-};
-const app = getApps().length ? getApp() : initializeApp(config);
-const auth = getAuth(app);
-const db = getFirestore(app);
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -84,7 +72,8 @@ async function reconcileHistoricalPlayerId(event) {
   const newPlayerId = $("#historicalNewPlayerId")?.value.trim().toUpperCase();
   const message = $("#historicalPlayerIdMessage");
   const button = event.submitter;
-  if (!/^P\d+$/.test(oldPlayerId) || !/^P\d+$/.test(newPlayerId) || oldPlayerId === newPlayerId) {
+  const validPlayerId = value => /^(?:P\d+|AO-\d+)$/.test(value);
+  if (!validPlayerId(oldPlayerId) || !validPlayerId(newPlayerId) || oldPlayerId === newPlayerId) {
     message.textContent = "Enter two different valid Player IDs.";
     return;
   }

@@ -20,7 +20,7 @@ Firebase project: `alphaopen-development-2026`
 | Entity | Document ID | Example |
 |---|---|---|
 | Firebase user | Firebase Authentication UID | `a7Q...x91` |
-| Player | `P` + four digits | `P1001` |
+| Player | Production: `AO-` + numeric sequence; legacy development: `P` + numeric sequence | `AO-1001` (`legacyPlayerId: P1001`) |
 | Venue | `V` + three digits | `V101` |
 | Season | `AO-{S|F}-{YYYY}` | `AO-F-2026` |
 | Team | `{Season_ID}-T{n}` | `AO-F-2026-T1` |
@@ -44,6 +44,7 @@ systemCounters/players
 playerAccountLinks/{playerId}
 playerLinkRequests/{requestId}
 registrationRequests/{uid}
+operationsAccess/{normalizedEmail}
 venues/{venueId}
 venuePrivate/{venueId}
 
@@ -110,21 +111,26 @@ Rules:
 
 ### 4.2 `players/{playerId}`
 
-Guest-safe player identity. Only fields approved for public display belong here.
+Restricted canonical Player Master. Super Admin and approved Operations roles may read it. Guests use the sanitized `publicConfig/playerMaster` projection containing only Player ID and Player Name.
 
 ```text
 playerId: string
-displayName: string
+firstName: string
+lastName: string
+fullName: string
+emailNormalized: string
+phone: string | null
+tShirtSize: string | null
+globalRank: number | null
+internalNotes: string | null
 status: "active" | "inactive"
-publicProfileEnabled: boolean
-photoUrl: string | null
 createdAt: Timestamp
 updatedAt: Timestamp
 ```
 
 ### 4.3 `playerPrivate/{playerId}`
 
-EC-controlled private master record.
+Retired legacy collection. Production does not duplicate Player Master records here.
 
 ```text
 playerId: string
@@ -145,6 +151,27 @@ updatedByUid: string
 updatedAt: Timestamp
 ```
 
+### 4.3A `operationsAccess/{normalizedEmail}`
+
+Super Admin pre-approval for private Operations login. The document ID is the lowercase Player Master email. Captains, EC members, and Neutral Approvers still authenticate with Google, but they do not sign up or request approval. Their first verified sign-in creates the production `users/{uid}`, `playerAccountLinks/{playerId}`, and active-season membership records from this grant.
+
+```text
+emailNormalized: string
+playerId: string
+displayNameSnapshot: string
+roles: array<"captain" | "ec" | "neutralApprover">
+membershipRoles: array
+seasonId: string | null
+teamIds: array
+status: "approved" | "revoked"
+createdByUid: string
+createdAt: Timestamp
+updatedByUid: string
+updatedAt: Timestamp
+```
+
+Guests and ordinary players have no `operationsAccess` record and never sign in. The protected Super Admin is bootstrapped by verified email and the production `AO-1200` Player Master record; Development Authentication users and registration history are not migrated.
+
 ### 4.4 `playerAccountLinks/{playerId}`
 
 The approved one-to-one connection between a master player and Google account.
@@ -162,7 +189,7 @@ revokedAt: Timestamp | null
 reason: string | null
 ```
 
-The application must prevent more than one active player link per UID and more than one active UID per Player ID unless a recorded Super Admin exception exists. `playerEmailIndex` enforces one normalized email per Player ID, and `systemCounters/players.nextNumber` assigns permanent sequential IDs beginning at `P1001`.
+The application must prevent more than one active player link per UID and more than one active UID per Player ID unless a recorded Super Admin exception exists. `playerEmailIndex` enforces one normalized email per Player ID. Production uses permanent sequential IDs beginning at `AO-1001`; migrated records retain the prior `P1001`-style value in `legacyPlayerId`. Development retains its existing `P` IDs until migration validation is complete.
 
 ### 4.5 `playerLinkRequests/{requestId}`
 

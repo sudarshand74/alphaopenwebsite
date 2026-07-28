@@ -6,7 +6,7 @@ import {
   serverTimestamp,
   writeBatch,
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=4";
+import { auth, db } from "./firebase-client.js?v=5";
 import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=15";
 
 const OFFICIAL_SCORE_STATUSES = new Set(["published", "confirmed", "locked"]);

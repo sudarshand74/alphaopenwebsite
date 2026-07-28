@@ -1,9 +1,8 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { collection, doc, getDoc, getDocs, runTransaction, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=5";
 
-const config={projectId:"alphaopen-development-2026",appId:"1:128657830722:web:07c8c84d0386b5b11c4edb",storageBucket:"alphaopen-development-2026.firebasestorage.app",apiKey:"AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",authDomain:"alphaopen-development-2026.firebaseapp.com",messagingSenderId:"128657830722"};
-const app=getApps().length?getApp():initializeApp(config),auth=getAuth(app),db=getFirestore(app),$=s=>document.querySelector(s);
+const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
 let data=null,currentLineup=null,validated=null,users=[];
 if($("#lineupRoleBadge"))$("#lineupRoleBadge").textContent="Connecting";

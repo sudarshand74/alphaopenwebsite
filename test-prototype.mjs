@@ -33,15 +33,22 @@ const aoContent = await fs.readFile("ao-content.js","utf8");
 const publicSeasonDashboard = await fs.readFile("public-season-dashboard.js","utf8");
 const seasonPublicSync = await fs.readFile("season-public-sync.js","utf8");
 const ecLineupStatus = await fs.readFile("ec-lineup-status.js","utf8");
+const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
+const lineupApproverAdmin = await fs.readFile("lineup-approver-admin.js","utf8");
+const operationsAccessAdmin = await fs.readFile("operations-access-admin.js","utf8");
 
-for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupReset, lineupWorkflowClient, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule, aoContent, publicSeasonDashboard, seasonPublicSync })) {
-  assert(source.includes('from "./firebase-client.js?v=4"'),`${name} must use the shared Firebase client`);
+for (const [name, source] of Object.entries({ firebaseData, lineupSubmit, lineupApprove, lineupReset, lineupWorkflowClient, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule, aoContent, publicSeasonDashboard, seasonPublicSync, identityReconciliation, lineupApproverAdmin, operationsAccessAdmin, venueAdmin, seasonOperations, seasonStructureAdmin, seasonBulkImport })) {
+  assert(source.includes('from "./firebase-client.js?v=5"'),`${name} must use the shared Firebase client`);
   assert(!source.includes("getFirestore("),`${name} must not reinitialize Firestore with different options`);
+  assert(!source.includes("initializeApp("),`${name} must not initialize a second Firebase app`);
 }
-assert(runtimeLoader.includes('await import("./firebase-client.js?v=4")'),"Runtime must preload the identical shared Firebase client URL");
-for (const staleVersion of ["firebase-client.js?v=1", "firebase-client.js?v=2", "firebase-client.js?v=3"]) {
+assert(runtimeLoader.includes('await import("./firebase-client.js?v=5")'),"Runtime must preload the identical shared Firebase client URL");
+for (const staleVersion of ["firebase-client.js?v=1", "firebase-client.js?v=2", "firebase-client.js?v=3", "firebase-client.js?v=4"]) {
   assert(!`${runtimeLoader}${lineupSubmit}${lineupApprove}${lineupReset}${lineupWorkflowClient}${lineupUpdate}${rosterAdminShared}${playerAdmin}${matchManagementModule}`.includes(staleVersion),`Mixed shared Firebase client version remains: ${staleVersion}`);
 }
+assert(firebaseClient.includes('fetch("/__/firebase/init.json"'),"Firebase Hosting must supply the deployed project's automatic SDK configuration");
+assert(firebaseClient.includes('"alphaopen-production"')&&firebaseClient.includes("expectedProjectByHost"),"Firebase client must allow only the approved development and production projects");
+assert(serviceWorker.includes('url.pathname.startsWith("/__/")'),"The service worker must never intercept Firebase Hosting reserved configuration URLs");
 
 for (const token of ["Â","â","Ã"]) assert(!`${html}${js}${css}`.includes(token),`Mojibake token found: ${token}`);
 for (const id of ["authStatus","profileName","profileRole","springRosterTeams","springSeasonResults","springWeekFilter","springTeamFilter","standingsRows","historyRows","lineupRows","approvalQueue","lineupResetSeason","lineupResetWeek","lineupResetHomeTeam","lineupResetForm","resetApprovedLineups","rosterRows","signInDialog","registrationPendingDialog","registrationPendingMessage","acknowledgeRegistrationPending","registrationBlockedDialog","registrationBlockedMessage","acknowledgeRegistrationBlocked","createSeasonDialog","createSeasonForm","seasonDialogTitle","seasonStatus","seasonAdminList","refreshActivePublicDashboard","publicDashboardRefreshMessage","playerMasterCard","playerMasterPanel","playerMasterSearch","venueManagementPanel","venueMasterSearch","venueMasterList","editVenueDialog","editVenueForm","editVenueId","editVenueName","editVenueStatus","userManagementSearch","addPlayerDialog","importPlayersDialog","editPlayerDialog","editPlayerId","editPlayerEmail","playerImportFile","openRegisteredUsers","registeredUsersCard","registeredUsersPanel","refreshRegisteredUsers","manageUserDialog","manageActiveSeasonLabel","managedPastSeasons","scoreDialog","seasonTeamsSeason","seasonTeamsList","seasonTeamDialog","seasonMatchupsSeason","seasonMatchupsList","seasonMatchupDialog"]) assert(html.includes(`id="${id}"`),`Missing #${id}`);
@@ -135,11 +142,11 @@ assert(js.includes('classList.toggle("completed-season-loaded", Boolean(springSe
 assert(!html.includes('data-nav-roles="EC,Neutral Approver"><summary>EC</summary>'),"Neutral Approver must not see the desktop EC menu");
 assert(!html.includes('data-nav-roles="EC,Neutral Approver"><span>EC</span>'),"Neutral Approver must not see the mobile EC menu");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
-assert(html.includes("poster-generator.js?v=3"),"Poster generator is not loaded");
+assert(html.includes("poster-generator.js?v=4"),"Poster generator is not loaded");
 assert(js.includes("data-public-poster")&&matchManagement.includes("Preview poster"),"Poster links must appear on Matches and Match Management");
 assert(posterGenerator.includes("navigator.clipboard")&&posterGenerator.includes("ClipboardItem"),"Copy Image support is missing");
 assert(posterGenerator.includes("canvas.toBlob")&&posterGenerator.includes("Download PNG"),"Poster PNG generation is missing");
-assert(posterGenerator.includes('/^P\\d+$/i.test(label)')&&posterGenerator.includes("Player name unavailable"),"Poster must never draw a Player ID as a player name");
+assert(posterGenerator.includes('AO-\\d+')&&posterGenerator.includes("Player name unavailable"),"Poster must never draw a legacy or production Player ID as a player name");
 assert(js.includes("(line.homePlayers || []).map(posterPlayerName)")&&matchManagementModule.includes("(line.homePlayers || []).map(posterPlayerName)"),"Every poster entry point must resolve player names");
 assert(publicSeasonDashboard.includes("canonicalPlayers.get(playerId)?.displayName ||")&&publicSeasonDashboard.includes("player.nameSnapshot"),"Published poster data must consider canonical player names before stale snapshots");
 assert(publicSeasonDashboard.includes("function resolvedPlayerName(playerId, ...candidates)"),"Public season publishing must reject Player IDs used as names");
@@ -295,7 +302,7 @@ assert(serviceWorker.includes("caches.match"),"Service worker must serve cached 
 assert(serviceWorker.includes("isAppCode"),"App code must use the update-safe caching path");
 assert(pwa.includes("beforeinstallprompt"),"Missing install experience");
 assert(pwa.includes("serviceWorker.register"),"Missing service-worker registration");
-assert(firebaseClient.includes("initializeApp(firebaseConfig)")&&firebaseAuth.includes('from "./firebase-client.js?v=4"'),"Firebase app must be initialized by the shared client");
+assert(firebaseClient.includes("initializeApp(firebaseConfig)")&&firebaseAuth.includes('from "./firebase-client.js?v=5"'),"Firebase app must be initialized by the shared client");
 assert(firebaseAuth.includes("onAuthStateChanged"),"Firebase auth observer is missing");
 assert(firebaseAuth.includes("signInWithPopup"),"Desktop Google sign-in is missing");
 assert(!firebaseAuth.includes("signInWithRedirect"),"Safari-incompatible cross-domain redirect flow must not be used");
@@ -304,9 +311,13 @@ assert(firebaseAuth.includes("browserSessionPersistence") && firebaseAuth.includ
 assert(!firebaseAuth.includes("browserLocalPersistence"),"Authentication must not persist automatically across browser sessions");
 assert(!runtimeLoader.includes("LOCAL-DEV-SUPER-ADMIN"),"Local development must not auto-sign in a fake Super Admin");
 assert(firebaseAuth.includes("ensureUserProfile"),"Firestore user bootstrap is missing");
-assert(firebaseAuth.includes('BOOTSTRAP_ADMIN_PLAYER_ID = "P1200"'),"Protected Super Admin Player ID link is missing");
+assert(firebaseAuth.includes('firebaseProjectId === "alphaopen-production" ? "AO-1200" : "P1200"'),"Protected Super Admin Player ID must follow the deployed Firebase environment");
 assert(firebaseAuth.includes("ensureBootstrapAdminPlayerLink"),"Protected Super Admin account-link transaction is missing");
-assert(firestoreRules.includes("request.resource.data.playerId == 'P1200'"),"Protected Super Admin Player ID rule is missing");
+assert(firestoreRules.includes("request.resource.data.playerId in ['P1200', 'AO-1200']"),"Protected Super Admin Player ID rule must allow the legacy and production formats");
+for (const collectionName of ["publicSeasonDashboards", "publicCompletedSeasons"]) {
+  const collectionRule = firestoreRules.slice(firestoreRules.indexOf(`match /${collectionName}/`));
+  assert(collectionRule.includes("allow read: if isSuperAdmin() || resource.data.status == 'completed';"),`${collectionName} must allow Super Admin full-export reads`);
+}
 assert(firebaseData.includes("runTransaction"),"Atomic season creation is missing");
 assert(!firebaseData.includes('from "./firebase-auth.js"'),"Season module must not depend on a possibly stale auth module export");
 assert(firebaseData.includes("typeof dialog.showModal"),"Season dialog compatibility fallback is missing");
@@ -326,6 +337,14 @@ assert((firebaseAuth.match(/accountChanged \|\| window\.location\.hash\.slice\(1
 assert(!firebaseAuth.includes("eligiblePlayerId")&&!firebaseAuth.includes("showRegistrationPending"),"Public Player registration must be disabled");
 assert(firebaseAuth.includes('error.code = "operations/not-authorized"'),"Unauthorized operations accounts must be explicitly rejected");
 assert(firebaseAuth.includes('roles.has("captain")')&&firebaseAuth.includes('roles.has("ec")')&&firebaseAuth.includes('roles.has("neutralApprover")'),"Operations authorization must recognize approved private roles");
+assert(firebaseAuth.includes("activateApprovedOperationsUser")&&firebaseAuth.includes('doc(db, "operationsAccess"'),"First verified sign-in must activate a pre-approved Operations grant");
+assert(!firebaseAuth.includes('if (firebaseProjectId === "alphaopen-production")'),"Development and Production must both revalidate approved Operations grants");
+assert(firestoreRules.includes("match /operationsAccess/{emailKey}")&&firestoreRules.includes("validGrantedUser(uid)"),"Firestore must secure pre-approved Operations access and first-login profile creation");
+assert(firestoreRules.includes("validGrantedAccountLink(playerId)")&&firestoreRules.includes("validGrantedMembership(seasonId, uid)"),"First-login account and season links must be constrained to the approved grant");
+for (const id of ["operationsAccessCard","addOperationsAccess","importOperationsAccess","operationsAccessPanel","operationsAccessDialog"]) assert(html.includes(`id="${id}"`),`Operations access Admin control is missing: ${id}`);
+assert(runtimeLoader.includes('users:"./operations-access-admin.js?v=1"'),"User Management must lazy-load the Operations access Admin screen");
+assert(operationsAccessAdmin.includes('getDocs(collection(db, "operationsAccess"))')&&operationsAccessAdmin.includes("AlphaOpen-Operations-Access-Template.xlsx"),"Operations access Admin must support review and controlled Excel upload");
+assert(seasonBulkImport.includes('doc(db, "operationsAccess", captain.playerEmail)')&&seasonBulkImport.includes('membershipRoles: ["player", ...accessRoles]'),"Season Captain upload must pre-approve first-login Operations access");
 assert(firebaseAuth.includes("showRegistrationBlocked"),"Missing registration acknowledgement dialog flow");
 assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Registration rejection must wait for acknowledgement");
 assert(firebaseAuth.includes("await signOut(auth)"),"Denied Operations attempts must return visitors to Guest");
@@ -333,12 +352,11 @@ assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registra
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
 assert(firestoreRules.includes("function hasOperationsAccess()"),"Firestore must define authoritative Operations access");
-assert(firestoreRules.includes("allow create: if signedIn() && isSuperAdmin()"),"Public accounts must not be able to create their own user profiles");
+assert(firestoreRules.includes("allow create: if (signedIn() && isSuperAdmin()) || validGrantedUser(uid);"),"Only Super Admin or an exact approved Operations grant may create a user profile");
 assert(firestoreRules.includes("|| hasOperationsAccess()"),"Private Player Master reads must require Operations access");
 assert(/runtime-loader\.js\?v=\d+/.test(html),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
-const identityReconciliation = await fs.readFile("identity-reconciliation.js","utf8");
 const seasonReset = await fs.readFile("season-reset.js","utf8");
 assert(html.includes('id="resetSeasonDialog"')&&html.includes('id="resetSeasonConfirmation"'),"Season reset confirmation UI is missing");
 assert(seasonReset.includes("DELETE ${target.seasonId}")&&seasonReset.includes("resetSeasonAcknowledgement"),"Season reset requires typed and checked confirmation");
@@ -380,6 +398,14 @@ assert(html.includes('id="exportDatabase"'),"Full Firebase Excel export control 
 assert(seasonBulkImport.includes("exportEntireDatabase"),"Full Firebase Excel export workflow is missing");
 assert(seasonBulkImport.includes('"Document Path"'),"Database export must preserve Firestore document paths");
 assert(seasonBulkImport.includes('"Line Matches"'),"Database export must include season line matches");
+for (const collectionName of ["publicConfig","publicSeasonDashboards","publicCompletedSeasons","aoContent","aoFaqCategories","aoFaqs"]) {
+  assert(seasonBulkImport.includes(`"${collectionName}"`),`Database export must include global collection ${collectionName}`);
+}
+for (const collectionName of ["playerOverrides","corrections"]) {
+  assert(seasonBulkImport.includes(`"${collectionName}"`),`Database export must include nested line workflow collection ${collectionName}`);
+}
+assert(seasonBulkImport.includes("EXCEL_CELL_TEXT_LIMIT = 30000"),"Database export must stay below Excel's per-cell text limit");
+assert(seasonBulkImport.includes("json-chunks-v1")&&seasonBulkImport.includes("__part_"),"Database export must losslessly chunk oversized JSON fields");
 assert(js.includes('new CustomEvent("alphaopen:route-changed"'),"Route changes must trigger lazy Firebase loading");
 assert(firebaseData.includes("function cachedRead"),"Shared Firebase request deduplication is missing");
 assert(firebaseData.includes("async function loadForRoute"),"Route-aware Firebase loader is missing");
@@ -417,8 +443,12 @@ assert(!playerAdmin.includes("preferredName"),"Preferred Name should not be used
 assert(playerAdmin.includes("xlsx-0.20.3"),"Excel workbook parser is missing");
 assert(html.includes('id="exportPlayers"'), "Player Master export button is missing");
 assert(playerAdmin.includes("async function exportAllPlayers()"), "Export All Player Data workflow is missing");
-assert(playerAdmin.includes("playerCache.map"), "Player export must include the complete Player Master cache");
+assert(playerAdmin.includes('getDocs(collection(db, "players"))'), "Player export must read the latest canonical Player Master records");
+assert(playerAdmin.includes('"Document Path"')&&playerAdmin.includes('"Document ID"'), "Player export must preserve Firestore identity");
+assert(playerAdmin.includes('getDoc(doc(db, "publicConfig", "playerMaster"))'), "Player export must include the public Player Directory record");
 assert(playerAdmin.includes('"All Players"'), "Player export workbook sheet is missing");
+assert(playerAdmin.includes('"Public Player Directory"'), "Player export workbook must include the sanitized public directory");
+assert(playerAdmin.includes("additionalKeys"), "Player export must include newly added Player Master schema fields");
 assert(html.includes('id="exportTeamRoster"'), "Team roster export button is missing");
 const rosterAdmin = await fs.readFile("roster-admin-v3.js", "utf8");
 assert(rosterAdmin.includes("async function exportTeamRoster()"), "Team roster export workflow is missing");

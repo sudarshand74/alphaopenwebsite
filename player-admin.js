@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, limit, query, runTransaction, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=4";
+import { auth, db, firebaseProjectId } from "./firebase-client.js?v=5";
 import { bumpPlayerMasterVersion, resolvedPlayerName } from "./player-identity.js?v=5";
 
 const ADMIN_EMAIL = "sudarshandesai74@gmail.com";
@@ -32,7 +32,13 @@ function normalizeName(value) { return String(value || "").trim().normalize("NFK
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]); }
 function openDialog(dialog) { typeof dialog.showModal === "function" ? dialog.showModal() : dialog.setAttribute("open", ""); }
 function closeDialog(dialog) { if (!dialog.open) return; typeof dialog.close === "function" ? dialog.close() : dialog.removeAttribute("open"); }
-function numericId(playerId) { const match = /^P(\d+)$/.exec(playerId || ""); return match ? Number(match[1]) : 0; }
+function numericId(playerId) {
+  const match = /^(?:P|AO-)(\d+)$/.exec(playerId || "");
+  return match ? Number(match[1]) : 0;
+}
+function generatedPlayerId(number) {
+  return firebaseProjectId === "alphaopen-production" ? `AO-${number}` : `P${number}`;
+}
 function validEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
 
 async function loadXlsx() {
@@ -49,15 +55,28 @@ function excelValue(value) {
 
 async function exportAllPlayers() {
   if (!isAdmin()) return;
-  if (!playerCache.length) {
-    window.alphaOpenAuthUI.showMessage("There are no Player Master records to export");
-    return;
-  }
   const button = $("#exportPlayers");
   button.disabled = true;
   try {
     const XLSX = await loadXlsx();
+    const [playerSnapshot, publicDirectorySnapshot] = await Promise.all([
+      getDocs(collection(db, "players")),
+      getDoc(doc(db, "publicConfig", "playerMaster")),
+    ]);
+    const exportPlayers = playerSnapshot.docs
+      .map(item => ({
+        ...item.data(),
+        playerId: item.id,
+        documentPath: item.ref.path,
+        documentId: item.id,
+      }))
+      .sort((a, b) => String(a.fullName || a.playerId).localeCompare(String(b.fullName || b.playerId)));
+    if (!exportPlayers.length) {
+      window.alphaOpenAuthUI.showMessage("There are no Player Master records to export");
+      return;
+    }
     const preferredFields = [
+      ["Document Path", "documentPath"], ["Document ID", "documentId"],
       ["Player ID", "playerId"], ["First Name", "firstName"], ["Last Name", "lastName"],
       ["Full Name", "fullName"], ["Email Address", "emailNormalized"], ["Mobile Number", "phone"],
       ["T-Shirt Size", "tShirtSize"], ["AOR Suggested", "globalRank"], ["Global Score", "globalScore"],
@@ -66,20 +85,55 @@ async function exportAllPlayers() {
       ["Created By UID", "createdByUid"], ["Updated By UID", "updatedByUid"]
     ];
     const knownKeys = new Set(preferredFields.map(([, key]) => key));
-    const additionalKeys = [...new Set(playerCache.flatMap(player => Object.keys(player)))]
+    const additionalKeys = [...new Set(exportPlayers.flatMap(player => Object.keys(player)))]
       .filter(key => !knownKeys.has(key)).sort();
-    const rows = playerCache.map(player => Object.fromEntries([
+    const rows = exportPlayers.map(player => Object.fromEntries([
       ...preferredFields.map(([heading, key]) => [heading, excelValue(player[key])]),
       ...additionalKeys.map(key => [key, excelValue(player[key])])
     ]));
     const worksheet = XLSX.utils.json_to_sheet(rows, { cellDates: true });
     worksheet["!autofilter"] = { ref: worksheet["!ref"] };
     worksheet["!cols"] = Object.keys(rows[0]).map(heading => ({ wch: Math.min(45, Math.max(12, heading.length + 2)) }));
+    const publicDirectory = publicDirectorySnapshot.data() || {};
+    const publicPlayers = Array.isArray(publicDirectory.players)
+      ? publicDirectory.players.map(player => ({
+          "Player ID": player.playerId || "",
+          "Display Name": player.displayName || "",
+          "Status": player.status || "active",
+        }))
+      : [];
+    const publicWorksheet = publicPlayers.length
+      ? XLSX.utils.json_to_sheet(publicPlayers)
+      : XLSX.utils.aoa_to_sheet([["Player ID", "Display Name", "Status"]]);
+    publicWorksheet["!autofilter"] = { ref: publicWorksheet["!ref"] };
+    publicWorksheet["!cols"] = [{ wch: 14 }, { wch: 32 }, { wch: 14 }];
+    const declaredPublicCount = Number(publicDirectory.playerCount);
+    const publicStatus = !publicDirectorySnapshot.exists()
+      ? "Missing publicConfig/playerMaster"
+      : Number.isFinite(declaredPublicCount) && declaredPublicCount !== publicPlayers.length
+        ? "Public directory count mismatch"
+        : "Public directory included";
+    const summaryWorksheet = XLSX.utils.aoa_to_sheet([
+      ["AlphaOpen Player Master Export"],
+      ["Exported At", new Date()],
+      ["Full Player Source", "players"],
+      ["Full Player Records", exportPlayers.length],
+      ["Public Directory Source", "publicConfig/playerMaster"],
+      ["Public Directory Version", excelValue(publicDirectory.version)],
+      ["Public Directory Declared Count", Number.isFinite(declaredPublicCount) ? declaredPublicCount : ""],
+      ["Public Directory Exported Rows", publicPlayers.length],
+      ["Public Directory Status", publicStatus],
+    ], { cellDates: true });
+    summaryWorksheet["!cols"] = [{ wch: 34 }, { wch: 38 }];
     const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, "Export Summary");
     XLSX.utils.book_append_sheet(workbook, worksheet, "All Players");
+    XLSX.utils.book_append_sheet(workbook, publicWorksheet, "Public Player Directory");
     const exportDate = new Date().toISOString().slice(0, 10);
     XLSX.writeFileXLSX(workbook, `AlphaOpen-All-Player-Data-${exportDate}.xlsx`, { cellDates: true });
-    window.alphaOpenAuthUI.showMessage(`${playerCache.length} players exported to Excel`);
+    window.alphaOpenAuthUI.showMessage(
+      `${exportPlayers.length} Player Master records and ${publicPlayers.length} public directory records exported`,
+    );
   } catch (error) {
     console.error("Player export failed", error);
     window.alphaOpenAuthUI.showMessage(`Player export failed: ${error.message}`);
@@ -137,11 +191,11 @@ async function createPlayer(candidate, allowMatchingName = false) {
     const [counterSnapshot, emailSnapshot] = await Promise.all([transaction.get(counterRef), transaction.get(emailIndexRef)]);
     if (emailSnapshot.exists()) throw new Error(`Email is already assigned to ${emailSnapshot.data().playerId}.`);
     let nextNumber = Math.max(counterSnapshot.exists() ? Number(counterSnapshot.data().nextNumber) || 1001 : highestExisting + 1, 1001);
-    let playerId = `P${nextNumber}`;
+    let playerId = generatedPlayerId(nextNumber);
     let playerRef = doc(db, "players", playerId);
     while ((await transaction.get(playerRef)).exists()) {
       nextNumber += 1;
-      playerId = `P${nextNumber}`;
+      playerId = generatedPlayerId(nextNumber);
       playerRef = doc(db, "players", playerId);
     }
     const shared = { playerId, status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
@@ -274,6 +328,8 @@ async function transferPlayerEmail(event) {
     const userRef = linkedUser.ref;
     const registrationRef = doc(db, "registrationRequests", transfer.linkedUid);
     const accountLinkRef = doc(db, "playerAccountLinks", transfer.playerId);
+    const oldAccessRef = doc(db, "operationsAccess", transfer.oldEmail);
+    const newAccessRef = doc(db, "operationsAccess", transfer.newEmail);
     await runTransaction(db, async (transaction) => {
       const references = [
         playerRef,
@@ -282,6 +338,8 @@ async function transferPlayerEmail(event) {
         userRef,
         registrationRef,
         accountLinkRef,
+        oldAccessRef,
+        newAccessRef,
         ...memberRefs,
         ...approverRefs,
       ];
@@ -293,6 +351,8 @@ async function transferPlayerEmail(event) {
         userSnapshot,
         registrationSnapshot,
         accountLinkSnapshot,
+        oldAccessSnapshot,
+        newAccessSnapshot,
       ] = snapshots;
       if (!playerSnapshot.exists()) throw new Error("Player Master record no longer exists.");
       if (!userSnapshot.exists() || userSnapshot.data().playerId !== transfer.playerId) {
@@ -303,6 +363,9 @@ async function transferPlayerEmail(event) {
       }
       if (accountLinkSnapshot.exists() && accountLinkSnapshot.data().uid !== transfer.linkedUid) {
         throw new Error("The approved account link belongs to a different Firebase UID.");
+      }
+      if (newAccessSnapshot.exists() && newAccessSnapshot.data().playerId !== transfer.playerId) {
+        throw new Error("The new email already has Operations access for another Player ID.");
       }
       const candidate = transfer.candidate;
       transaction.update(playerRef, {
@@ -368,7 +431,24 @@ async function transferPlayerEmail(event) {
         transferredAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
-      let snapshotIndex = 6;
+      if (oldAccessSnapshot.exists()) {
+        transaction.set(newAccessRef, {
+          ...oldAccessSnapshot.data(),
+          emailNormalized: transfer.newEmail,
+          playerId: transfer.playerId,
+          status: "approved",
+          replacedFromEmail: transfer.oldEmail,
+          updatedAt: serverTimestamp(),
+          updatedByUid: auth.currentUser.uid,
+        }, { merge: true });
+        transaction.set(oldAccessRef, {
+          status: "revoked",
+          replacedByEmail: transfer.newEmail,
+          updatedAt: serverTimestamp(),
+          updatedByUid: auth.currentUser.uid,
+        }, { merge: true });
+      }
+      let snapshotIndex = 8;
       memberRefs.forEach((reference) => {
         const snapshot = snapshots[snapshotIndex++];
         if (snapshot.exists()) {
@@ -455,12 +535,16 @@ async function submitEditPlayer(event) {
       return;
     }
     const accountLinkRef = doc(db, "playerAccountLinks", playerId);
+    const oldAccessRef = doc(db, "operationsAccess", oldEmail);
+    const newAccessRef = doc(db, "operationsAccess", candidate.email);
     await runTransaction(db, async transaction => {
-      const [playerSnapshot, oldIndexSnapshot, newIndexSnapshot, accountLinkSnapshot] = await Promise.all([
-        transaction.get(playerRef), transaction.get(oldIndexRef), transaction.get(newIndexRef), transaction.get(accountLinkRef)
+      const [playerSnapshot, oldIndexSnapshot, newIndexSnapshot, accountLinkSnapshot, oldAccessSnapshot, newAccessSnapshot] = await Promise.all([
+        transaction.get(playerRef), transaction.get(oldIndexRef), transaction.get(newIndexRef), transaction.get(accountLinkRef),
+        transaction.get(oldAccessRef), transaction.get(newAccessRef)
       ]);
       if (!playerSnapshot.exists()) throw new Error("Player Master record no longer exists.");
       if (newIndexSnapshot.exists() && newIndexSnapshot.data().playerId !== playerId) throw new Error(`Email is already assigned to ${newIndexSnapshot.data().playerId}.`);
+      if (emailChanged && newAccessSnapshot.exists() && newAccessSnapshot.data().playerId !== playerId) throw new Error("The new email already has Operations access for another Player ID.");
       transaction.update(playerRef, {
         firstName: candidate.firstName,
         lastName: candidate.lastName,
@@ -477,6 +561,23 @@ async function submitEditPlayer(event) {
       if (emailChanged && linkedUser) transaction.set(linkedUser.ref, { playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
       if (emailChanged) registrationSnapshot.docs.forEach(request => transaction.set(request.ref, { matchedPlayerId: playerId, playerEmailNormalized: candidate.email, updatedAt: serverTimestamp() }, { merge: true }));
       if (emailChanged && accountLinkSnapshot.exists()) transaction.set(accountLinkRef, { playerId, emailAtApproval: candidate.email, updatedAt: serverTimestamp() }, { merge: true });
+      if (emailChanged && oldAccessSnapshot.exists()) {
+        transaction.set(newAccessRef, {
+          ...oldAccessSnapshot.data(),
+          emailNormalized: candidate.email,
+          playerId,
+          status: "approved",
+          replacedFromEmail: oldEmail,
+          updatedAt: serverTimestamp(),
+          updatedByUid: auth.currentUser.uid,
+        }, { merge: true });
+        transaction.set(oldAccessRef, {
+          status: "revoked",
+          replacedByEmail: candidate.email,
+          updatedAt: serverTimestamp(),
+          updatedByUid: auth.currentUser.uid,
+        }, { merge: true });
+      }
     });
     const [verifiedPlayer, verifiedIndex, verifiedOldIndex, verifiedLink] = await Promise.all([
       getDoc(playerRef), getDoc(newIndexRef), emailChanged ? getDoc(oldIndexRef) : Promise.resolve(null), getDoc(accountLinkRef)

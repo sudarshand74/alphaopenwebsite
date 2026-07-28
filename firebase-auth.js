@@ -15,7 +15,7 @@ import {
   updateDoc,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=4";
+import { auth, db, firebaseProjectId } from "./firebase-client.js?v=5";
 export { auth, db };
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
@@ -27,8 +27,26 @@ const registrationBlockedDialog = document.querySelector("#registrationBlockedDi
 const registrationBlockedMessage = document.querySelector("#registrationBlockedMessage");
 const acknowledgeRegistrationBlocked = document.querySelector("#acknowledgeRegistrationBlocked");
 const BOOTSTRAP_ADMIN_EMAIL = "sudarshandesai74@gmail.com";
-const BOOTSTRAP_ADMIN_PLAYER_ID = "P1200";
+const BOOTSTRAP_ADMIN_PLAYER_ID =
+  firebaseProjectId === "alphaopen-production" ? "AO-1200" : "P1200";
 const SEASON_CONTROL_REF = doc(db, "systemConfig", "seasonControl");
+const OPERATIONS_ROLES = ["captain", "ec", "neutralApprover"];
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function operationsAccessRef(email) {
+  return doc(db, "operationsAccess", normalizeEmail(email));
+}
+
+function profileTypeForRoles(roles) {
+  return roles.includes("ec")
+    ? "ec"
+    : roles.includes("captain")
+      ? "captain"
+      : "neutralApprover";
+}
 
 function friendlyAuthError(error) {
   const messages = {
@@ -62,14 +80,14 @@ async function ensureUserProfile(user) {
       displayName: await canonicalPlayerName(linkedPlayerId, snapshot.data().displayName || user.displayName || user.email)
     };
     if (isBootstrapAdmin) return ensureBootstrapAdminPlayerLink(user, userRef, common);
-    await updateDoc(userRef, common);
-    return (await getDoc(userRef)).data();
+    return activateApprovedOperationsUser(user, userRef, common);
   }
 
   if (!isBootstrapAdmin) {
-    const error = new Error("This operations portal is restricted to approved AlphaOpen Captains, EC members, Neutral Approvers, and Administrators.");
-    error.code = "operations/not-authorized";
-    throw error;
+    return activateApprovedOperationsUser(user, userRef, {
+      ...commonFields,
+      displayName: user.displayName || user.email,
+    });
   }
   const matchedPlayerId = BOOTSTRAP_ADMIN_PLAYER_ID;
   const common = {
@@ -90,6 +108,92 @@ async function ensureUserProfile(user) {
   });
   await batch.commit();
   return ensureBootstrapAdminPlayerLink(user, userRef, common);
+}
+
+async function activateApprovedOperationsUser(user, userRef, common) {
+  const emailNormalized = normalizeEmail(user.email);
+  const grantRef = operationsAccessRef(emailNormalized);
+  const [grantSnapshot, seasonControl] = await Promise.all([
+    getDoc(grantRef),
+    getDoc(SEASON_CONTROL_REF),
+  ]);
+  if (!grantSnapshot.exists() || grantSnapshot.data().status !== "approved") {
+    const error = new Error("This Google email has not been pre-approved for private AlphaOpen Operations access.");
+    error.code = "operations/not-authorized";
+    throw error;
+  }
+  const grant = grantSnapshot.data();
+  const roles = OPERATIONS_ROLES.filter((role) => (grant.roles || []).includes(role));
+  const membershipRoles = ["player", ...roles];
+  if (!roles.length || !grant.playerId || normalizeEmail(grant.emailNormalized) !== emailNormalized) {
+    throw new Error("The approved Operations access record is incomplete. Contact AlphaOpen Administration.");
+  }
+  const playerRef = doc(db, "players", grant.playerId);
+  const linkRef = doc(db, "playerAccountLinks", grant.playerId);
+  const activeSeasonId = seasonControl.exists() ? seasonControl.data().activeSeasonId || "" : "";
+  const memberRef = activeSeasonId && grant.seasonId === activeSeasonId
+    ? doc(db, "seasons", activeSeasonId, "members", user.uid)
+    : null;
+  const displayName = await canonicalPlayerName(grant.playerId, grant.displayNameSnapshot || common.displayName);
+  await runTransaction(db, async (transaction) => {
+    const references = [grantRef, userRef, playerRef, linkRef, ...(memberRef ? [memberRef] : [])];
+    const [verifiedGrant, userSnapshot, playerSnapshot, linkSnapshot] =
+      await Promise.all(references.map((reference) => transaction.get(reference)));
+    const currentGrant = verifiedGrant.data() || {};
+    if (!verifiedGrant.exists() || currentGrant.status !== "approved") {
+      throw new Error("Operations access was revoked before sign-in completed.");
+    }
+    if (!playerSnapshot.exists()) throw new Error(`${grant.playerId} is missing from Player Master.`);
+    if (normalizeEmail(playerSnapshot.data().emailNormalized) !== emailNormalized) {
+      throw new Error("The approved Google email no longer matches Player Master.");
+    }
+    if (linkSnapshot.exists() && linkSnapshot.data().status === "active" && linkSnapshot.data().uid !== user.uid) {
+      throw new Error(`${grant.playerId} is already linked to a different Google account.`);
+    }
+    const userData = {
+      uid: user.uid,
+      email: user.email,
+      emailVerified: user.emailVerified,
+      displayName,
+      photoUrl: user.photoURL || null,
+      status: "active",
+      profileType: profileTypeForRoles(roles),
+      playerId: grant.playerId,
+      globalRoles: roles,
+      playerEmailNormalized: emailNormalized,
+      lastLoginAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      ...(userSnapshot.exists() ? {} : { createdAt: serverTimestamp() }),
+    };
+    transaction.set(userRef, userData, { merge: true });
+    transaction.set(linkRef, {
+      playerId: grant.playerId,
+      uid: user.uid,
+      emailAtApproval: emailNormalized,
+      status: "active",
+      linkMethod: "preApprovedEmail",
+      approvedByUid: currentGrant.updatedByUid,
+      approvedAt: currentGrant.updatedAt || serverTimestamp(),
+      revokedByUid: null,
+      revokedAt: null,
+      reason: null,
+    }, { merge: true });
+    if (memberRef) {
+      transaction.set(memberRef, {
+        uid: user.uid,
+        playerId: grant.playerId,
+        roles: membershipRoles,
+        teamIds: grant.teamIds || [],
+        status: "active",
+        effectiveFrom: serverTimestamp(),
+        effectiveTo: null,
+        assignedByUid: currentGrant.updatedByUid,
+        assignedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+  });
+  return (await getDoc(userRef)).data();
 }
 
 async function canonicalPlayerName(playerId, fallback) {

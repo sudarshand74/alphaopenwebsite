@@ -1,8 +1,8 @@
 const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LOCAL_HOSTS.has(location.hostname),useFirebaseEmulator=isLocalDevelopment&&new URLSearchParams(location.search).get("firebase")==="emulator";
-const coreModules=["./firebase-auth.js?v=39","./firebase-data.js?v=86"];
+const coreModules=["./firebase-auth.js?v=42","./firebase-data.js?v=87"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
-const adminModuleForPanel={players:"./player-admin.js?v=42","identity-audit":"./identity-reconciliation.js?v=10",rosters:"./roster-admin-v3.js?v=20",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=15","season-teams":"./season-structure-admin.js?v=9","season-matchups":"./season-structure-admin.js?v=9","lineup-approvers":"./lineup-approver-admin.js?v=4"};
+const adminModuleForPanel={players:"./player-admin.js?v=45",users:"./operations-access-admin.js?v=1","identity-audit":"./identity-reconciliation.js?v=11",rosters:"./roster-admin-v3.js?v=20",venues:"./venue-admin.js?v=26",seasons:"./season-bulk-import.js?v=18","season-teams":"./season-structure-admin.js?v=10","season-matchups":"./season-structure-admin.js?v=10","lineup-approvers":"./lineup-approver-admin.js?v=4"};
 function loadRouteFeature(route){
   if(["current-season","captain-schedule","captain-score"].includes(route))return importFeature("./season-operations.js?v=2");
   if(route==="ec-roster")return importFeature("./roster-admin-v3.js?v=20");
@@ -12,7 +12,7 @@ function loadRouteFeature(route){
 }
 
 if(!isLocalDevelopment||useFirebaseEmulator){
-  await import("./firebase-client.js?v=4");
+  await import("./firebase-client.js?v=5");
   const results=await Promise.allSettled(coreModules.map(path=>import(path)));
   results.forEach((result,index)=>{if(result.status==="rejected")console.error(`AlphaOpen module failed: ${coreModules[index]}`,result.reason);});
   const currentRoute=()=>location.hash.slice(1)||"home";
@@ -45,7 +45,7 @@ if(!isLocalDevelopment||useFirebaseEmulator){
   window.addEventListener("alphaopen:request-signin",async()=>{
     if(firebaseAuthEnabled)return;
     firebaseAuthEnabled=true;
-    await import("./firebase-auth.js?v=39");
+    await import("./firebase-auth.js?v=42");
     window.dispatchEvent(new CustomEvent("alphaopen:request-signin"));
   });
 }

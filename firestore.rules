@@ -50,6 +50,95 @@ service cloud.firestore {
       return email == 'sudarshandesai74@gmail.com';
     }
 
+    function hasVerifiedAuthEmail() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    function normalizedAuthEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function operationsAccessPath() {
+      return /databases/$(database)/documents/operationsAccess/$(normalizedAuthEmail());
+    }
+
+    function hasApprovedOperationsAccess() {
+      return hasVerifiedAuthEmail()
+        && exists(operationsAccessPath())
+        && get(operationsAccessPath()).data.status == 'approved'
+        && get(operationsAccessPath()).data.emailNormalized == normalizedAuthEmail()
+        && get(operationsAccessPath()).data.playerId is string
+        && get(operationsAccessPath()).data.roles is list
+        && get(operationsAccessPath()).data.roles.size() > 0
+        && get(operationsAccessPath()).data.roles.hasOnly([
+          'captain', 'ec', 'neutralApprover'
+        ]);
+    }
+
+    function operationsAccess() {
+      return get(operationsAccessPath()).data;
+    }
+
+    function grantedProfileMatches() {
+      return (
+          request.resource.data.profileType == 'ec'
+          && operationsAccess().roles.hasAny(['ec'])
+        )
+        || (
+          request.resource.data.profileType == 'captain'
+          && operationsAccess().roles.hasAny(['captain'])
+        )
+        || (
+          request.resource.data.profileType == 'neutralApprover'
+          && operationsAccess().roles.hasAny(['neutralApprover'])
+        );
+    }
+
+    function validGrantedUser(uid) {
+      return hasApprovedOperationsAccess()
+        && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email.lower() == normalizedAuthEmail()
+        && request.resource.data.emailVerified == true
+        && request.resource.data.status == 'active'
+        && request.resource.data.playerId == operationsAccess().playerId
+        && request.resource.data.playerEmailNormalized == normalizedAuthEmail()
+        && request.resource.data.globalRoles == operationsAccess().roles
+        && grantedProfileMatches()
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'emailVerified', 'displayName', 'photoUrl',
+          'status', 'profileType', 'playerId', 'globalRoles',
+          'playerEmailNormalized', 'createdAt', 'lastLoginAt', 'updatedAt'
+        ]);
+    }
+
+    function validGrantedAccountLink(playerId) {
+      return hasApprovedOperationsAccess()
+        && playerId == operationsAccess().playerId
+        && request.resource.data.playerId == playerId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.emailAtApproval == normalizedAuthEmail()
+        && request.resource.data.status == 'active'
+        && request.resource.data.linkMethod == 'preApprovedEmail'
+        && request.resource.data.approvedByUid == operationsAccess().updatedByUid;
+    }
+
+    function validGrantedMembership(seasonId, uid) {
+      return hasApprovedOperationsAccess()
+        && uid == request.auth.uid
+        && operationsAccess().seasonId == seasonId
+        && operationsAccess().membershipRoles is list
+        && operationsAccess().teamIds is list
+        && request.resource.data.uid == uid
+        && request.resource.data.playerId == operationsAccess().playerId
+        && request.resource.data.roles == operationsAccess().membershipRoles
+        && request.resource.data.teamIds == operationsAccess().teamIds
+        && request.resource.data.status == 'active'
+        && request.resource.data.assignedByUid == operationsAccess().updatedByUid;
+    }
+
     function seasonMemberPath(seasonId) {
       return /databases/$(database)/documents/seasons/$(seasonId)/members/$(request.auth.uid);
     }
@@ -227,9 +316,15 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
-      allow create: if signedIn() && isSuperAdmin();
+      allow create: if (signedIn() && isSuperAdmin()) || validGrantedUser(uid);
       allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
       allow update: if (isSuperAdmin() && !isBootstrapAdminEmail(resource.data.email))
+        || (validGrantedUser(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'displayName', 'photoUrl', 'lastLoginAt', 'updatedAt',
+            'status', 'profileType', 'playerId', 'globalRoles',
+            'playerEmailNormalized', 'emailVerified'
+          ]))
         || (signedIn()
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -242,7 +337,7 @@ service cloud.firestore {
           && request.resource.data.email == resource.data.email
           && request.resource.data.status == 'active'
           && request.resource.data.profileType == 'superAdmin'
-          && request.resource.data.playerId == 'P1200'
+          && request.resource.data.playerId in ['P1200', 'AO-1200']
           && request.resource.data.globalRoles is list
           && request.resource.data.globalRoles.size() == 1
           && request.resource.data.globalRoles.hasAny(['superAdmin'])
@@ -265,6 +360,7 @@ service cloud.firestore {
     match /players/{playerId} {
       allow read: if isSuperAdmin()
         || hasOperationsAccess()
+        || (hasApprovedOperationsAccess() && operationsAccess().playerId == playerId)
         || (resource.data.status == 'active' && resource.data.publicProfileEnabled == true);
       allow write: if isSuperAdmin();
     }
@@ -288,8 +384,16 @@ service cloud.firestore {
 
     match /playerAccountLinks/{playerId} {
       allow read: if isSuperAdmin()
-        || (signedIn() && resource.data.uid == request.auth.uid);
-      allow write: if isSuperAdmin();
+        || (signedIn() && resource.data.uid == request.auth.uid)
+        || (hasApprovedOperationsAccess() && operationsAccess().playerId == playerId);
+      allow create, update: if isSuperAdmin() || validGrantedAccountLink(playerId);
+      allow delete: if isSuperAdmin();
+    }
+
+    match /operationsAccess/{emailKey} {
+      allow get: if isSuperAdmin()
+        || (hasVerifiedAuthEmail() && emailKey == normalizedAuthEmail());
+      allow list, create, update, delete: if isSuperAdmin();
     }
 
     match /playerLinkRequests/{requestId} {
@@ -341,13 +445,13 @@ service cloud.firestore {
     }
 
     match /publicSeasonDashboards/{seasonId} {
-      allow read: if resource.data.status == 'completed';
+      allow read: if isSuperAdmin() || resource.data.status == 'completed';
       allow create, update: if isSuperAdmin() || isSeasonEC(seasonId);
       allow delete: if isSuperAdmin();
     }
 
     match /publicCompletedSeasons/{seasonId} {
-      allow read: if resource.data.status == 'completed';
+      allow read: if isSuperAdmin() || resource.data.status == 'completed';
       allow create, update: if isSuperAdmin() || isSeasonEC(seasonId);
       allow delete: if isSuperAdmin();
     }
@@ -383,7 +487,8 @@ service cloud.firestore {
         allow read: if isSuperAdmin()
           || isSeasonEC(seasonId)
           || (signedIn() && request.auth.uid == uid);
-        allow write: if isSuperAdmin();
+        allow create, update: if isSuperAdmin() || validGrantedMembership(seasonId, uid);
+        allow delete: if isSuperAdmin();
       }
 
       match /teams/{teamId} {

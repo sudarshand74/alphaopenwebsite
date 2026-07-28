@@ -18,6 +18,8 @@ const callableOptions = {
   cors: [
     "https://alphaopen-development-2026.web.app",
     "https://alphaopen-development-2026.firebaseapp.com",
+    "https://alphaopen-production.web.app",
+    "https://alphaopen-production.firebaseapp.com",
     /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
   ],
   enforceAppCheck: false,

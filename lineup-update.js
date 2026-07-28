@@ -1,6 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import { auth, db } from "./firebase-client.js?v=4";
+import { auth, db } from "./firebase-client.js?v=5";
 import { calculateMatchScore } from "./score-rules.js?v=1";
 import { formattedPlayerLabel, loadCanonicalPlayers } from "./player-identity.js?v=5";
 import { refreshSeasonPublicRecords } from "./season-public-sync.js?v=1";

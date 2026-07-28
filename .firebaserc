@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "alphaopen-development-2026"
+    "default": "alphaopen-development-2026",
+    "dev": "alphaopen-development-2026",
+    "prod": "alphaopen-production"
   }
 }

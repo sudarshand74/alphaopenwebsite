@@ -1,9 +1,8 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
-import { collection, doc, getDocs, getFirestore, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { collection, doc, getDocs, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+import { auth, db } from "./firebase-client.js?v=5";
 
-const config={projectId:"alphaopen-development-2026",appId:"1:128657830722:web:07c8c84d0386b5b11c4edb",storageBucket:"alphaopen-development-2026.firebasestorage.app",apiKey:"AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",authDomain:"alphaopen-development-2026.firebaseapp.com",messagingSenderId:"128657830722"};
-const app=getApps().length?getApp():initializeApp(config),auth=getAuth(app),db=getFirestore(app),ADMIN="sudarshandesai74@gmail.com";
+const ADMIN="sudarshandesai74@gmail.com";
 const $=selector=>document.querySelector(selector),seasonSelect=$("#rosterAdminSeason"),panel=$("#rosterAdminTeams"),statusBox=$("#rosterAdminMessage"),dialog=$("#rosterReplacementDialog"),form=$("#rosterReplacementForm"),playerSelect=$("#replacementPlayerId"),recordReplacement=$("#recordRosterReplacement");
 const esc=value=>String(value??"").replace(/[&<>'"]/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[char]);
 const isAdmin=()=>Boolean(auth.currentUser?.emailVerified&&auth.currentUser.email?.toLowerCase()===ADMIN);

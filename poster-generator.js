@@ -38,7 +38,7 @@
     return (players || [])
       .map((player) => {
         const label = String(player || "").trim();
-        return /^P\d+$/i.test(label) ? "Player name unavailable" : label;
+        return /^(?:P\d+|AO-\d+)$/i.test(label) ? "Player name unavailable" : label;
       })
       .filter(Boolean)
       .slice(0, 2);

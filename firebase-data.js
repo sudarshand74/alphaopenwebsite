@@ -1,5 +1,5 @@
-import { getApp, getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+import { auth, db } from "./firebase-client.js?v=5";
 import { formattedPlayerLabel, resolvedPlayerName, loadCanonicalPlayers } from "./player-identity.js?v=5";
 import {
   loadPublicCompletedSeasonDashboard,
@@ -23,23 +23,9 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
-  getFirestore,
   writeBatch,
   where
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  projectId: "alphaopen-development-2026",
-  appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
-  storageBucket: "alphaopen-development-2026.firebasestorage.app",
-  apiKey: "AIzaSyCBxY1bOkhALp1W_1yXFmDo9jdFhRNQqIY",
-  authDomain: "alphaopen-development-2026.firebaseapp.com",
-  messagingSenderId: "128657830722"
-};
-
-const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
 let publishedHistorySeasons = [];
 const readCache = new Map();
 const PUBLIC_READ_TTL_MS = 5 * 60 * 1000;
@@ -773,7 +759,7 @@ async function loadRegisteredUsers() {
     if (loadId !== registeredUsersLoadId) return;
     if (usersSnapshot.empty) {
       registeredUserRecords = [];
-      registeredUsersPanel.innerHTML = '<div class="empty-state compact"><b>No registered users</b><p>A registration appears after the first verified Google sign-in.</p></div>';
+      registeredUsersPanel.innerHTML = '<div class="empty-state compact"><b>No activated accounts</b><p>Pre-approved Captains, ECs, and Approvers appear here after their first verified Google sign-in.</p></div>';
       return;
     }
     const records = usersSnapshot.docs.map(userDocument => {
@@ -825,7 +811,7 @@ function renderRegisteredUsers(records, filter = "") {
       return !term || [record.playerName, record.user.displayName, record.user.email, record.user.playerId, status, profileLabel(profile), ...record.roles].some(value => String(value ?? "").toLowerCase().includes(term));
     }).sort((a, b) => (a.playerName || a.user.displayName || a.user.email).localeCompare(b.playerName || b.user.displayName || b.user.email));
     if (!filtered.length) {
-      registeredUsersPanel.innerHTML = `<div class="empty-state compact"><b>${term ? "No matching users" : "No registered users"}</b><p>${term ? "Try a different name, email, Player ID, status, or profile." : "A registration appears after the first verified Google sign-in."}</p></div>`;
+      registeredUsersPanel.innerHTML = `<div class="empty-state compact"><b>${term ? "No matching users" : "No activated accounts"}</b><p>${term ? "Try a different name, email, Player ID, status, or profile." : "Pre-approved Operations users appear after their first verified Google sign-in."}</p></div>`;
       return;
     }
     registeredUsersPanel.innerHTML = filtered.map(record => {

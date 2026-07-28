@@ -1,6 +1,6 @@
 import {onAuthStateChanged} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import {collection, doc, getDoc, getDocs} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-import {auth, db} from "./firebase-client.js?v=4";
+import {auth, db} from "./firebase-client.js?v=5";
 import {listLineupWorkflowSeasons, newWorkflowOperationId, resetApprovedLineups} from "./lineup-workflow-client.js?v=2";
 import {loadCanonicalPlayers} from "./player-identity.js?v=5";
 
