@@ -10,19 +10,6 @@ service cloud.firestore {
       return /databases/$(database)/documents/users/$(uid);
     }
 
-    function playerPath(playerId) {
-      return /databases/$(database)/documents/players/$(playerId);
-    }
-
-    function playerMatchesAuthenticatedEmail(playerId) {
-      return request.auth.token.email_verified == true
-        && playerId is string
-        && exists(playerPath(playerId))
-        && get(playerPath(playerId)).data.emailNormalized.lower() == request.auth.token.email.lower()
-        && get(playerPath(playerId)).data.status is string
-        && get(playerPath(playerId)).data.status.lower() == 'active';
-    }
-
     function hasStoredSuperAdminRole() {
       return signedIn()
         && exists(userPath(request.auth.uid))
@@ -35,6 +22,14 @@ service cloud.firestore {
       return signedIn()
         && exists(userPath(request.auth.uid))
         && get(userPath(request.auth.uid)).data.status == 'active';
+    }
+
+    function hasStoredOperationsGlobalRole() {
+      return isActiveUser()
+        && get(userPath(request.auth.uid)).data.globalRoles is list
+        && get(userPath(request.auth.uid)).data.globalRoles.hasAny([
+          'superAdmin', 'ec', 'captain', 'neutralApprover'
+        ]);
     }
 
     // Temporary bootstrap path. Replace the email check with a custom claim
@@ -73,6 +68,27 @@ service cloud.firestore {
       return isSeasonMember(seasonId)
         && seasonMember(seasonId).roles is list
         && seasonMember(seasonId).roles.hasAny([role]);
+    }
+
+    function activeSeasonControlPath() {
+      return /databases/$(database)/documents/systemConfig/seasonControl;
+    }
+
+    function hasCurrentSeasonOperationsRole() {
+      return isActiveUser()
+        && exists(activeSeasonControlPath())
+        && get(activeSeasonControlPath()).data.activeSeasonId is string
+        && (
+          hasSeasonRole(get(activeSeasonControlPath()).data.activeSeasonId, 'captain')
+          || hasSeasonRole(get(activeSeasonControlPath()).data.activeSeasonId, 'ec')
+          || hasSeasonRole(get(activeSeasonControlPath()).data.activeSeasonId, 'neutralApprover')
+        );
+    }
+
+    function hasOperationsAccess() {
+      return isSuperAdmin()
+        || hasStoredOperationsGlobalRole()
+        || hasCurrentSeasonOperationsRole();
     }
 
     function isSeasonEC(seasonId) {
@@ -210,23 +226,8 @@ service cloud.firestore {
         && validLineupApprovalState(request.resource.data);
     }
 
-    function safeOwnUserCreate(uid) {
-      return request.auth.uid == uid
-        && request.resource.data.uid == uid
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.status == 'pending'
-        && request.resource.data.profileType == 'player'
-        && playerMatchesAuthenticatedEmail(request.resource.data.playerId)
-        && request.resource.data.globalRoles.size() == 0
-        && request.resource.data.keys().hasOnly([
-          'uid', 'email', 'emailVerified', 'displayName', 'photoUrl',
-          'status', 'profileType', 'playerId', 'globalRoles', 'createdAt', 'lastLoginAt',
-          'updatedAt'
-        ]);
-    }
-
     match /users/{uid} {
-      allow create: if signedIn() && (isSuperAdmin() || safeOwnUserCreate(uid));
+      allow create: if signedIn() && isSuperAdmin();
       allow read: if signedIn() && (request.auth.uid == uid || isSuperAdmin());
       allow update: if (isSuperAdmin() && !isBootstrapAdminEmail(resource.data.email))
         || (signedIn()
@@ -263,7 +264,7 @@ service cloud.firestore {
 
     match /players/{playerId} {
       allow read: if isSuperAdmin()
-        || signedIn()
+        || hasOperationsAccess()
         || (resource.data.status == 'active' && resource.data.publicProfileEnabled == true);
       allow write: if isSuperAdmin();
     }
@@ -308,15 +309,7 @@ service cloud.firestore {
     }
 
     match /registrationRequests/{uid} {
-      allow create: if isSuperAdmin()
-        || (signedIn()
-          && request.auth.uid == uid
-          && request.resource.data.uid == uid
-          && request.resource.data.email == request.auth.token.email
-          && request.auth.token.email_verified == true
-          && request.resource.data.status == 'pending'
-          && request.resource.data.assignedProfileType == 'player'
-          && playerMatchesAuthenticatedEmail(request.resource.data.matchedPlayerId));
+      allow create: if isSuperAdmin();
       allow read: if isSuperAdmin()
         || (signedIn() && request.auth.uid == uid);
       allow update: if isSuperAdmin();
@@ -341,17 +334,22 @@ service cloud.firestore {
     // before deciding whether the locally cached public Player Master is stale.
     match /publicConfig/{documentId} {
       allow read: if true;
-      allow write: if isSuperAdmin();
+      allow write: if isSuperAdmin()
+        || (documentId == 'activeSeasonDashboard'
+          && request.resource.data.seasonId is string
+          && isSeasonEC(request.resource.data.seasonId));
     }
 
     match /publicSeasonDashboards/{seasonId} {
       allow read: if resource.data.status == 'completed';
-      allow create, update, delete: if isSuperAdmin();
+      allow create, update: if isSuperAdmin() || isSeasonEC(seasonId);
+      allow delete: if isSuperAdmin();
     }
 
     match /publicCompletedSeasons/{seasonId} {
       allow read: if resource.data.status == 'completed';
-      allow create, update, delete: if isSuperAdmin();
+      allow create, update: if isSuperAdmin() || isSeasonEC(seasonId);
+      allow delete: if isSuperAdmin();
     }
 
     match /aoContent/{contentId} {
@@ -416,6 +414,21 @@ service cloud.firestore {
         allow read: if isSuperAdmin() || isSeasonMember(seasonId) || isSeasonApprover(seasonId);
         allow create, delete: if isSuperAdmin();
         allow update: if isSuperAdmin();
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'homeTeamPoints', 'awayTeamPoints', 'completedLineCount',
+            'canceledLineCount', 'status', 'winnerTeamId',
+            'lastCorrectionId', 'lastCorrectionAt', 'lastCorrectionByUid',
+            'updatedAt'
+          ])
+          && request.resource.data.lastCorrectionByUid == request.auth.uid
+          && isSeasonEC(seasonId);
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'homeTeamPoints', 'awayTeamPoints', 'completedLineCount',
+            'canceledLineCount', 'status', 'winnerTeamId', 'standingsApplied',
+            'derivedRecordsUpdatedAt', 'derivedRecordsUpdatedByUid', 'updatedAt'
+          ])
+          && request.resource.data.derivedRecordsUpdatedByUid == request.auth.uid
+          && isSeasonEC(seasonId);
         allow update: if request.resource.data.homeLineupStatus == 'submitted'
           && request.resource.data.awayLineupStatus == resource.data.awayLineupStatus
           && workflowMatchupUpdateOnly()
@@ -582,13 +595,21 @@ service cloud.firestore {
             && getAfter(matchupPath(seasonId, matchupId)).data.lineupApprovalStatus == 'awaitingSubmission'
             && request.resource.data.lineupState == 'awaitingReapproval'
             && request.resource.data.scoreEntryAllowed == false;
-          allow update: if (isSeasonEC(seasonId)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          allow update: if (request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'homePlayers', 'awayPlayers', 'homeSor', 'awaySor',
                 'venueId', 'venueNameSnapshot', 'venueAddressSnapshot',
                 'scheduledAt', 'sets', 'scheduleStatus', 'scoreStatus',
-                'homePoints', 'awayPoints', 'winnerTeamId', 'updatedAt'
-              ]))
+                'homePoints', 'awayPoints', 'winnerTeamId',
+                'lineupState', 'scoreEntryAllowed',
+                'lastCorrectionId', 'lastCorrectionAt', 'lastCorrectionByUid',
+                'lastCorrectionByNameSnapshot', 'lastCorrectionReason', 'updatedAt'
+              ])
+              && request.resource.data.lastCorrectionByUid == request.auth.uid
+              && request.resource.data.lastCorrectionReason is string
+              && request.resource.data.lastCorrectionReason.size() > 0
+              && isSeasonEC(seasonId))
             || (isMatchupTeamCaptain(seasonId, matchupId)
+              && resource.data.scheduleStatus in ['toBeScheduled', 'scheduled']
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'venueId', 'venueNameSnapshot', 'venueAddressSnapshot', 'scheduledAt', 'sets',
                 'scheduleStatus', 'scoreStatus', 'homePoints', 'awayPoints',
@@ -602,6 +623,19 @@ service cloud.firestore {
               && request.resource.data.seasonId == seasonId
               && request.resource.data.matchupId == matchupId
               && request.resource.data.lineMatchId == lineMatchId
+              && request.resource.data.reason is string
+              && request.resource.data.reason.size() > 0;
+            allow update, delete: if false;
+          }
+
+          match /corrections/{correctionId} {
+            allow read: if isSeasonEC(seasonId);
+            allow create: if isSeasonEC(seasonId)
+              && request.resource.data.correctionId == correctionId
+              && request.resource.data.seasonId == seasonId
+              && request.resource.data.matchupId == matchupId
+              && request.resource.data.lineMatchId == lineMatchId
+              && request.resource.data.correctedByUid == request.auth.uid
               && request.resource.data.reason is string
               && request.resource.data.reason.size() > 0;
             allow update, delete: if false;
@@ -683,7 +717,25 @@ service cloud.firestore {
 
       match /standings/{teamId} {
         allow read: if isSuperAdmin() || isSeasonMember(seasonId);
-        allow write: if false;
+        allow create: if request.resource.data.teamId == teamId
+          && request.resource.data.calculatedByUid == request.auth.uid
+          && request.resource.data.keys().hasAll([
+            'teamId', 'completedMatchups', 'completedLines', 'lineWins',
+            'lineLosses', 'matchPoints', 'bonusPoints', 'penaltyPoints',
+            'adjustedTotal', 'playoffPosition', 'qualified', 'calculatedAt',
+            'calculatedByUid', 'sourceVersion'
+          ])
+          && isSeasonEC(seasonId);
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'teamId', 'completedMatchups', 'completedLines', 'lineWins',
+            'lineLosses', 'matchPoints', 'bonusPoints', 'penaltyPoints',
+            'adjustedTotal', 'playoffPosition', 'qualified', 'calculatedAt',
+            'calculatedByUid', 'sourceVersion'
+          ])
+          && request.resource.data.teamId == teamId
+          && request.resource.data.calculatedByUid == request.auth.uid
+          && isSeasonEC(seasonId);
+        allow delete: if false;
       }
 
       match /standingsSnapshots/{snapshotId} {
@@ -711,12 +763,6 @@ service cloud.firestore {
       match /{document=**} {
         allow delete: if isSuperAdmin();
       }
-    }
-
-    // Collection-group queries need an explicit recursive match. Match Lines are
-    // public when their operational schedule status belongs on the Matches page.
-    match /{path=**}/lineMatches/{lineMatchId} {
-      allow read: if isPublicMatchStatus(resource.data);
     }
 
     // Every collection not explicitly matched above remains inaccessible.

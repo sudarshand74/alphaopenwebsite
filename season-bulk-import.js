@@ -14,7 +14,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import "./season-reset.js?v=2";
-import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
+import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=15";
+import { refreshSeasonPublicRecords } from "./season-public-sync.js?v=1";
 const config = {
     projectId: "alphaopen-development-2026",
     appId: "1:128657830722:web:07c8c84d0386b5b11c4edb",
@@ -734,7 +735,43 @@ async function exportEntireDatabase() {
     button.textContent = "Export database to Excel";
   }
 }
+async function refreshActivePublicDashboard() {
+  const button = $("#refreshActivePublicDashboard");
+  const message = $("#publicDashboardRefreshMessage");
+  if (!button || !message || !isAdmin()) return;
+  const controlSnapshot = await getDoc(doc(db, "systemConfig", "seasonControl"));
+  const seasonId =
+    window.alphaOpenAuthorization?.activeSeasonId ||
+    controlSnapshot.data()?.activeSeasonId ||
+    "";
+  if (!seasonId) {
+    message.textContent = "No active season is configured. Nothing was refreshed.";
+    return;
+  }
+  if (!window.confirm(
+    `Refresh public records for ${seasonId}?\n\n` +
+    "This recalculates matchup totals and standings from official completed lines, " +
+    "then rebuilds the public dashboard.",
+  )) return;
+  button.disabled = true;
+  button.textContent = "Refreshing…";
+  message.textContent = `Recalculating ${seasonId} matchup totals and standings…`;
+  try {
+    const result = await refreshSeasonPublicRecords(seasonId);
+    message.textContent =
+      `${seasonId} public dashboard refreshed successfully: ` +
+      `${result.matchupCount} matchups and ${result.standingCount} standings rows.`;
+    window.alphaOpenAuthUI?.showMessage(`${seasonId} public dashboard refreshed`);
+  } catch (error) {
+    console.error("Active public dashboard refresh failed", error);
+    message.textContent = `Refresh failed: ${error.message || "Unknown error"}`;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Refresh Active Public Dashboard";
+  }
+}
 $("#exportDatabase")?.addEventListener("click", exportEntireDatabase);
+$("#refreshActivePublicDashboard")?.addEventListener("click", refreshActivePublicDashboard);
 $("#downloadSeasonTemplate")?.addEventListener("click", downloadTemplate);
 $("#downloadSeasonTemplateDialog")?.addEventListener("click", downloadTemplate);
 $("#openSeasonImport")?.addEventListener("click", open);

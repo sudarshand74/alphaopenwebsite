@@ -3,7 +3,7 @@ import { collection, doc, getDoc, getDocs, serverTimestamp, writeBatch } from "h
 import { auth, db } from "./firebase-client.js?v=4";
 import { calculateMatchScore } from "./score-rules.js?v=1";
 import { formattedPlayerLabel, resolvedPlayerName, loadCanonicalPlayers } from "./player-identity.js?v=5";
-import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
+import { refreshSeasonPublicRecords } from "./season-public-sync.js?v=1";
 
 let state;
 const feedbackByLineId = new Map();
@@ -68,6 +68,29 @@ function setCardFeedback(article, text, tone = "error") {
 }
 function captainLabel(team) {
   return team.captainNameSnapshot || team.captainName || String(team.name || team.teamId).replace(/^Team\s+/i, "");
+}
+function matchupTeamName(record, side) {
+  const teamId = record.matchup[side + "TeamId"];
+  const team = state.teams.find(function (item) { return item.teamId === teamId; });
+  const name = team && team.name ||
+    record.matchup[side + "TeamNameSnapshot"] ||
+    teamId ||
+    "Team";
+  return /^Team\b/i.test(name) ? name : "Team " + name;
+}
+function winnerName(record, result) {
+  return result ? matchupTeamName(record, result.winnerSide) : "";
+}
+function showPointResult(points, homePoints, awayPoints, winner = "") {
+  points.replaceChildren();
+  const pointLine = document.createElement("span");
+  pointLine.textContent = homePoints + " \u2013 " + awayPoints + " points";
+  points.appendChild(pointLine);
+  if (winner) {
+    const winnerLine = document.createElement("strong");
+    winnerLine.textContent = winner + " Won";
+    points.appendChild(winnerLine);
+  }
 }
 function venueFullAddress(venue) {
   if (!venue) return null;
@@ -154,13 +177,13 @@ function setVisualStatus(article, status) {
   const labels = { toBeScheduled: "To Be Scheduled", scheduled: "Scheduled", completed: "Completed", canceled: "Canceled" };
   if (badge) badge.textContent = labels[status] || status;
 }
-function updatePreview(article) {
+function updatePreview(article, record) {
   const points = article.querySelector("[data-points]");
   try {
     const sets = readEnteredSets(article);
     const result = calculateMatchScore(sets);
     if (!sets.length) {
-      points.textContent = "0 – 0 points";
+      showPointResult(points, 0, 0);
       if (article.querySelector("[data-venue]").value && article.querySelector("[data-played]").value) setVisualStatus(article, "scheduled");
       else setVisualStatus(article, "toBeScheduled");
       return;
@@ -170,7 +193,7 @@ function updatePreview(article) {
       setVisualStatus(article, "toBeScheduled");
       return;
     }
-    points.textContent = result.homePoints + " – " + result.awayPoints + " points";
+    showPointResult(points, result.homePoints, result.awayPoints, winnerName(record, result));
     setVisualStatus(article, "completed");
   } catch (error) {
     points.textContent = error.message;
@@ -275,7 +298,17 @@ function renderCard(record) {
   });
   const points = document.createElement("div");
   points.dataset.points = "";
-  points.textContent = (line.homePoints || 0) + " – " + (line.awayPoints || 0) + " points";
+  const savedWinnerSide = line.winnerTeamId === record.matchup.homeTeamId
+    ? "home"
+    : line.winnerTeamId === record.matchup.awayTeamId
+      ? "away"
+      : null;
+  showPointResult(
+    points,
+    line.homePoints || 0,
+    line.awayPoints || 0,
+    savedWinnerSide ? matchupTeamName(record, savedWinnerSide) : "",
+  );
   score.appendChild(points);
 
   const actions = document.createElement("div");
@@ -334,10 +367,10 @@ function renderCard(record) {
   if (playerGrid) article.append(playerGrid);
   article.append(form, score, actions);
   article.querySelectorAll("[data-home-set], [data-away-set], [data-venue], [data-played]").forEach(function (control) {
-    control.addEventListener("input", function () { updatePreview(article); });
-    control.addEventListener("change", function () { updatePreview(article); });
+    control.addEventListener("input", function () { updatePreview(article, record); });
+    control.addEventListener("change", function () { updatePreview(article, record); });
   });
-  updatePreview(article);
+  updatePreview(article, record);
   return article;
 }
 async function save(article, record) {
@@ -379,14 +412,16 @@ async function save(article, record) {
   if (finalStatus === "canceled") scoreStatus = "canceled";
   else if (result) scoreStatus = "published";
   if (finalStatus === "completed") {
-    const homeName = record.matchup.homeTeamNameSnapshot || record.matchup.homeTeamId;
-    const awayName = record.matchup.awayTeamNameSnapshot || record.matchup.awayTeamId;
+    const homeName = matchupTeamName(record, "home");
+    const awayName = matchupTeamName(record, "away");
+    const winningTeamName = winnerName(record, result);
     const scoreText = sets.map(function (set) { return set.home + "-" + set.away; }).join(" ");
     const confirmed = window.confirm(
       "Confirm final score?\n\n" +
       homeName + " vs " + awayName + "\n" +
       "Score: " + scoreText + "\n" +
-      "Points: " + result.homePoints + "-" + result.awayPoints +
+      "Points: " + result.homePoints + "-" + result.awayPoints + "\n" +
+      "Winner: " + winningTeamName +
       "\n\nOnce saved, the score update button will be disabled."
     );
     if (!confirmed) throw new Error("Score update canceled. No changes were saved.");
@@ -407,10 +442,30 @@ async function save(article, record) {
   const batch = writeBatch(db);
   batch.update(record.ref, payload);
   await batch.commit();
-  await publishPublicSeasonDashboard(state.seasonId);
-  window.dispatchEvent(new CustomEvent("alphaopen:match-line-updated", {
-    detail: { seasonId: state.seasonId, matchupId: record.matchup.matchupId, lineMatchId: record.line.lineMatchId }
-  }));
+  const authorization = window.alphaOpenAuthorization || {};
+  const canRefreshPublicRecords =
+    authorization.role === "SuperAdmin" ||
+    (authorization.roles || []).some(function (role) {
+      return ["ec", "superadmin"].includes(String(role || "").toLowerCase());
+    }) ||
+    (authorization.access || []).some(function (access) {
+      return ["ec", "superadmin"].includes(String(access || "").toLowerCase());
+    });
+  if (canRefreshPublicRecords) {
+    try {
+      await refreshSeasonPublicRecords(state.seasonId);
+    } catch (error) {
+      throw new Error(
+        "The private score was saved, but the public dashboard refresh failed. " +
+        "Use Admin > Setup Season > Refresh Active Public Dashboard. " +
+        (error.message || "")
+      );
+    }
+  } else {
+    window.dispatchEvent(new CustomEvent("alphaopen:match-line-updated", {
+      detail: { seasonId: state.seasonId, matchupId: record.matchup.matchupId, lineMatchId: record.line.lineMatchId }
+    }));
+  }
   const successText = finalStatus === "completed"
     ? "Scores were updated."
     : finalStatus === "scheduled"

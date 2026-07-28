@@ -117,6 +117,8 @@ function canPublish() {
     auth.currentUser &&
     (
       authorization?.roles?.includes("superAdmin") ||
+      authorization?.roles?.includes("ec") ||
+      authorization?.access?.includes("ec") ||
       authorization?.role === "Super Admin" ||
       auth.currentUser.email?.toLowerCase() === "sudarshandesai74@gmail.com"
     )
@@ -146,16 +148,16 @@ export async function loadPublicSeasonDashboard(expectedSeasonId = "") {
 export async function loadPublicMatchLines(seasonId, matchups = []) {
   if (!seasonId) return [];
   const lineGroups = await Promise.all(matchups.map(async (matchup) => {
-    const matchupId = String(matchup.matchupId || "").trim();
+    const matchupId = String(matchup?.matchupId || "").trim();
     if (!matchupId) return [];
     const snapshot = await getDocs(query(
       collection(db, "seasons", seasonId, "matchups", matchupId, "lineMatches"),
       where("scheduleStatus", "in", ["toBeScheduled", "scheduled", "completed"]),
     ));
-    return snapshot.docs.map((lineSnapshot) => ({
-      lineMatchId: lineSnapshot.id,
+    return snapshot.docs.map((item) => ({
+      lineMatchId: item.id,
       matchupId,
-      ...lineSnapshot.data(),
+      ...item.data(),
     }));
   }));
   return lineGroups.flat();

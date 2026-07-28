@@ -67,11 +67,19 @@ function allowed(element, account) {
 function setAccount(key, announce = false) {
   currentAccountKey = key;
   const account = accounts[key];
+  const signedIn = key !== "guest";
   document.body.dataset.account = key;
   $("#profileName").textContent =
-    key === "guest" ? "Sign in" : account.name.split(" ")[0];
+    signedIn ? account.name.split(" ")[0] : "Account";
   $("#profileRole").textContent = account.role;
   $("#avatar").textContent = account.avatar;
+  $("#signInButton").hidden = !signedIn;
+  if ($("#operationsGuestPanel")) $("#operationsGuestPanel").hidden = signedIn;
+  if ($("#operationsUserPanel")) $("#operationsUserPanel").hidden = !signedIn;
+  if (signedIn && $("#operationsUserName")) {
+    $("#operationsUserName").textContent = account.name;
+    $("#operationsUserRole").textContent = `${account.role} access verified. Your approved operations tools are available.`;
+  }
   $$("[data-access],[data-access-any],[data-access-strict],[data-nav-roles]").forEach(
     (el) => (el.hidden = !allowed(el, account)),
   );
@@ -111,7 +119,7 @@ function renderWorkspace(account) {
   $("#roleBadge").textContent = account.role;
   const copy = {
     Guest:
-      "Follow scores, standings and league rules. Sign in for your private workspace.",
+      "Follow scores, standings, player history and league information without an account.",
     "Super Admin":
       "Manage every season setting, account, roster, approval and result.",
     EC: "Review season operations, rosters, replacements and data quality.",
@@ -2222,6 +2230,9 @@ function resetPreviousSeasonDashboardFilters() {
 
 function updatePreviousSeasonHeading() {
   const name = seasonDisplayName(springSeasonData?.season);
+  document
+    .querySelector('[data-view="schedule"]')
+    ?.classList.toggle("completed-season-loaded", Boolean(springSeasonData));
   if ($("#previousSeasonTitle"))
     $("#previousSeasonTitle").textContent = springSeasonData
       ? name
@@ -2456,9 +2467,13 @@ $$("[data-admin-panel]").forEach((button) =>
   ),
 );
 $("#signInButton").addEventListener("click", () =>
-  currentAccountKey === "guest"
-    ? $("#signInDialog").showModal()
-    : window.dispatchEvent(new CustomEvent("alphaopen:request-signout")),
+  window.dispatchEvent(new CustomEvent("alphaopen:request-signout")),
+);
+$("#operationsSignIn")?.addEventListener("click", () =>
+  $("#signInDialog").showModal(),
+);
+$("#operationsSignOut")?.addEventListener("click", () =>
+  window.dispatchEvent(new CustomEvent("alphaopen:request-signout")),
 );
 $("#continueGoogle").addEventListener("click", () =>
   window.dispatchEvent(new CustomEvent("alphaopen:request-signin")),

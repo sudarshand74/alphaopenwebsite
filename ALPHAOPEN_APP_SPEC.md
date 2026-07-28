@@ -142,32 +142,26 @@ Captains cannot:
 
 ### 4.4 Player
 
-A player signs in with Google and may be linked to exactly one master `Player_ID`. Captains and ECs who also play retain their operational permissions and receive Player access under the same login.
+A player uses the same public experience as a Guest and does not need an account. Captains, Neutral Approvers, ECs, and Administrators who also play retain their immutable `Player_ID` while using one approved operations login.
 
-Account-linking workflow:
+Limited operations access workflow:
 
-1. The user authenticates with Google using a verified Gmail address.
-2. Before registration is created, the verified Google email must match exactly one active Firebase Player Master email.
-3. A match creates a `player` profile linked to the permanent Player ID with `status: pending`; no match is signed out without a registration record.
-4. Super Admin verifies and approves the pending Player before any private or operational access is granted, then assigns active-season profiles.
-5. Selecting a player name alone never grants access to private history.
+1. Public navigation contains no sign-in or registration control.
+2. Approved operations personnel receive the private `#operations` address.
+3. Google authentication must resolve to an existing active user with a Captain, Neutral Approver, EC, or Super Admin assignment.
+4. Unknown, inactive, and player-only identities are signed out without creating a registration request.
+5. Firestore rules enforce the role assignment; knowing the private URL never grants access.
 
 Players can:
 
-- View their current team, roster rank, captain, and teammates.
-- View upcoming assigned matches, approved lineups, venue, date, and time.
-- Submit or update their availability when enabled for the season.
-- View their own complete season and career match history.
+- View published teams, rosters, schedules, standings, scores, and player history.
 - View wins, losses, set scores, games, league points, line numbers played, team history, rank history, replacements, and playoff appearances.
-- Track rank-level min/max participation progress for the current season.
-- Manage profile, notification, phone-visibility, and email-visibility preferences.
-- Request correction of an identity link or historical record.
 
 Players cannot:
 
-- Claim another Player_ID without EC approval.
+- Sign in solely because they exist in Player Master.
 - Change official team, rank, eligibility, lineup, score, or historical results.
-- View private contact information for other players.
+- View private contact information or other Player Master fields.
 - View sealed opposing lineups or internal EC notes.
 
 Player history is calculated from immutable Player IDs in official Match Data and roster assignments. Changing a name or email does not remove prior history.

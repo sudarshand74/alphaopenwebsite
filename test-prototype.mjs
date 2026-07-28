@@ -31,9 +31,10 @@ const matchManagement = `${matchManagementModule}${js}`;
 const posterGenerator = await fs.readFile("poster-generator.js","utf8");
 const aoContent = await fs.readFile("ao-content.js","utf8");
 const publicSeasonDashboard = await fs.readFile("public-season-dashboard.js","utf8");
+const seasonPublicSync = await fs.readFile("season-public-sync.js","utf8");
 const ecLineupStatus = await fs.readFile("ec-lineup-status.js","utf8");
 
-for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupReset, lineupWorkflowClient, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule, aoContent, publicSeasonDashboard })) {
+for (const [name, source] of Object.entries({ lineupSubmit, lineupApprove, lineupReset, lineupWorkflowClient, lineupUpdate, rosterAdminShared, playerAdmin, matchManagementModule, aoContent, publicSeasonDashboard, seasonPublicSync })) {
   assert(source.includes('from "./firebase-client.js?v=4"'),`${name} must use the shared Firebase client`);
   assert(!source.includes("getFirestore("),`${name} must not reinitialize Firestore with different options`);
 }
@@ -43,7 +44,7 @@ for (const staleVersion of ["firebase-client.js?v=1", "firebase-client.js?v=2", 
 }
 
 for (const token of ["Â","â","Ã"]) assert(!`${html}${js}${css}`.includes(token),`Mojibake token found: ${token}`);
-for (const id of ["authStatus","profileName","profileRole","springRosterTeams","springSeasonResults","springWeekFilter","springTeamFilter","standingsRows","historyRows","lineupRows","approvalQueue","lineupResetSeason","lineupResetWeek","lineupResetHomeTeam","lineupResetForm","resetApprovedLineups","rosterRows","signInDialog","registrationPendingDialog","registrationPendingMessage","acknowledgeRegistrationPending","registrationBlockedDialog","registrationBlockedMessage","acknowledgeRegistrationBlocked","createSeasonDialog","createSeasonForm","seasonDialogTitle","seasonStatus","seasonAdminList","playerMasterCard","playerMasterPanel","playerMasterSearch","venueManagementPanel","venueMasterSearch","venueMasterList","editVenueDialog","editVenueForm","editVenueId","editVenueName","editVenueStatus","userManagementSearch","addPlayerDialog","importPlayersDialog","editPlayerDialog","editPlayerId","editPlayerEmail","playerImportFile","openRegisteredUsers","registeredUsersCard","registeredUsersPanel","refreshRegisteredUsers","manageUserDialog","manageActiveSeasonLabel","managedPastSeasons","scoreDialog","seasonTeamsSeason","seasonTeamsList","seasonTeamDialog","seasonMatchupsSeason","seasonMatchupsList","seasonMatchupDialog"]) assert(html.includes(`id="${id}"`),`Missing #${id}`);
+for (const id of ["authStatus","profileName","profileRole","springRosterTeams","springSeasonResults","springWeekFilter","springTeamFilter","standingsRows","historyRows","lineupRows","approvalQueue","lineupResetSeason","lineupResetWeek","lineupResetHomeTeam","lineupResetForm","resetApprovedLineups","rosterRows","signInDialog","registrationPendingDialog","registrationPendingMessage","acknowledgeRegistrationPending","registrationBlockedDialog","registrationBlockedMessage","acknowledgeRegistrationBlocked","createSeasonDialog","createSeasonForm","seasonDialogTitle","seasonStatus","seasonAdminList","refreshActivePublicDashboard","publicDashboardRefreshMessage","playerMasterCard","playerMasterPanel","playerMasterSearch","venueManagementPanel","venueMasterSearch","venueMasterList","editVenueDialog","editVenueForm","editVenueId","editVenueName","editVenueStatus","userManagementSearch","addPlayerDialog","importPlayersDialog","editPlayerDialog","editPlayerId","editPlayerEmail","playerImportFile","openRegisteredUsers","registeredUsersCard","registeredUsersPanel","refreshRegisteredUsers","manageUserDialog","manageActiveSeasonLabel","managedPastSeasons","scoreDialog","seasonTeamsSeason","seasonTeamsList","seasonTeamDialog","seasonMatchupsSeason","seasonMatchupsList","seasonMatchupDialog"]) assert(html.includes(`id="${id}"`),`Missing #${id}`);
 assert(!html.includes('id="matchList"')&&!html.includes('Match browser'),"Duplicate Match Browser section must remain removed");
 for (const removedId of ["homeIdentityAvatar","homeIdentityStatus","homeIdentityName","homeIdentityEmail","homeAccessLevel"]) assert(!html.includes(`id="${removedId}"`),`Removed identity strip field remains: #${removedId}`);
 assert(!html.includes('class="home-identity"'),"Large home identity strip must be removed");
@@ -58,7 +59,7 @@ assert(js.includes("initCommunityCarousel")&&js.includes("setInterval")&&js.incl
 assert(js.includes('$("#profileRole").textContent = account.role'),"Header role binding is missing");
 for (const panel of ["players","users","venues","seasons","season-teams","season-matchups","rosters","lineup-approvers","submit-lineup","approve-lineup","update-lineup","schedule-score"]) assert(html.includes(`data-admin-panel="${panel}"`) && html.includes(`data-admin-section="${panel}"`), `Missing Admin submenu: ${panel}`);
 for (const heading of ["Master Data","Season","Operations"]) assert(html.includes(`>${heading}</h2>`),`Missing Admin group: ${heading}`);
-for (const label of ["Player Master","User Management","Venue Master","Setup Season","Season Teams","Matchup Schedule","Manage Team Roster","Lineup Approvers","Submit Lineup","Approve Lineup","Update Lineup","Update Schedule &amp; Score"]) assert(html.includes(`>${label}<`),`Missing grouped Admin item: ${label}`);
+for (const label of ["Player Master","User Management","Venue Master","Setup Season","Season Teams","Matchup Schedule","Manage Team Roster","Lineup Approvers","Submit Lineup","Approve Lineup","Correct Lineup &amp; Score","Update Schedule &amp; Score"]) assert(html.includes(`>${label}<`),`Missing grouped Admin item: ${label}`);
 assert(seasonStructureAdmin.includes('collection(db,"seasons",seasonId,"teams")'),"Season team management must use Firebase season teams");
 assert(seasonStructureAdmin.includes('collection(db,"seasons",seasonId,"matchups")'),"Season matchup management must use Firebase season matchups");
 
@@ -73,7 +74,7 @@ assert(html.includes('id="seasonRulesNotice" href="#rules"'),"Current-season rul
 assert(html.includes("Please check Season Rules Here"),"Current-season rules notice text is missing");
 assert(html.indexOf('id="seasonRulesNotice"') < html.indexOf('id="currentSeasonKicker"'),"Active-season rules notice must appear at the top");
 assert(html.includes('id="currentSeasonKicker"')&&js.includes("`Current Season · ${name}`"),"Current-season kicker must show the Firebase season name");
-for (const label of ["Home","Active Season","History","Previous Seasons","Player History","Admin","Captain","Submit Lineup","Schedule & Score","EC","Approve Lineup","Update Lineup"]) assert(html.includes(`>${label}<`),`Missing main-menu label: ${label}`);
+for (const label of ["Home","Active Season","History","Previous Seasons","Player History","Admin","Captain","Submit Lineup","Schedule & Score","EC","Approve Lineup","Correct Lineup & Score"]) assert(html.includes(`>${label}<`),`Missing main-menu label: ${label}`);
 for (const route of ["current-season","captain-schedule","captain-score","ec-lineup","ec-score"]) assert(html.includes(`data-view="${route}"`),`Missing destination view: ${route}`);
 assert(html.includes('id="currentSeasonFilter" disabled'),"Current Season must show one locked active-season selector");
 assert(html.includes('id="fallMatchesSeasonLabel"')&&html.includes('id="fallMatchesTitle"'),"Matches by Round must expose active-season context labels");
@@ -107,7 +108,7 @@ assert(html.includes('data-view="admin" data-super-admin'),"Admin view must be S
 assert(html.includes('data-view="approvals" data-access="approver"'),"Lineup approval must be limited to assigned season approvers");
 assert.equal((html.match(/data-access-strict="approver" data-route="approvals"/g)||[]).length,0,"Approve Lineup must not appear in the EC navigation menu");
 assert(html.includes('<button type="button" data-admin-panel="approve-lineup">Approve Lineup</button>'),"Admin Control must embed Approve Lineup");
-assert(html.includes('<button type="button" data-admin-panel="update-lineup">Update Lineup</button>'),"Admin Control must embed Update Lineup");
+assert(html.includes('<button type="button" data-admin-panel="update-lineup">Correct Lineup &amp; Score</button>'),"Admin Control must embed lineup and score correction");
 assert(js.includes("element.dataset.accessStrict"),"Strict menu access handling is missing");
 assert(js.includes("dataset.accessAny"),"Any-of role access handling is missing");
 
@@ -130,6 +131,7 @@ assert(js.includes('account.access.includes("captain")')&&js.includes('"Lineup D
 assert(ecLineupStatus.includes('authorization.access?.includes("captain")'),"Lineup Dashboard data loader must accept Captain access");
 assert(firebaseData.includes("lineMatches: await loadPublicMatchLines("),"Player History must hydrate completed seasons from live public Match Lines");
 assert(js.includes('String(line.scheduleStatus || "").toLowerCase() === "completed"'),"Player History must count completed Match Lines by schedule status");
+assert(js.includes('classList.toggle("completed-season-loaded", Boolean(springSeasonData))'),"Previous Season sections must become visible after the selected completed dashboard loads");
 assert(!html.includes('data-nav-roles="EC,Neutral Approver"><summary>EC</summary>'),"Neutral Approver must not see the desktop EC menu");
 assert(!html.includes('data-nav-roles="EC,Neutral Approver"><span>EC</span>'),"Neutral Approver must not see the mobile EC menu");
 for (const id of ["matchPosterDialog","matchPosterCanvas","copyMatchPoster","downloadMatchPoster","closeMatchPoster"]) assert(html.includes(`id="${id}"`),`Missing poster control: ${id}`);
@@ -147,6 +149,8 @@ assert(publicSeasonDashboard.includes("loadPublicCompletedSeasonDashboard(season
 assert(publicSeasonDashboard.includes('doc(db, PUBLIC_COMPLETED_DASHBOARDS, seasonId)'),"Completed seasons must publish to independent guest-safe dashboard documents");
 assert(firestoreRules.includes("match /publicSeasonDashboards/{seasonId}")&&firestoreRules.includes("match /publicCompletedSeasons/{seasonId}")&&firestoreRules.includes("resource.data.status == 'completed'"),"Completed-season metadata and dashboard projections must be publicly readable and status restricted");
 assert(matchManagement.includes("Confirm final score?")&&matchManagement.includes("window.confirm"),"Completed scores must require confirmation");
+assert(matchManagementModule.includes('winnerLine.textContent = winner + " Won"'),"Score preview must show the winning team on a separate line");
+assert(matchManagementModule.includes('"Winner: " + winningTeamName'),"Score confirmation must identify the winning team");
 assert(matchManagement.includes("Scores were updated.")&&matchManagement.includes('textContent = "Score updated"'),"Saved-score feedback and disabled-button state are missing");
 assert(matchManagement.includes('if (finalStatus === "completed")')&&matchManagement.includes("return;"),"Completed score save must remain on the current page");
 assert(matchManagementModule.includes("select.disabled = true")&&matchManagementModule.includes('aria-readonly'),"Schedule & Score player controls must be visibly read-only");
@@ -232,12 +236,33 @@ assert(js.includes(".map((player) => playerNameIdLabel(player))"),"Matches Home 
 assert(matchManagementModule.includes("formattedPlayerLabel("),"Match Management must show names instead of Player IDs");
 assert(lineupSubmit.includes("label: rosterPlayerLabel(item)"),"Submit Lineup must show Rank-Player Name (Player ID)");
 assert(lineupApprove.includes("line?.[`player${number}Rank`]")&&lineupApprove.includes("formattedPlayerLabel(")&&lineupApprove.includes("rosterNamesById"),"Approve Lineup must show Rank-Player Name (Player ID) with a roster-name fallback");
-assert(lineupUpdate.includes("Only Super Admin can change an approved lineup's Match Line Record."),"Last-minute player overrides must remain Super Admin-only");
-assert(lineupUpdate.includes("data-player-override-reason")&&lineupUpdate.includes("Enter the reason for this last-minute player override."),"Super Admin player overrides must require a reason");
-assert(lineupUpdate.includes('collection(privateRef, "playerOverrides")')&&lineupUpdate.includes("previousHomePlayers")&&lineupUpdate.includes("replacementAwayPlayers"),"Player overrides must create an immutable before/after audit");
-assert(lineupUpdate.includes("superAdminPlayerOverrideApproved: true")&&lineupUpdate.includes('lineupState: "approved"')&&lineupUpdate.includes("scoreEntryAllowed: true"),"A Super Admin player override must restore the selected line's approved score-entry state");
-assert(lineupUpdate.includes("hasScoreActivity(line)")&&lineupUpdate.includes("before score activity begins"),"Player overrides must be blocked after score activity starts");
-assert(lineupUpdate.includes("await publishPublicSeasonDashboard(state.seasonId)"),"A Super Admin player override must immediately refresh the guest dashboard");
+assert(lineupUpdate.includes("Only EC or Super Admin can change an approved lineup's Match Line Record."),"Approved lineup corrections must be limited to EC and Super Admin");
+assert(html.includes('id="lineupUpdateStatus"')&&html.includes('<option value="open" selected>Scheduled + To Be Scheduled</option>'),"Lineup correction must default to Scheduled + To Be Scheduled");
+assert(html.includes('id="lineupUpdateCaptain"')&&html.includes("All Captains"),"Lineup correction Captain filter is missing");
+assert(html.includes('id="lineupUpdateWeek"')&&html.includes("All Weeks"),"Lineup correction Week filter is missing");
+assert(lineupUpdate.includes('record.matchup.weekId === weekFilter')&&lineupUpdate.includes('getDocs(collection(seasonRef, "weeks"))'),"Lineup correction must load and apply the active-season Week filter");
+assert(lineupUpdate.includes('byId("lineupUpdateWeek")?.addEventListener("change", renderRecords)'),"Changing the lineup correction Week must refresh the result list");
+for (const status of ["completed", "scheduled", "toBeScheduled"]) assert(html.includes(`<option value="${status}">`),`Lineup correction status filter is missing ${status}`);
+assert(!lineupUpdate.includes('const statusLabel = document.createElement("label")'),"Lineup correction form must not shadow the statusLabel formatter");
+assert(lineupUpdate.includes('winnerLine.textContent = `${winner} Won`'),"Lineup correction score preview must identify the winning team");
+assert(lineupUpdate.includes("Confirm completed match correction?"),"Completed score corrections must require before/after confirmation");
+assert(lineupUpdate.includes('"corrections"')&&lineupUpdate.includes("previousHomePlayers")&&lineupUpdate.includes("correctedHomePlayers"),"Immutable lineup and score correction audit is missing");
+assert(firestoreRules.includes("match /corrections/{correctionId}")&&firestoreRules.includes("correctedByUid == request.auth.uid"),"Correction audit security rules are missing");
+assert(firestoreRules.includes("resource.data.scheduleStatus in ['toBeScheduled', 'scheduled']"),"Captains must not be able to change completed scores");
+assert(lineupUpdate.includes("data-player-override-reason")&&lineupUpdate.includes("Enter the reason for this player or completed-score correction."),"EC/Admin completed and player corrections must require a reason");
+assert(lineupUpdate.includes('"corrections"')&&lineupUpdate.includes("previousHomePlayers")&&lineupUpdate.includes("correctedAwayPlayers"),"EC/Admin corrections must create an immutable before/after audit");
+assert(lineupUpdate.includes('lineupState: "approved"')&&lineupUpdate.includes("scoreEntryAllowed: true"),"An EC/Admin correction must preserve the selected line's approved score-entry state");
+assert(!lineupUpdate.includes("Players can only be overridden before score activity begins."),"EC/Admin must be allowed to correct players on completed lines");
+assert(lineupUpdate.includes("await refreshSeasonPublicRecords(state.seasonId)"),"An EC/Admin correction must recalculate standings and refresh the guest dashboard");
+assert(seasonPublicSync.includes("recalculateSeasonDerivedRecords")&&seasonPublicSync.includes("publishPublicSeasonDashboard(seasonId)"),"Public refresh must recalculate private derived records before publishing");
+assert(seasonPublicSync.includes("standing.matchPoints + standing.bonusPoints - standing.penaltyPoints"),"Standings adjusted total must include match points, bonuses, and penalties");
+assert(seasonPublicSync.includes("isOfficialCompletedLine")&&seasonPublicSync.includes('stage === "regular"'),"Standings must use only official completed regular-season lines");
+assert(seasonBulkImport.includes("refreshActivePublicDashboard")&&seasonBulkImport.includes("refreshSeasonPublicRecords(seasonId)"),"Admin Setup Season must provide a manual active public-dashboard recovery action");
+assert(firebaseData.includes("data-refresh-public-season")&&firebaseData.includes("refreshSelectedSeasonPublicData"),"Each Season Management row must provide a public-data refresh action");
+assert(firebaseData.includes('status === "completed"')&&firebaseData.includes("completed public snapshot"),"Completed seasons must refresh their independent public snapshot");
+assert(firebaseData.includes('if (![\"active\", \"completed\"].includes(status)) return;'),"Only Active and Completed seasons may use the per-season public refresh");
+assert(firebaseData.includes("result.matchupCount")&&firebaseData.includes("result.standingCount")&&firebaseData.includes("refreshedAt"),"Per-season refresh must report counts and timestamp");
+assert(firestoreRules.includes("derivedRecordsUpdatedByUid")&&firestoreRules.includes("calculatedByUid == request.auth.uid"),"Derived matchup and standings writes must be restricted to the authenticated EC/Admin");
 assert(publicSeasonDashboard.includes('["tobescheduled", "scheduled", "completed"].includes(scheduleStatus)'),"Guest publication must be driven directly by Match Line schedule status");
 assert(firestoreRules.includes("match /playerOverrides/{overrideId}")&&firestoreRules.includes("allow create: if isSuperAdmin()"),"Only Super Admin may create immutable player-override audits");
 assert(rosterAdminShared.includes("formattedPlayerLabel(item.playerId, null, nameOf(item))")&&rosterAdminShared.includes("nextName = nameOf(next)"),"Manage Ranked Player must use the private Player Master name in Player Name (Player ID) labels and snapshots");
@@ -293,20 +318,23 @@ assert(firebaseData.includes('doc(db, "systemConfig", "seasonControl")'),"Active
 assert(firebaseData.includes("managedPastSeasons"),"Read-only past-season profile display is missing");
 assert(firebaseAuth.includes("activeSeasonId"),"Authentication must resolve the active season dynamically");
 assert(firestoreRules.includes("match /systemConfig/{documentId}"),"Season-control security rules are missing");
-assert(firebaseAuth.includes("registrationRequests"),"Google registration request creation is missing");
-assert(firebaseAuth.includes("eligiblePlayerId"),"Player Master registration eligibility check is missing");
-assert(firebaseAuth.includes("registration/not-in-player-master"),"Non-player registration rejection is missing");
-assert(firebaseAuth.includes("showRegistrationPending"),"Matched players must receive a registration confirmation dialog");
-assert(firebaseAuth.includes("This email address is associated with ${identity}"),"Player registration confirmation must include Player Name and Player ID");
-assert(firebaseAuth.includes("Your request has been sent to AO Admin for approval"),"Player registration confirmation must explain the approval step");
-assert(firebaseAuth.includes("we are only allowing players to register"),"Non-player registration dialog must explain player-only eligibility");
-assert(firebaseAuth.includes("Sorry we could not complete your AO website registration. Please try again or contact Administration."),"Registration failure dialog must use the approved message");
+assert(html.includes('data-view="operations"')&&html.includes('id="operationsSignIn"'),"Private AO Operations entry route is missing");
+assert(html.includes('id="signInButton" hidden'),"Public navigation must not display a sign-in control to guests");
+assert(html.includes("There is no public registration"),"Operations entry must clearly state that public registration is unavailable");
+assert(firebaseAuth.includes('window.location.hash.slice(1) !== "operations"'),"Google sign-in must be restricted to the private Operations route");
+assert((firebaseAuth.match(/accountChanged \|\| window\.location\.hash\.slice\(1\) === "operations"/g) || []).length >= 2,"Successful Operations sign-in must redirect authorized users to Home");
+assert(!firebaseAuth.includes("eligiblePlayerId")&&!firebaseAuth.includes("showRegistrationPending"),"Public Player registration must be disabled");
+assert(firebaseAuth.includes('error.code = "operations/not-authorized"'),"Unauthorized operations accounts must be explicitly rejected");
+assert(firebaseAuth.includes('roles.has("captain")')&&firebaseAuth.includes('roles.has("ec")')&&firebaseAuth.includes('roles.has("neutralApprover")'),"Operations authorization must recognize approved private roles");
 assert(firebaseAuth.includes("showRegistrationBlocked"),"Missing registration acknowledgement dialog flow");
 assert(firebaseAuth.includes("await showRegistrationBlocked(error.message)"),"Registration rejection must wait for acknowledgement");
-assert(firebaseAuth.includes("await showRegistrationPending(userData)")&&firebaseAuth.includes("await signOut(auth)"),"Registration result dialogs must return visitors to Guest");
+assert(firebaseAuth.includes("await signOut(auth)"),"Denied Operations attempts must return visitors to Guest");
 assert(firebaseAuth.includes('window.location.hash = "home"'),"Rejected registration must return to public Home");
 assert(firebaseAuth.includes("if (signInDialog.open) signInDialog.close()"),"Google sign-in dialog must close before registration result dialog");
 assert(firebaseAuth.includes("window.alert(message)"),"Missing registration rejection popup fallback");
+assert(firestoreRules.includes("function hasOperationsAccess()"),"Firestore must define authoritative Operations access");
+assert(firestoreRules.includes("allow create: if signedIn() && isSuperAdmin()"),"Public accounts must not be able to create their own user profiles");
+assert(firestoreRules.includes("|| hasOperationsAccess()"),"Private Player Master reads must require Operations access");
 assert(/runtime-loader\.js\?v=\d+/.test(html),"Environment-aware runtime loader is missing");
 assert(html.includes('data-admin-panel="identity-audit"'),"Identity Reconciliation admin navigation is missing");
 for (const id of ["runIdentityAudit","identityAuditSummary","identityAuditResults"]) assert(html.includes(`id="${id}"`), `Identity Reconciliation control is missing: ${id}`);
@@ -359,9 +387,8 @@ assert(!firebaseData.trimEnd().endsWith("loadPublishedHistoryData();"),"All-seas
 assert(firebaseClient.includes("memoryLocalCache"),"In-memory Firestore caching is missing");
 assert(firebaseClient.includes("connectFirestoreEmulator")&&runtimeLoader.includes('get("firebase")==="emulator"'),"Local Firebase Emulator mode is missing");
 assert(firebaseAuth.includes("isProtectedAdmin") && firebaseAuth.includes("protectedAdminFallback"),"Protected Super Admin fallback is missing");
-assert(firebaseAuth.includes('profileType: isBootstrapAdmin ? "superAdmin" : "player"'),"Pending registrations must receive Player profile type");
-assert(firestoreRules.includes("playerMatchesAuthenticatedEmail"),"Registration eligibility security rule is missing");
-assert(firestoreRules.includes("emailNormalized.lower() == request.auth.token.email.lower()"),"Registration email matching must be case-insensitive");
+assert(firebaseAuth.includes('profileType: "superAdmin"'),"Only the protected Super Admin may self-provision an Operations profile");
+assert(!firestoreRules.includes("isSuperAdmin() || safeOwnUserCreate(uid)"),"Firestore must reject public self-registration");
 assert(firebaseAuth.includes("authorizationFor"),"Authoritative Firestore role loading is missing");
 assert(firebaseData.includes("approveRegistration"),"Registration approval is missing");
 assert(!firebaseData.includes("must be created first"),"Account approval must not depend on season creation");

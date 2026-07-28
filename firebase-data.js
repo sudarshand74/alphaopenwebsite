@@ -7,7 +7,8 @@ import {
   loadPublicMatchLines,
   loadPublicSeasonDashboard,
   publishPublicSeasonDashboard,
-} from "./public-season-dashboard.js?v=14";
+} from "./public-season-dashboard.js?v=15";
+import { refreshSeasonPublicRecords } from "./season-public-sync.js?v=1";
 import {
   collection,
   doc,
@@ -641,9 +642,22 @@ async function loadSeasons() {
     }
     seasonRecords = snapshot.docs.map(item => ({ ...item.data(), seasonId: item.id }));
     seasonList.innerHTML = seasonRecords.map(season => {
-      const active = season.status === "active";
-      return `<div class="season-admin-row"><div><b>${escapeHtml(season.name)}</b><small>${escapeHtml(season.seasonId)} · ${escapeHtml(season.startDate)} to ${escapeHtml(season.endDate)}</small></div><span class="badge ${active ? "lime" : "navy"}">${escapeHtml(season.status)}</span><strong>${season.teamCount} teams</strong><div class="card-actions"><button class="secondary compact-button" type="button" data-edit-season="${escapeHtml(season.seasonId)}">Edit</button><button class="secondary compact-button danger-button" type="button" data-reset-season="${escapeHtml(season.seasonId)}" data-reset-season-name="${escapeHtml(season.name)}">Reset data</button></div></div>`;
+      const status = String(season.status || "").toLowerCase();
+      const active = status === "active";
+      const refreshable = ["active", "completed"].includes(status);
+      const refreshLabel = active
+        ? "Refresh Active Dashboard"
+        : status === "completed"
+          ? "Refresh Completed Snapshot"
+          : "Public Refresh Unavailable";
+      const refreshTitle = refreshable
+        ? `Refresh public records for ${season.name || season.seasonId}`
+        : "Only Active and Completed seasons can be published for guests.";
+      return `<div class="season-admin-row"><div><b>${escapeHtml(season.name)}</b><small>${escapeHtml(season.seasonId)} · ${escapeHtml(season.startDate)} to ${escapeHtml(season.endDate)}</small><small class="season-public-refresh-status" data-public-season-message="${escapeHtml(season.seasonId)}"></small></div><span class="badge ${active ? "lime" : "navy"}">${escapeHtml(season.status)}</span><strong>${season.teamCount} teams</strong><div class="card-actions"><button class="secondary compact-button" type="button" data-refresh-public-season="${escapeHtml(season.seasonId)}" title="${escapeHtml(refreshTitle)}" ${refreshable ? "" : "disabled"}>${refreshLabel}</button><button class="secondary compact-button" type="button" data-edit-season="${escapeHtml(season.seasonId)}">Edit</button><button class="secondary compact-button danger-button" type="button" data-reset-season="${escapeHtml(season.seasonId)}" data-reset-season-name="${escapeHtml(season.name)}">Reset data</button></div></div>`;
     }).join("");
+    seasonList.querySelectorAll("[data-refresh-public-season]").forEach(button => {
+      button.addEventListener("click", () => refreshSelectedSeasonPublicData(button));
+    });
     seasonList.querySelectorAll("[data-edit-season]").forEach(button => button.addEventListener("click", () => {
       const season = seasonRecords.find(item => item.seasonId === button.dataset.editSeason);
       if (season) openDialog(season);
@@ -651,6 +665,52 @@ async function loadSeasons() {
   } catch (error) {
     console.error("Season list failed", error);
     seasonList.innerHTML = '<p class="muted">Seasons could not be loaded. Refresh after confirming your Super Admin account.</p>';
+  }
+}
+
+async function refreshSelectedSeasonPublicData(button) {
+  const seasonId = String(button?.dataset.refreshPublicSeason || "").trim();
+  const season = seasonRecords.find(item => item.seasonId === seasonId);
+  if (!season || !isBootstrapAdmin()) return;
+  const status = String(season.status || "").toLowerCase();
+  if (!["active", "completed"].includes(status)) return;
+  const targetLabel = status === "active"
+    ? "active public dashboard"
+    : "completed public snapshot";
+  if (!window.confirm(
+    `Refresh the ${targetLabel} for ${season.name || seasonId} (${seasonId})?\n\n` +
+    "This recalculates matchup totals and standings from official completed lines, " +
+    "then rebuilds the guest-readable season records.",
+  )) return;
+  const statusElement = seasonList.querySelector(
+    `[data-public-season-message="${CSS.escape(seasonId)}"]`,
+  );
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "Refreshing…";
+  if (statusElement) statusElement.textContent = `Refreshing ${targetLabel}…`;
+  try {
+    const result = await refreshSeasonPublicRecords(seasonId);
+    const refreshedAt = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date());
+    const success =
+      `${targetLabel} refreshed ${refreshedAt}: ` +
+      `${result.matchupCount} matchups and ${result.standingCount} standings rows.`;
+    if (statusElement) statusElement.textContent = success;
+    window.alphaOpenAuthUI?.showMessage(
+      `${season.name || seasonId} public records refreshed`,
+    );
+  } catch (error) {
+    console.error("Selected season public refresh failed", seasonId, error);
+    if (statusElement) {
+      statusElement.textContent =
+        `Refresh failed: ${error.message || "Unknown error"}`;
+    }
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
 }
 

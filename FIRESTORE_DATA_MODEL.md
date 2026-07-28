@@ -59,6 +59,7 @@ seasons/{seasonId}
       revisions/{revisionId}
     lineupReviews/{reviewId}
     lineMatches/{lineMatchId}
+      corrections/{correctionId}
       scheduleProposals/{proposalId}
       scoreSubmissions/{submissionId}
       scoreDecisions/{decisionId}
@@ -179,7 +180,7 @@ decidedAt: Timestamp | null
 
 ### 4.6 `registrationRequests/{uid}`
 
-Created automatically after a person's first verified Google authentication. The document ID is the Firebase UID.
+Legacy administrative record retained for previously registered accounts and identity-transfer cleanup. Public authentication no longer creates this document.
 
 ```text
 uid: string
@@ -195,7 +196,7 @@ matchedPlayerId: string | null
 assignedProfileType: string | null
 ```
 
-Google authentication occurs before registration. A new user record is created only when the verified Google email matches an active Player Master email index. The pending user is immediately linked to that permanent Player ID with `profileType: "player"`, but receives no private or operational access until Super Admin approval changes `status` to `active`. No Player Master match means no registration record is created.
+AlphaOpen uses a public-first model. Guests and players do not authenticate. Google sign-in is exposed only at the private `#operations` entry and succeeds only for an existing active account with a Captain, EC, Neutral Approver, or Super Admin role. Unknown and player-only identities are signed out without creating `users` or `registrationRequests` records.
 
 ### 4.7 `venues/{venueId}` and `venuePrivate/{venueId}`
 
@@ -564,6 +565,37 @@ The official score fields are written only after validation. Set 3 is absent for
 
 Official line-match state is a trusted projection of these immutable workflow documents.
 
+### 9.3 `lineMatches/{lineMatchId}/corrections/{correctionId}`
+
+Immutable EC/Admin before-and-after record for player, schedule, or completed-score corrections.
+
+```text
+correctionId: string
+seasonId: string
+matchupId: string
+lineMatchId: string
+reason: string
+previousStatus: string
+correctedStatus: string
+previousHomePlayers: array
+previousAwayPlayers: array
+correctedHomePlayers: array
+correctedAwayPlayers: array
+previousSets: array
+correctedSets: array
+previousHomePoints: number
+previousAwayPoints: number
+correctedHomePoints: number
+correctedAwayPoints: number
+previousWinnerTeamId: string | null
+correctedWinnerTeamId: string | null
+correctedByUid: string
+correctedByNameSnapshot: string
+correctedAt: Timestamp
+```
+
+EC and Super Admin may create correction records. They are never updated or deleted. Captains cannot use this correction path.
+
 ## 10. Operational workflow collections
 
 ### `availability/{availabilityId}`
@@ -603,6 +635,21 @@ qualified: boolean
 calculatedAt: Timestamp
 sourceVersion: number
 ```
+
+The EC/Admin browser recalculates these rows from official, published, completed
+regular-season line matches before rebuilding the public dashboard:
+
+- `matchPoints` is the sum of the team's official line points.
+- `adjustedTotal = matchPoints + bonusPoints - penaltyPoints`.
+- Existing `bonusPoints` and `penaltyPoints` are preserved during score corrections.
+- Ranking uses adjusted total, line wins, completed lines, and Team ID in that order.
+- `playoffPosition` and `qualified` are refreshed from that ranking.
+
+The same refresh recalculates each matchup's team-point totals, completed/canceled
+line counts, completion status, and winner. Matchups record
+`derivedRecordsUpdatedAt` and `derivedRecordsUpdatedByUid`. Admin can run the same
+process manually with **Setup Season → Refresh Active Public Dashboard** if a
+browser or network interruption occurs after a private correction is saved.
 
 `standingsSnapshots` stores immutable standings at publication milestones. Season summaries, schedules, approved lineups, results, standings, playoff brackets, and announcements remain in the authorized season tree.
 
@@ -663,14 +710,14 @@ Avoid array-contains queries combined with several range filters. Where a dashbo
 
 | Data | Guest | Player | Captain | Approver | EC | Super Admin |
 |---|---:|---:|---:|---:|---:|---:|
-| Season tree | No | Authorized-season read | Authorized-season read | Assigned-season read | Season-scoped read/write | Full |
-| Own user/profile | No | Read/update safe preferences | Same | Same | Scoped read | Full |
-| Player private master | No | Own approved subset | Team-needed subset through safe view | No | Season roster scope | Full |
-| Roster assignments | No | Own/team read | Own team read | Matchup-needed read | Season write | Full |
-| Draft lineup | No | If own captain role | Own team write | No | Season read/override | Full |
-| Submitted sealed lineup | No | Own side only | Own side only | Both when review-ready | Season read | Full |
-| Approved lineup/result | No | Authorized-season read | Authorized-season read | Assigned-season read | Read | Full |
-| Official score/points | No | Authorized-season read | Submit proposal only | Assigned-season read | Resolve | Full |
+| Season tree | No | Public projection only | Authorized-season read | Assigned-season read | Season-scoped read/write | Full |
+| Own user/profile | No | No operations account | Same | Same | Scoped read | Full |
+| Player private master | No | No | Team-needed subset through safe view | No | Season roster scope | Full |
+| Roster assignments | No | Public projection only | Own team read | Matchup-needed read | Season write | Full |
+| Draft lineup | No | No | Own team write | No | Season read/override | Full |
+| Submitted sealed lineup | No | No | Own side only | Both when review-ready | Season read | Full |
+| Approved lineup/result | Public projection | Public projection | Authorized-season read | Assigned-season read | Read | Full |
+| Official score/points | Public projection | Public projection | Submit proposal only | Assigned-season read | Resolve | Full |
 | Audit events | No | No | No | Assigned-event read | Season read | Full |
 
 Security rules authorize access; they do not replace league-rule validation. SOR, eligibility, participation limits, score calculation, simultaneous lineup publication, standings updates, and audit creation require trusted server-side transactions before production use.

@@ -11,7 +11,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=4";
 import { formattedPlayerLabel, resolvedPlayerName, validatePlayerIds } from "./player-identity.js?v=5";
-import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=14";
+import { publishPublicSeasonDashboard } from "./public-season-dashboard.js?v=15";
 
 const ADMIN = "sudarshandesai74@gmail.com";
 const $ = (value) => document.querySelector(value),

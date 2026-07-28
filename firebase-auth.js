@@ -12,7 +12,6 @@ import {
   getDoc,
   runTransaction,
   serverTimestamp,
-  setDoc,
   updateDoc,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
@@ -24,9 +23,6 @@ provider.setCustomParameters({ prompt: "select_account" });
 const ui = window.alphaOpenAuthUI;
 const continueButton = document.querySelector("#continueGoogle");
 const signInDialog = document.querySelector("#signInDialog");
-const registrationPendingDialog = document.querySelector("#registrationPendingDialog");
-const registrationPendingMessage = document.querySelector("#registrationPendingMessage");
-const acknowledgeRegistrationPending = document.querySelector("#acknowledgeRegistrationPending");
 const registrationBlockedDialog = document.querySelector("#registrationBlockedDialog");
 const registrationBlockedMessage = document.querySelector("#registrationBlockedMessage");
 const acknowledgeRegistrationBlocked = document.querySelector("#acknowledgeRegistrationBlocked");
@@ -67,20 +63,15 @@ async function ensureUserProfile(user) {
     };
     if (isBootstrapAdmin) return ensureBootstrapAdminPlayerLink(user, userRef, common);
     await updateDoc(userRef, common);
-    const refreshed = await getDoc(userRef);
-    if (refreshed.data().status === "pending") {
-      const matchedPlayerId = await eligiblePlayerId(user);
-      if (refreshed.data().playerId !== matchedPlayerId || refreshed.data().profileType !== "player") {
-        const error = new Error("This older pending registration is not linked correctly. Ask the Super Admin to delete it, then register again.");
-        error.code = "registration/player-link-mismatch";
-        throw error;
-      }
-      await ensureRegistrationRequest(user, matchedPlayerId);
-    }
-    return refreshed.data();
+    return (await getDoc(userRef)).data();
   }
 
-  const matchedPlayerId = isBootstrapAdmin ? BOOTSTRAP_ADMIN_PLAYER_ID : await eligiblePlayerId(user);
+  if (!isBootstrapAdmin) {
+    const error = new Error("This operations portal is restricted to approved AlphaOpen Captains, EC members, Neutral Approvers, and Administrators.");
+    error.code = "operations/not-authorized";
+    throw error;
+  }
+  const matchedPlayerId = BOOTSTRAP_ADMIN_PLAYER_ID;
   const common = {
     ...commonFields,
     displayName: await canonicalPlayerName(matchedPlayerId, user.displayName || user.email)
@@ -91,16 +82,14 @@ async function ensureUserProfile(user) {
     email: user.email,
     emailVerified: user.emailVerified,
     ...common,
-    status: isBootstrapAdmin ? "active" : "pending",
-    profileType: isBootstrapAdmin ? "superAdmin" : "player",
+    status: "active",
+    profileType: "superAdmin",
     playerId: matchedPlayerId,
-    globalRoles: isBootstrapAdmin ? ["superAdmin"] : [],
+    globalRoles: ["superAdmin"],
     createdAt: serverTimestamp()
   });
-  if (!isBootstrapAdmin) batch.set(doc(db, "registrationRequests", user.uid), registrationRequestData(user, matchedPlayerId));
   await batch.commit();
-  if (isBootstrapAdmin) return ensureBootstrapAdminPlayerLink(user, userRef, common);
-  return (await getDoc(userRef)).data();
+  return ensureBootstrapAdminPlayerLink(user, userRef, common);
 }
 
 async function canonicalPlayerName(playerId, fallback) {
@@ -109,46 +98,6 @@ async function canonicalPlayerName(playerId, fallback) {
   if (!playerSnapshot.exists()) return fallback;
   const player = playerSnapshot.data();
   return player.displayName || player.fullName || [player.firstName, player.lastName].filter(Boolean).join(" ") || fallback;
-}
-
-async function eligiblePlayerId(user) {
-  const normalizedEmail = user.email.trim().toLowerCase();
-  const indexRef = doc(db, "playerEmailIndex", encodeURIComponent(normalizedEmail));
-  const indexSnapshot = await getDoc(indexRef);
-  if (!indexSnapshot.exists() || indexSnapshot.data().emailNormalized?.toLowerCase() !== normalizedEmail || String(indexSnapshot.data().status || "active").toLowerCase() === "inactive") {
-    const error = new Error("Thank you for trying to register for the AO website. Unfortunately, at this time we are only allowing players to register. Please contact Administration if you think you need to register.");
-    error.code = "registration/not-in-player-master";
-    throw error;
-  }
-  return indexSnapshot.data().playerId;
-}
-
-function showRegistrationPending(userData) {
-  const playerId = String(userData.playerId || "").trim();
-  const playerName = String(userData.displayName || "").trim() || "Player";
-  const identity = playerId ? `${playerName} (${playerId})` : playerName;
-  registrationPendingMessage.textContent =
-    `Thank you for registering. This email address is associated with ${identity}. ` +
-    "Your request has been sent to AO Admin for approval. Once approved, you can sign in. " +
-    "As a Player, you do not receive any additional access beyond what is available to a Guest.";
-  return new Promise(resolve => {
-    const acknowledge = () => {
-      acknowledgeRegistrationPending.removeEventListener("click", acknowledge);
-      if (registrationPendingDialog.open) registrationPendingDialog.close();
-      resolve();
-    };
-    acknowledgeRegistrationPending.addEventListener("click", acknowledge);
-    try {
-      if (signInDialog.open) signInDialog.close();
-      if (typeof registrationPendingDialog.showModal === "function") registrationPendingDialog.showModal();
-      else registrationPendingDialog.setAttribute("open", "");
-      acknowledgeRegistrationPending.focus();
-    } catch (dialogError) {
-      acknowledgeRegistrationPending.removeEventListener("click", acknowledge);
-      window.alert(registrationPendingMessage.textContent);
-      resolve();
-    }
-  });
 }
 
 function showRegistrationBlocked(message) {
@@ -174,7 +123,6 @@ function showRegistrationBlocked(message) {
 }
 
 registrationBlockedDialog.addEventListener("cancel", event => event.preventDefault());
-registrationPendingDialog.addEventListener("cancel", event => event.preventDefault());
 
 async function ensureBootstrapAdminPlayerLink(user, userRef, common) {
   const playerRef = doc(db, "players", BOOTSTRAP_ADMIN_PLAYER_ID);
@@ -201,35 +149,15 @@ async function ensureBootstrapAdminPlayerLink(user, userRef, common) {
   return (await getDoc(userRef)).data();
 }
 
-function registrationRequestData(user, matchedPlayerId) {
-  return {
-    uid: user.uid,
-    email: user.email,
-    displayName: user.displayName || user.email,
-    photoUrl: user.photoURL || null,
-    status: "pending",
-    requestedAt: serverTimestamp(),
-    decidedByUid: null,
-    decidedAt: null,
-    decisionNote: null,
-    matchedPlayerId,
-    assignedProfileType: "player"
-  };
-}
-
-async function ensureRegistrationRequest(user, matchedPlayerId) {
-  const requestRef = doc(db, "registrationRequests", user.uid);
-  if (!(await getDoc(requestRef)).exists()) await setDoc(requestRef, registrationRequestData(user, matchedPlayerId));
-}
-
 async function authorizationFor(user, userData) {
   if (user.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL) {
     return { role: "Super Admin", access: ["player", "captain", "approver", "ec"], playerId: userData.playerId || null, playerName: userData.displayName || null, status: "active" };
   }
 
   if (userData.status !== "active") {
-    const labels = { pending: "Pending approval", rejected: "Registration rejected", suspended: "Account suspended" };
-    return { role: labels[userData.status] || "Pending approval", access: [], playerId: userData.playerId || null, playerName: userData.displayName || null, status: userData.status };
+    const error = new Error("Your AO Operations access is not active. Contact AlphaOpen Administration if you believe this is an error.");
+    error.code = "operations/inactive";
+    throw error;
   }
 
   const seasonControl = await getDoc(SEASON_CONTROL_REF);
@@ -246,6 +174,15 @@ async function authorizationFor(user, userData) {
   if (roles.has("superAdmin")) access.push("captain", "approver", "player");
 
   const uniqueAccess = [...new Set(access)];
+  const hasOperationsRole = roles.has("superAdmin") ||
+    roles.has("ec") ||
+    roles.has("captain") ||
+    roles.has("neutralApprover");
+  if (!hasOperationsRole) {
+    const error = new Error("This operations portal is restricted to approved AlphaOpen Captains, EC members, Neutral Approvers, and Administrators.");
+    error.code = "operations/not-authorized";
+    throw error;
+  }
   const role = roles.has("superAdmin") ? "Super Admin"
     : roles.has("ec") ? "EC"
     : roles.has("captain") ? "Captain"
@@ -256,6 +193,10 @@ async function authorizationFor(user, userData) {
 }
 
 async function startGoogleSignIn() {
+  if (window.location.hash.slice(1) !== "operations") {
+    ui.showMessage("AO Operations sign-in is available only from the private operations address.");
+    return;
+  }
   continueButton.disabled = true;
   if (signInDialog.open) signInDialog.close();
   ui.setStatus("Opening Google sign-in…");
@@ -302,7 +243,7 @@ onAuthStateChanged(auth, async user => {
   if (!user) {
     window.alphaOpenProfileReady = null;
     ui.applyGuest();
-    if (accountChanged) window.location.hash = "home";
+    if (accountChanged && window.location.hash.slice(1) !== "operations") window.location.hash = "home";
     return;
   }
 
@@ -310,18 +251,10 @@ onAuthStateChanged(auth, async user => {
   try {
     await user.getIdTokenResult(true);
     const userData = await ensureUserProfile(user);
-    if (userData.status === "pending") {
-      window.alphaOpenProfileReady = { uid: user.uid, status: "pending" };
-      await showRegistrationPending(userData);
-      await signOut(auth);
-      ui.applyGuest();
-      window.location.hash = "home";
-      return;
-    }
     const authorization = await authorizationFor(user, userData);
     window.alphaOpenProfileReady = { uid: user.uid, status: "ready" };
     ui.applyUser(user, authorization, true);
-    if (accountChanged) window.location.hash = "home";
+    if (accountChanged || window.location.hash.slice(1) === "operations") window.location.hash = "home";
     window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
   } catch (error) {
     console.error("AlphaOpen profile initialization failed", error);
@@ -329,22 +262,16 @@ onAuthStateChanged(auth, async user => {
     if (isProtectedAdmin) {
       window.alphaOpenProfileReady = { uid: user.uid, status: "ready", protectedAdminFallback: true };
       ui.applyUser(user, { role: "Super Admin", access: ["player", "captain", "approver", "ec"], playerId: BOOTSTRAP_ADMIN_PLAYER_ID, status: "active" }, true);
-      if (accountChanged) window.location.hash = "home";
+      if (accountChanged || window.location.hash.slice(1) === "operations") window.location.hash = "home";
       ui.showMessage("Signed in as the protected AlphaOpen Super Admin.");
       window.dispatchEvent(new CustomEvent("alphaopen:profile-ready", { detail: window.alphaOpenProfileReady }));
       return;
     }
     window.alphaOpenProfileReady = { uid: user.uid, status: "error" };
-    if (error.code?.startsWith("registration/")) {
+    const attemptedOperations = window.location.hash.slice(1) === "operations";
+    if (attemptedOperations) {
       await showRegistrationBlocked(error.message);
-      await signOut(auth);
-      ui.applyGuest();
-      window.location.hash = "home";
-      return;
     }
-    await showRegistrationBlocked(
-      "Sorry we could not complete your AO website registration. Please try again or contact Administration.",
-    );
     await signOut(auth);
     ui.applyGuest();
     window.location.hash = "home";

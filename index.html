@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=80">
+  <link rel="stylesheet" href="styles.css?v=82">
   <link rel="stylesheet" href="lineup-workflow.css?v=1">
   <style>.managed-line-form .player-override-reason{grid-column:1/-1}@media(max-width:760px){.managed-line-form .player-override-reason{grid-column:auto}}</style>
   <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
@@ -48,10 +48,10 @@
       <details class="nav-menu"><summary>History</summary><div><button data-route="schedule">Previous Seasons</button><button data-route="history">Player History</button></div></details>
       <details class="nav-menu" data-nav-roles="Captain"><summary>Captain</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="ec-lineup-status">Lineup Dashboard</button><button data-route="match-management">Update Schedule and Score</button></div></details>
       <details class="nav-menu" data-nav-roles="Neutral Approver"><summary>Neutral Approver</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="approvals">Review/Approve Lineups</button><button data-route="reset-approved-lineup">Reset Approved Lineup</button></div></details>
-      <details class="nav-menu" data-nav-roles="EC"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button></div></details>
+      <details class="nav-menu" data-nav-roles="EC"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button><button data-access="ec" data-route="ec-lineup">Correct Lineup & Score</button></div></details>
       <button data-super-admin data-route="admin">Admin</button>
     </nav>
-    <button class="sign-in-button" id="signInButton"><span id="avatar">G</span><span class="profile-copy"><strong id="profileName">Sign in</strong><small id="profileRole">Guest</small></span></button>
+    <button class="sign-in-button" id="signInButton" hidden><span id="avatar">AO</span><span class="profile-copy"><strong id="profileName">Account</strong><small id="profileRole">Operations</small></span></button>
   </header>
 
   <aside class="mobile-drawer" id="mobileDrawer" aria-hidden="true">
@@ -63,12 +63,41 @@
     <div class="drawer-group"><span>History</span><button data-route="schedule">Previous Seasons</button><button data-route="history">Player History</button></div>
     <div class="drawer-group" data-nav-roles="Captain"><span>Captain</span><button data-route="lineup">Submit Lineup</button><button data-route="ec-lineup-status">Lineup Dashboard</button><button data-route="match-management">Update Schedule and Score</button></div>
     <div class="drawer-group" data-nav-roles="Neutral Approver"><span>Neutral Approver</span><button data-route="lineup">Submit Lineup</button><button data-route="approvals">Review/Approve Lineups</button><button data-route="reset-approved-lineup">Reset Approved Lineup</button></div>
-    <div class="drawer-group" data-nav-roles="EC"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button></div>
+    <div class="drawer-group" data-nav-roles="EC"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button><button data-access="ec" data-route="ec-lineup">Correct Lineup & Score</button></div>
     <button data-super-admin data-route="admin">Admin</button>
   </aside>
   <div class="scrim" id="scrim"></div>
 
   <main>
+    <section class="view content-wrap page-view operations-view" data-view="operations">
+      <div class="operations-shell">
+        <div class="operations-copy">
+          <span class="kicker">Restricted access</span>
+          <h1>AO Operations</h1>
+          <p>Private tools for approved AlphaOpen Captains, EC members, Neutral Approvers, and Administrators.</p>
+        </div>
+        <section class="dashboard-card operations-access-card" id="operationsGuestPanel">
+          <div class="operations-lock" aria-hidden="true">AO</div>
+          <div>
+            <span class="kicker">Authorized personnel only</span>
+            <h2>Continue to your operations workspace</h2>
+            <p class="muted">There is no public registration. Sign in only with the Google account approved by AlphaOpen Administration.</p>
+          </div>
+          <button type="button" class="primary" id="operationsSignIn">Continue with Google</button>
+          <button type="button" class="secondary" data-route="home">Return to public site</button>
+        </section>
+        <section class="dashboard-card operations-access-card" id="operationsUserPanel" hidden>
+          <div class="operations-lock" aria-hidden="true">✓</div>
+          <div>
+            <span class="kicker">Access verified</span>
+            <h2 id="operationsUserName">Operations account</h2>
+            <p class="muted" id="operationsUserRole">Your approved workspace is ready.</p>
+          </div>
+          <button type="button" class="primary" data-route="home">Open operations workspace</button>
+          <button type="button" class="secondary" id="operationsSignOut">Sign out</button>
+        </section>
+      </div>
+    </section>
     <section class="view active" data-view="home">
       <section class="community-section community-feature">
         <div class="community-carousel" id="communityCarousel" aria-label="AlphaOpen community photo gallery" tabindex="0">
@@ -207,9 +236,15 @@
       </section>
     </section>
 
-    <section class="view content-wrap page-view" data-view="ec-lineup" data-super-admin>
-      <div class="page-heading"><div><span class="kicker">Super Admin workspace · Firebase</span><h1>Update approved lineup</h1><p>Directly correct an approved lineup through its Match Line Record.</p></div><span class="badge navy" id="lineupUpdateRole">Super Admin</span></div>
-      <div class="dashboard-card match-management-context"><label>Active season<select id="lineupUpdateSeason" disabled><option>Loading active season...</option></select></label><div id="lineupUpdateMessage" class="info-box">Loading scheduled line matches...</div></div>
+    <section class="view content-wrap page-view" data-view="ec-lineup" data-access="ec">
+      <div class="page-heading"><div><span class="kicker">EC &amp; Admin workspace · Firebase</span><h1>Update Approved Lineup &amp; Correct Score</h1><p>Correct players, schedules, and individual line scores with an immutable audit trail.</p></div><span class="badge navy" id="lineupUpdateRole">EC / Admin</span></div>
+      <div class="dashboard-card match-management-context lineup-update-context">
+        <label>Active season<select id="lineupUpdateSeason" disabled><option>Loading active season...</option></select></label>
+        <label>Week<select id="lineupUpdateWeek"><option value="all">All Weeks</option></select></label>
+        <label>Match Status<select id="lineupUpdateStatus"><option value="open" selected>Scheduled + To Be Scheduled</option><option value="completed">Completed</option><option value="scheduled">Scheduled</option><option value="toBeScheduled">To Be Scheduled</option></select></label>
+        <label>Captain<select id="lineupUpdateCaptain"><option value="all">All Captains</option></select></label>
+        <div id="lineupUpdateMessage" class="info-box">Loading active-season line matches...</div>
+      </div>
       <div id="lineupUpdateList" class="match-management-list"><div class="dashboard-card empty-state"><b>Loading editable matches...</b></div></div>
     </section>
 
@@ -271,7 +306,7 @@
           <h2 id="adminOperationsHeading">Operations</h2>
           <button type="button" data-admin-panel="submit-lineup">Submit Lineup</button>
           <button type="button" data-admin-panel="approve-lineup">Approve Lineup</button>
-          <button type="button" data-admin-panel="update-lineup">Update Lineup</button>
+          <button type="button" data-admin-panel="update-lineup">Correct Lineup &amp; Score</button>
           <button type="button" data-admin-panel="schedule-score">Update Schedule &amp; Score</button>
         </section>
       </nav>
@@ -371,7 +406,8 @@
 
       <div class="admin-section" data-admin-section="seasons" hidden>
         <section class="dashboard-card season-admin-card" data-super-admin>
-          <div class="card-top"><div><span class="kicker">Season Management</span><h2>Season setup</h2><p class="muted">Create, validate, replace, or export the complete Firebase dataset.</p></div><div class="card-actions"><button class="secondary compact-button" id="exportDatabase" type="button">Export database to Excel</button><button class="secondary compact-button" id="downloadSeasonTemplate" type="button">Download bulk template</button><button class="secondary compact-button" id="openSeasonImport" type="button">Bulk upload season</button><button class="primary compact-button" id="openCreateSeason" type="button">Create season</button><span class="badge navy">Super Admin</span></div></div>
+          <div class="card-top"><div><span class="kicker">Season Management</span><h2>Season setup</h2><p class="muted">Create, validate, replace, or export the complete Firebase dataset.</p></div><div class="card-actions"><button class="secondary compact-button" id="refreshActivePublicDashboard" type="button">Refresh Active Public Dashboard</button><button class="secondary compact-button" id="exportDatabase" type="button">Export database to Excel</button><button class="secondary compact-button" id="downloadSeasonTemplate" type="button">Download bulk template</button><button class="secondary compact-button" id="openSeasonImport" type="button">Bulk upload season</button><button class="primary compact-button" id="openCreateSeason" type="button">Create season</button><span class="badge navy">Super Admin</span></div></div>
+          <div id="publicDashboardRefreshMessage" class="info-box">Use the refresh action to recalculate matchup totals and standings, then rebuild the active public dashboard.</div>
           <div id="seasonAdminList" class="season-admin-list"><p class="muted">Loading seasons…</p></div>
         </section>
       </div>
@@ -415,11 +451,11 @@
     <button data-super-admin data-route="admin"><span>⚙</span>Admin</button>
   </nav>
 
-  <dialog id="signInDialog"><form method="dialog"><div class="dialog-head"><div><span class="kicker">Secure access</span><h2>Continue with Google</h2></div><button value="cancel" aria-label="Close">×</button></div><p class="muted">Registration requires a verified Google email that already exists in Player Master. All new accounts remain pending until Super Admin approval.</p><div class="google-mark">G</div><div class="form-actions"><button value="cancel" class="secondary">Cancel</button><button type="button" class="primary" id="continueGoogle">Continue with Google</button></div></form></dialog>
+  <dialog id="signInDialog"><form method="dialog"><div class="dialog-head"><div><span class="kicker">AO Operations</span><h2>Restricted Google sign-in</h2></div><button value="cancel" aria-label="Close">×</button></div><p class="muted">Only active AlphaOpen Captains, EC members, Neutral Approvers, and Administrators may sign in. Public players and guests do not need an account.</p><div class="google-mark">G</div><div class="form-actions"><button value="cancel" class="secondary">Cancel</button><button type="button" class="primary" id="continueGoogle">Continue with Google</button></div></form></dialog>
 
   <dialog id="registrationPendingDialog" aria-labelledby="registrationPendingTitle" aria-describedby="registrationPendingMessage"><form><div class="dialog-head"><div><span class="kicker">Registration received</span><h2 id="registrationPendingTitle">AO Admin approval required</h2></div></div><p id="registrationPendingMessage">Thank you for registering.</p><div class="info-box">Until approval, the public website remains available with the same access provided to a Guest.</div><div class="form-actions"><button type="button" class="primary" id="acknowledgeRegistrationPending">OK, return to public site</button></div></form></dialog>
 
-  <dialog id="registrationBlockedDialog" aria-labelledby="registrationBlockedTitle" aria-describedby="registrationBlockedMessage"><form><div class="dialog-head"><div><span class="kicker">Registration unavailable</span><h2 id="registrationBlockedTitle">Players only at this time</h2></div></div><p id="registrationBlockedMessage">Thank you for trying to register for the AO website. Unfortunately, at this time we are only allowing players to register. Please contact Administration if you think you need to register.</p><div class="form-actions"><button type="button" class="primary" id="acknowledgeRegistrationBlocked">OK, return to public site</button></div></form></dialog>
+  <dialog id="registrationBlockedDialog" aria-labelledby="registrationBlockedTitle" aria-describedby="registrationBlockedMessage"><form><div class="dialog-head"><div><span class="kicker">AO Operations</span><h2 id="registrationBlockedTitle">Access restricted</h2></div></div><p id="registrationBlockedMessage">This operations portal is restricted to approved AlphaOpen Captains, EC members, Neutral Approvers, and Administrators.</p><div class="form-actions"><button type="button" class="primary" id="acknowledgeRegistrationBlocked">OK, return to public site</button></div></form></dialog>
 
   <dialog id="createSeasonDialog"><form id="createSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin</span><h2 id="seasonDialogTitle">Create a season</h2></div><button type="button" id="closeCreateSeason" aria-label="Close">×</button></div><p class="muted" id="seasonDialogDescription">This creates the Firestore season record and its first rules version. New seasons begin in Draft status.</p><div class="season-form-grid"><label>Term<select id="seasonTerm" required><option value="fall">Fall</option><option value="spring">Spring</option></select></label><label>Year<input id="seasonYear" type="number" min="2026" max="2100" value="2026" required></label><label class="wide">Season ID<input id="seasonIdPreview" value="AO-F-2026" readonly></label><label class="wide">Season name<input id="seasonName" value="AlphaOpen Fall 2026" maxlength="80" required></label><label>Status<select id="seasonStatus" required><option value="draft">Draft</option><option value="published">Published</option><option value="active">Active</option><option value="playoffs">Playoffs</option><option value="completed">Completed</option><option value="archived">Archived</option></select></label><label>Timezone<select id="seasonTimezone"><option value="America/New_York">Eastern Time — America/New_York</option><option value="America/Chicago">Central Time — America/Chicago</option><option value="America/Denver">Mountain Time — America/Denver</option><option value="America/Los_Angeles">Pacific Time — America/Los_Angeles</option></select></label><label>Start date<input id="seasonStartDate" type="date" value="2026-08-03" required></label><label>End date<input id="seasonEndDate" type="date" value="2026-11-08" required></label><label>Teams<input id="seasonTeamCount" type="number" min="2" max="32" value="8" required></label><label>Roster ranks per team<input id="seasonRosterRanks" type="number" min="2" max="40" value="14" required></label><label>Regular matchups per team<input id="seasonMatchups" type="number" min="1" max="31" value="7" required></label><label>Lines per matchup<input id="seasonLines" type="number" min="1" max="10" value="5" required></label></div><div class="info-box" id="seasonFormMessage">The season ID is permanent after creation.</div><div class="form-actions"><button type="button" class="secondary" id="cancelCreateSeason">Cancel</button><button type="submit" class="primary" id="createSeasonSubmit">Create draft season</button></div></form></dialog>
 
@@ -457,15 +493,15 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=127"></script>
+  <script src="app.js?v=129"></script>
   <script src="lineup-bootstrap.js?v=20"></script>
   <script src="approval-bootstrap.js?v=16"></script>
   <script src="lineup-reset-bootstrap.js?v=3"></script>
   <script src="ec-lineup-status-bootstrap.js?v=2"></script>
-  <script src="match-management-bootstrap.js?v=32"></script>
+  <script src="match-management-bootstrap.js?v=34"></script>
   <script src="poster-generator.js?v=3"></script>
   <script type="module" src="ao-content.js?v=2"></script>
-  <script type="module" src="runtime-loader.js?v=80"></script>
+  <script type="module" src="runtime-loader.js?v=87"></script>
   <script src="pwa.js?v=26"></script>
   <dialog id="resetSeasonDialog"><form id="resetSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Destructive operation</span><h2>Reset season data</h2></div><button type="button" id="closeResetSeason" aria-label="Close">×</button></div><p class="muted">This keeps the Season Master and all global users/players, but permanently removes every operational and public child record for the selected season.</p><div class="info-box" id="resetSeasonScope"></div><label class="wide">Type the confirmation phrase<input id="resetSeasonConfirmation" autocomplete="off" spellcheck="false"></label><label class="check-row"><input id="resetSeasonAcknowledgement" type="checkbox"> I understand that teams, memberships, rosters, schedules, lineups, scores, standings, approvers, audits and published season data will be deleted.</label><div class="info-box" id="resetSeasonMessage">No data has been changed.</div><div class="form-actions"><button type="button" class="secondary" id="cancelResetSeason">Cancel</button><button type="submit" class="primary danger-button" id="confirmResetSeason" disabled>Delete season data</button></div></form></dialog>
 </body>
