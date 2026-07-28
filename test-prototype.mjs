@@ -128,6 +128,9 @@ assert(firebaseData.includes('"lineMatches"'),"Firebase line-match loading is mi
 assert(firebaseData.includes("showMatchesUnavailable"),"Matches must leave loading state when no active season or public dashboard exists");
 assert(firebaseData.includes("includeCompleted ? publishedHistorySeasons : []"),"Player History must preserve completed seasons when no active season exists");
 assert(js.includes("Season: No active season")&&js.includes("Matches unavailable"),"Matches no-active-season empty state is missing");
+assert(js.includes('"UNAVAILABLE"')&&js.includes('classList.toggle("gray", !season)'),"Active Season must not show an ACTIVE badge when no season exists");
+assert(js.includes("Teams, standings, rosters, and matches will appear after an active season is published."),"Active Season panels need a consistent no-season empty state");
+assert(js.includes("panels.forEach((target) => { target.innerHTML = markup; })"),"Both active-season dashboard containers must leave the no-season loading state");
 assert(!js.includes("sudarshan:")&&!js.includes("const players = [")&&!js.includes("initialLineup"),"Hardcoded prototype identities or lineups remain");
 
 assert.equal(manifest.display,"standalone","PWA must launch in standalone mode");

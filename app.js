@@ -1003,6 +1003,14 @@ function renderSpringTeamDashboards(teamMap) {
 }
 function renderFallSeason() {
   const fallResults = $("#fallSeasonResults");
+  const journey = $("#fallSeasonJourney");
+  const rosters = $("#fallRosterTeams");
+  const filters = [
+    $("#fallWeekFilter"),
+    $("#fallTeamFilter"),
+    $("#fallPlayerFilter"),
+    $("#fallStatusFilter"),
+  ].filter(Boolean);
   const seasonName =
     fallSeasonData?.season?.name ||
     activeWorkspaceSeason?.name ||
@@ -1024,9 +1032,18 @@ function renderFallSeason() {
     return;
   }
   if (!fallSeasonData) {
-    fallResults.innerHTML = `<div class="dashboard-card empty-state"><b>${safeText(seasonName)} setup is not published yet</b><p>Teams and matchups will appear automatically after the season upload.</p></div>`;
+    const markup = '<div class="dashboard-card empty-state"><b>No active season is configured</b><p>Teams, standings, rosters, and matches will appear after an active season is published.</p></div>';
+    if (journey) journey.innerHTML = markup;
+    if (rosters) rosters.innerHTML = markup;
+    fallResults.innerHTML = markup;
+    filters.forEach((filter) => { filter.disabled = true; });
+    if ($("#fallMatchesSeasonLabel"))
+      $("#fallMatchesSeasonLabel").textContent = "Season · Not configured";
+    if ($("#fallMatchesTitle"))
+      $("#fallMatchesTitle").textContent = "Matches by Round";
     return;
   }
+  filters.forEach((filter) => { filter.disabled = false; });
   const idPairs = [
       ["springSeasonJourney", "fallSeasonJourney"],
       ["springRosterTeams", "fallRosterTeams"],
@@ -1078,7 +1095,8 @@ function renderSeasonDashboard() {
     return;
   }
   if (!fallSeasonData) {
-    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Active-season data is unavailable</b></div>';
+    const markup = '<div class="dashboard-card empty-state"><b>No active season is configured</b><p>The Match Tracker will appear after an active season is published.</p></div>';
+    panels.forEach((target) => { target.innerHTML = markup; });
     return;
   }
   const teamMap = new Map((fallSeasonData.teams || []).map((team) => [team.teamId, team])),
@@ -2176,9 +2194,13 @@ function seasonDisplayName(season) {
 
 function updateCurrentSeasonContext(season) {
   const name = seasonDisplayName(season);
-  const headingName = /\bseason$/i.test(name) ? name : `${name} Season`;
+  const headingName = season
+    ? (/\bseason$/i.test(name) ? name : `${name} Season`)
+    : "Season unavailable";
   const seasonId = season?.seasonId || "";
-  const status = String(season?.status || "active").toUpperCase();
+  const status = season
+    ? String(season.status || "active").toUpperCase()
+    : "UNAVAILABLE";
   const filter = $("#currentSeasonFilter");
   if (filter)
     filter.replaceChildren(
@@ -2196,11 +2218,19 @@ function updateCurrentSeasonContext(season) {
     $("#currentSeasonDescription").textContent = seasonId
       ? `${seasonId} teams, schedule, standings and match results.`
       : "No active season is currently configured.";
-  if ($("#currentSeasonStatus")) $("#currentSeasonStatus").textContent = status;
+  if ($("#currentSeasonStatus")) {
+    $("#currentSeasonStatus").textContent = status;
+    $("#currentSeasonStatus").classList.toggle("lime", Boolean(season));
+    $("#currentSeasonStatus").classList.toggle("gray", !season);
+  }
   if ($("#currentSeasonJourneyLabel"))
-    $("#currentSeasonJourneyLabel").textContent = `${name} season journey`;
+    $("#currentSeasonJourneyLabel").textContent = season
+      ? `${name} season journey`
+      : "Season journey";
   if ($("#currentSeasonTeamsLabel"))
-    $("#currentSeasonTeamsLabel").textContent = `${name} teams`;
+    $("#currentSeasonTeamsLabel").textContent = season
+      ? `${name} teams`
+      : "Season teams";
   if ($("#seasonDashboardDescription"))
     $("#seasonDashboardDescription").textContent =
       `Weekly completion, scheduling readiness, and team points for ${name}.`;
