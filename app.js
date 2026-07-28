@@ -2405,6 +2405,19 @@ window.alphaOpenDataUI = {
     renderFallSeason();
     renderSeasonDashboard();
   },
+  showMatchesUnavailable(message, season = null) {
+    const panel = $("#matchesPage");
+    const seasonLabel = $("#matchesSeasonLabel");
+    if (seasonLabel) {
+      seasonLabel.textContent = season?.seasonId
+        ? `Season: ${season.name || season.seasonName || season.seasonId}`
+        : "Season: No active season";
+    }
+    if (panel) {
+      panel.innerHTML =
+        `<div class="dashboard-card empty-state"><b>Matches unavailable</b><p>${safeText(message)}</p></div>`;
+    }
+  },
   showError(message) {
     leagueDataLoaded = true;
     if ($("#matchList"))

@@ -155,9 +155,20 @@ async function loadActiveSeason(user = auth.currentUser) {
 
 async function loadActiveSeasonMatches() {
   const active = await loadActiveSeason(null);
-  if (!active?.seasonId) throw new Error("No active season is configured.");
+  if (!active?.seasonId) {
+    window.alphaOpenDataUI?.showMatchesUnavailable(
+      "No active season is currently configured.",
+    );
+    return;
+  }
   const dashboard = await loadPublicSeasonDashboard(active.seasonId);
-  if (!dashboard) throw new Error("Public active-season details have not been published yet.");
+  if (!dashboard) {
+    window.alphaOpenDataUI?.showMatchesUnavailable(
+      "The active-season public dashboard has not been published yet.",
+      active,
+    );
+    return;
+  }
   const lineMatches = await loadPublicMatchLines(
     active.seasonId,
     dashboard.matchups || [],
@@ -223,7 +234,12 @@ async function loadGlobalActiveSeasonDashboard({ includeCompleted = false } = {}
   try {
     const current = await loadActiveSeason(null);
     const seasonId = current?.seasonId || "";
-    if (!seasonId) throw new Error("No active season is configured.");
+    if (!seasonId) {
+      window.alphaOpenDataUI?.applyHistoryData(
+        includeCompleted ? publishedHistorySeasons : [],
+      );
+      return;
+    }
     let dashboard = await loadPublicSeasonDashboard(seasonId);
     const refreshed = await publishPublicSeasonDashboard(seasonId).catch((error) => {
       console.error("Active-season public dashboard refresh failed", error);
