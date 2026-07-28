@@ -242,9 +242,7 @@ service cloud.firestore {
         )
         && (
           isSuperAdmin()
-          || matchup(seasonId, matchupId).get('approverUids', []).hasAny([request.auth.uid])
           || isSeasonEC(seasonId)
-          || isSeasonApprover(seasonId)
           || isCaptainForTeam(seasonId, teamId)
         );
     }

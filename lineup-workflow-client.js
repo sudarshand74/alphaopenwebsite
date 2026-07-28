@@ -114,7 +114,7 @@ async function actorFor(seasonId) {
 }
 
 function assertCanSubmit(actor, teamId) {
-  if (actor.superAdmin || actor.neutralApprover || actor.ec) return;
+  if (actor.superAdmin || actor.ec) return;
   if (actor.captain && actor.teamIds.includes(teamId)) return;
   throw new Error("You are not authorized to submit this team's lineup.");
 }

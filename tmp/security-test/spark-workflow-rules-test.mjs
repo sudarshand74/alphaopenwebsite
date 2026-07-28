@@ -15,6 +15,7 @@ const env = await initializeTestEnvironment({
 const seasonId = "S1";
 const matchupId = "M1";
 const captainUid = "captain";
+const awayCaptainUid = "away-captain";
 const approverUid = "approver";
 const lines = Array.from({length: 5}, (_, index) => ({
   lineNumber: index + 1,
@@ -30,10 +31,14 @@ const lines = Array.from({length: 5}, (_, index) => ({
 await env.withSecurityRulesDisabled(async (context) => {
   const db = context.firestore();
   await setDoc(doc(db, "users", captainUid), {status: "active", globalRoles: [], displayName: "Captain", playerId: "P1"});
+  await setDoc(doc(db, "users", awayCaptainUid), {status: "active", globalRoles: [], displayName: "Away Captain", playerId: "P11"});
   await setDoc(doc(db, "users", approverUid), {status: "active", globalRoles: [], displayName: "Approver", playerId: "P20"});
   await setDoc(doc(db, "seasons", seasonId), {name: "Test Season", status: "active"});
   await setDoc(doc(db, "seasons", seasonId, "members", captainUid), {
     status: "active", roles: ["captain"], teamIds: ["HOME"], playerId: "P1",
+  });
+  await setDoc(doc(db, "seasons", seasonId, "members", awayCaptainUid), {
+    status: "active", roles: ["captain"], teamIds: ["AWAY"], playerId: "P11",
   });
   await setDoc(doc(db, "seasons", seasonId, "members", approverUid), {
     status: "active", roles: ["neutralApprover"], teamIds: [], playerId: "P20",
@@ -57,6 +62,9 @@ await env.withSecurityRulesDisabled(async (context) => {
 
 const captainDb = env.authenticatedContext(captainUid, {
   email: "captain@example.com", email_verified: true,
+}).firestore();
+const awayCaptainDb = env.authenticatedContext(awayCaptainUid, {
+  email: "away-captain@example.com", email_verified: true,
 }).firestore();
 const approverDb = env.authenticatedContext(approverUid, {
   email: "approver@example.com", email_verified: true,
@@ -163,7 +171,14 @@ async function approveHome() {
   await batch.commit();
 }
 await approveHome();
-await submit(approverDb, "AWAY", "away", approverUid, "submit_away_1");
+let approverSubmissionDenied = false;
+try {
+  await submit(approverDb, "AWAY", "away", approverUid, "submit_away_denied");
+} catch {
+  approverSubmissionDenied = true;
+}
+if (!approverSubmissionDenied) throw new Error("Neutral Approver was incorrectly allowed to submit a lineup.");
+await submit(awayCaptainDb, "AWAY", "away", awayCaptainUid, "submit_away_1");
 
 async function fullyApproveAway() {
   const batch = writeBatch(approverDb);
@@ -249,6 +264,7 @@ const resetMatchup = await getDoc(doc(approverDb, ...base));
 
 console.log(JSON.stringify({
   captainApprovalDenied,
+  approverSubmissionDenied,
   homeStatus: matchup.data().homeLineupStatus,
   awayStatus: matchup.data().awayLineupStatus,
   matchupStatus: matchup.data().lineupApprovalStatus,

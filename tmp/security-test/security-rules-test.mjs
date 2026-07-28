@@ -5,8 +5,10 @@ import { initializeTestEnvironment } from "@firebase/rules-unit-testing";
 import {
   doc,
   getDoc,
+  serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 
 const projectId = "alphaopen-security-audit";
@@ -66,17 +68,20 @@ await env.withSecurityRulesDisabled(async (context) => {
     lineupsPublished: false,
     homeLineupStatus: "submitted",
     awayLineupStatus: "submitted",
+    lineupApprovalStatus: "awaitingApproval",
     status: "readyForApproval",
   });
   await setDoc(doc(db, "seasons", seasonId, "matchups", matchupId, "lineups", "TEAM-A"), {
     teamId: "TEAM-A",
     status: "rejected",
     revisionNumber: 1,
+    lines: [],
   });
   await setDoc(doc(db, "seasons", seasonId, "matchups", matchupId, "lineups", "TEAM-B"), {
     teamId: "TEAM-B",
     status: "submitted",
     revisionNumber: 1,
+    lines: [],
   });
   await setDoc(doc(db, "seasons", seasonId, "matchups", matchupId, "lineMatches", "L1"), {
     lineMatchId: "L1",
@@ -131,16 +136,50 @@ await check("neutral", "Submit/edit lineup", "DENY", () =>
     status: "draft",
   }));
 
-await check("neutral", "Reject submitted lineup", "ALLOW", () =>
-  updateDoc(doc(auth.neutral, "seasons", seasonId, "matchups", matchupId, "lineups", "TEAM-B"), {
+async function rejectAwayLineup(db, uid, operationId, reason) {
+  const batch = writeBatch(db);
+  const matchupRef = doc(db, "seasons", seasonId, "matchups", matchupId);
+  batch.update(doc(matchupRef, "lineups", "TEAM-B"), {
     status: "rejected",
-    rejectionReason: "Security test",
-    rejectedByUid: uids.neutral,
-    rejectedAt: new Date(),
-  }));
+    rejectionReason: reason,
+    rejectedByUid: uid,
+    rejectedAt: serverTimestamp(),
+    updatedByUid: uid,
+  });
+  batch.update(matchupRef, {
+    awayLineupStatus: "rejected",
+    lineupApprovalStatus: "rejected",
+    bothLineupsSubmitted: false,
+    lineupsPublished: false,
+    lineupsPublishedAt: null,
+    fullyApprovedAt: null,
+    lineupWorkflowActorUid: uid,
+    lineupWorkflowOperationId: operationId,
+    updatedAt: serverTimestamp(),
+  });
+  batch.set(doc(matchupRef, "lineupReviews", operationId), {
+    action: "rejected",
+    operationId,
+    teamId: "TEAM-B",
+    actedByUid: uid,
+    actedAt: serverTimestamp(),
+  });
+  return batch.commit();
+}
+
+await check("neutral", "Reject submitted lineup", "ALLOW", () =>
+  rejectAwayLineup(auth.neutral, uids.neutral, "neutral-reject", "Security test"));
 await env.withSecurityRulesDisabled(async (context) => {
-  await updateDoc(doc(context.firestore(), "seasons", seasonId, "matchups", matchupId, "lineups", "TEAM-B"), {
+  const db = context.firestore();
+  await updateDoc(doc(db, "seasons", seasonId, "matchups", matchupId, "lineups", "TEAM-B"), {
     status: "submitted",
+  });
+  await updateDoc(doc(db, "seasons", seasonId, "matchups", matchupId), {
+    awayLineupStatus: "submitted",
+    lineupApprovalStatus: "awaitingApproval",
+    bothLineupsSubmitted: true,
+    lineupWorkflowActorUid: null,
+    lineupWorkflowOperationId: null,
   });
 });
 await check("ec", "Reject lineup without Neutral Approver assignment", "DENY", () =>
@@ -151,12 +190,7 @@ await check("ec", "Reject lineup without Neutral Approver assignment", "DENY", (
     rejectedAt: new Date(),
   }));
 await check("superAdmin", "Reject lineup as Super Admin", "ALLOW", () =>
-  updateDoc(doc(auth.superAdmin, "seasons", seasonId, "matchups", matchupId, "lineups", "TEAM-B"), {
-    status: "rejected",
-    rejectionReason: "Admin security test",
-    rejectedByUid: uids.superAdmin,
-    rejectedAt: new Date(),
-  }));
+  rejectAwayLineup(auth.superAdmin, uids.superAdmin, "admin-reject", "Admin security test"));
 
 for (const persona of ["player", "captain", "neutral"]) {
   await check(persona, "Manage team roster", "DENY", () =>
@@ -175,9 +209,20 @@ for (const persona of ["ec", "superAdmin"]) {
 
 for (const persona of ["captain", "ec", "superAdmin"]) {
   await check(persona, "Update match schedule/score", "ALLOW", () =>
-    updateDoc(doc(auth[persona], "seasons", seasonId, "matchups", matchupId, "lineMatches", "L1"), {
-      scoreStatus: "submitted",
-    }));
+    updateDoc(
+      doc(auth[persona], "seasons", seasonId, "matchups", matchupId, "lineMatches", "L1"),
+      persona === "ec"
+        ? {
+            scoreStatus: "submitted",
+            lastCorrectionId: "security-test-correction",
+            lastCorrectionAt: serverTimestamp(),
+            lastCorrectionByUid: uids.ec,
+            lastCorrectionByNameSnapshot: "EC Test",
+            lastCorrectionReason: "Security test correction",
+            updatedAt: serverTimestamp(),
+          }
+        : { scoreStatus: "submitted" },
+    ));
 }
 for (const persona of ["player", "neutral"]) {
   await check(persona, "Update match schedule/score", "DENY", () =>
@@ -223,11 +268,15 @@ for (const persona of ["player", "captain", "ec", "neutral"]) {
 await check("superAdmin", "Grant user profile", "ALLOW", () =>
   updateDoc(doc(auth.superAdmin, "users", uids.player), { globalRoles: [] }));
 
+const failed = results.filter((x) => !x.pass);
 console.log(JSON.stringify({
   total: results.length,
   passed: results.filter((x) => x.pass).length,
-  failed: results.filter((x) => !x.pass),
+  failed,
   results,
 }, null, 2));
 
 await env.cleanup();
+if (failed.length) {
+  throw new Error(`${failed.length} security-rule expectation(s) failed.`);
+}
