@@ -2,7 +2,7 @@ const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LO
 const coreModules=["./firebase-auth.js?v=44","./firebase-data.js?v=88"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
-const adminModuleForPanel={players:"./player-admin.js?v=45",users:"./operations-access-admin.js?v=1","identity-audit":"./identity-reconciliation.js?v=12",rosters:"./roster-admin-v3.js?v=21",venues:"./venue-admin.js?v=27",seasons:"./season-bulk-import.js?v=20","season-teams":"./season-structure-admin.js?v=12","season-matchups":"./season-structure-admin.js?v=12","lineup-approvers":"./lineup-approver-admin.js?v=5"};
+const adminModuleForPanel={players:"./player-admin.js?v=45",users:"./operations-access-admin.js?v=1","identity-audit":"./identity-reconciliation.js?v=12",rosters:"./roster-admin-v3.js?v=21",venues:"./venue-admin.js?v=28",seasons:"./season-bulk-import.js?v=20","season-teams":"./season-structure-admin.js?v=12","season-matchups":"./season-structure-admin.js?v=12","lineup-approvers":"./lineup-approver-admin.js?v=5"};
 function loadRouteFeature(route){
   if(["current-season","captain-schedule","captain-score"].includes(route))return importFeature("./season-operations.js?v=2");
   if(route==="ec-roster")return importFeature("./roster-admin-v3.js?v=21");

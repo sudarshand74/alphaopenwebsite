@@ -91,6 +91,8 @@ function setAccount(key, announce = false) {
   const active = $(".view.active");
   if ((requestedView && !allowed(requestedView, account)) || (active && !allowed(active, account)))
     navigate("home");
+  else if (requestedRoute === "admin" && account.role !== "Super Admin")
+    setAdminPanel("venues");
   const historyPlayerFilter = $("#historyPlayerFilter");
   if (historyPlayerFilter)
     historyPlayerFilter.dataset.preferredPlayerId =
@@ -258,13 +260,14 @@ function navigate(route) {
   $$(".view").forEach((view) =>
     view.classList.toggle("active", view === target),
   );
-  $$("[data-route]").forEach((button) =>
-    button.classList.toggle("active", button.dataset.route === route),
-  );
+  $$("[data-route]").forEach((button) => {
+    const isAdminShortcut = route === "admin" && Boolean(button.dataset.adminTarget);
+    button.classList.toggle("active", button.dataset.route === route && !isAdminShortcut);
+  });
   $$(".desktop-nav .nav-menu").forEach((menu) =>
     menu.classList.toggle(
       "active",
-      Boolean(menu.querySelector(`[data-route="${route}"]`)),
+      Boolean(menu.querySelector(`[data-route="${route}"]:not([data-admin-target])`)),
     ),
   );
   $$(".desktop-nav details[open]").forEach((menu) =>
@@ -319,6 +322,8 @@ function bindRoutes(root = document) {
           }
         }
         navigate(button.dataset.route);
+        if (button.dataset.adminTarget)
+          setAdminPanel(button.dataset.adminTarget);
         if (button.dataset.scrollTarget) {
           requestAnimationFrame(() => {
             document.getElementById(button.dataset.scrollTarget)?.scrollIntoView({

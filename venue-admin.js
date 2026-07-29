@@ -1,7 +1,6 @@
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
 import { collection, doc, getDocs, runTransaction, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { auth, db } from "./firebase-client.js?v=5";
-const ADMIN_EMAIL = "sudarshandesai74@gmail.com";
 const search = document.querySelector("#venueMasterSearch");
 const list = document.querySelector("#venueMasterList");
 const count = document.querySelector("#venueMasterCount");
@@ -10,7 +9,13 @@ const editForm = document.querySelector("#editVenueForm");
 const editMessage = document.querySelector("#editVenueMessage");
 let venues = [];
 
-function isAdmin(user = auth.currentUser) { return Boolean(user?.emailVerified && user.email?.toLowerCase() === ADMIN_EMAIL); }
+function canManageVenues() {
+  const authorization = window.alphaOpenAuthorization || {};
+  return authorization.role === "Super Admin"
+    || (authorization.roles || []).includes("superAdmin")
+    || (authorization.roles || []).includes("ec")
+    || (authorization.access || []).includes("ec");
+}
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]); }
 function venueName(venue) { return venue.venueName || venue.name || venue.displayName || "Unnamed venue"; }
 function venueAddress(venue) { return venue.fullAddress || venue.address || [venue.addressLine1, venue.addressLine2, venue.city, venue.state, venue.postalCode].filter(Boolean).join(", "); }
@@ -54,7 +59,7 @@ function renderVenues(filter = "") {
 
 async function saveEditedVenue(event) {
   event.preventDefault();
-  if (!isAdmin()) return;
+  if (!canManageVenues()) return;
   const venueId = document.querySelector("#editVenueId").value;
   const venue = venues.find(item => item.venueId === venueId);
   if (!venue) { editMessage.textContent = "This venue no longer exists. Refresh Venue Master."; return; }
@@ -89,7 +94,7 @@ async function saveEditedVenue(event) {
 }
 
 async function deleteVenue(venueId) {
-  if (!isAdmin()) return;
+  if (!canManageVenues()) return;
   const venue = venues.find(item => item.venueId === venueId);
   if (!venue || !window.confirm(`Delete ${venueName(venue)} (${venueId}) from Venue Master?\n\nExisting match records keep their saved venue snapshots.`)) return;
   try {
@@ -110,7 +115,7 @@ async function deleteVenue(venueId) {
 }
 
 async function loadVenues() {
-  if (!isAdmin()) return;
+  if (!canManageVenues()) return;
   list.innerHTML = '<p class="muted">Loading Venue Master…</p>';
   try {
     const snapshot = await getDocs(collection(db, "venues"));
@@ -127,4 +132,7 @@ document.querySelector("#refreshVenues").addEventListener("click", loadVenues);
 document.querySelector("#closeEditVenue").addEventListener("click", closeEditVenue);
 document.querySelector("#cancelEditVenue").addEventListener("click", closeEditVenue);
 editForm.addEventListener("submit", saveEditedVenue);
-onAuthStateChanged(auth, user => { if (isAdmin(user)) loadVenues(); });
+onAuthStateChanged(auth, () => { if (canManageVenues()) loadVenues(); });
+window.addEventListener("alphaopen:admin-panel-changed", (event) => {
+  if (event.detail?.panel === "venues" && canManageVenues()) loadVenues();
+});

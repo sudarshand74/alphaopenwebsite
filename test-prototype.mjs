@@ -77,6 +77,7 @@ assert(html.includes('id="workspaceKicker">Public Access')&&js.includes('? "Publ
 assert(css.includes('.view[data-view="home"] .home-grid{margin-top:0;min-height:0'),"Public home must not force viewport-height whitespace");
 assert(html.includes('id="openFooterLogo"')&&html.includes('id="footerLogoDialog"')&&js.includes('$("#footerLogoDialog")?.showModal()'),"Footer logo must open an enlarged dialog");
 assert(html.includes('id="jumpToAoFaqs"')&&html.includes('data-scroll-target="aoFaqHeading"'),"About and footer FAQ controls must target the FAQ section");
+assert(/Participant Agreement &amp; Waiver<\/button>\s*<button[^>]*privacy-policy[^>]*>Privacy Policy<\/button>\s*<button[^>]*website-disclaimer[^>]*>Website Disclaimer<\/button>\s*<button[^>]*data-scroll-target="aoFaqHeading"[^>]*>FAQ<\/button>\s*<button[^>]*data-route="ao"[^>]*>About<\/button>\s*<a href="mailto:AlphaOpenEC@gmail.com">Contact Us<\/a>/.test(html),"Footer Quick Links must use the requested legal-first order");
 assert(js.includes("button.dataset.scrollTarget")&&js.includes("scrollIntoView"),"Footer section links must scroll to their target");
 assert(js.includes('$("#jumpToAoFaqs")?.addEventListener'),"About FAQ button must work independently of remote content loading");
 assert(js.includes("No AO playing history found for ${safeText(selectedPlayerName)}"),"Player History must name the selected player in the AO empty state");
@@ -121,7 +122,7 @@ assert(headerFooterCss.includes(".brand-button")&&headerFooterCss.includes("back
 assert(headerFooterCss.includes("left: 50%")&&headerFooterCss.includes("translateX(-50%)"),"The AlphaOpen header logo must remain centered on phones");
 assert(html.includes('<span class="header-tagline">Where Friends Compete</span>')&&headerFooterCss.includes(".header-tagline")&&headerFooterCss.includes("color: #fff"),"Header must show the AlphaOpen tagline in white beside the logo");
 assert(js.includes('$$(".desktop-nav details[open]")')&&js.includes('menu.removeAttribute("open")'),"Open desktop navigation menus must close whenever navigation changes");
-assert(js.includes('$$(".desktop-nav .nav-menu")')&&js.includes('Boolean(menu.querySelector(`[data-route="${route}"]`))')&&headerFooterCss.includes(".nav-menu.active > summary"),"Submenu routes must transfer the active header state to their parent menu");
+assert(js.includes('$$(".desktop-nav .nav-menu")')&&js.includes('Boolean(menu.querySelector(`[data-route="${route}"]:not([data-admin-target])`))')&&headerFooterCss.includes(".nav-menu.active > summary"),"Standard submenu routes must transfer the active header state to their parent menu");
 assert(headerFooterCss.includes("top: 64px")&&headerFooterCss.includes("top: 60px")&&!headerFooterCss.includes(".header-tagline {\n    display: none"),"Mobile header must show the tagline beneath the centered logo");
 assert(headerFooterCss.includes("width: fit-content")&&headerFooterCss.includes(".footer-brand img {\n  margin-inline: auto")&&headerFooterCss.includes(".footer-social {\n  display: grid")&&headerFooterCss.includes(".footer-social .facebook-mark"),"Mobile footer logo and Facebook icon must use true centered layout");
 assert(headerFooterCss.includes("border-bottom: 0")&&headerFooterCss.includes("border-top: 0")&&headerFooterCss.includes("margin-bottom: 0"),"Header and footer must not show colored separator or ending lines");
@@ -129,7 +130,7 @@ assert(html.includes('<div class="page-heading-actions"><button type="button" cl
 assert(js.includes('"alphaopen:refresh-current-season"')&&js.includes('"alphaopen:current-season-refreshed"')&&firebaseData.includes('window.addEventListener("alphaopen:refresh-current-season"')&&firebaseData.includes("loadGlobalActiveSeasonDashboard()"),"Season Dashboards Refresh must reload active-season data and restore its button");
 assert(html.includes('id="aoPublicMessage" class="info-box" hidden')&&!aoContent.includes("${content.length} AO information record")&&aoContent.includes('byId("aoPublicMessage").hidden = false'),"About AO must hide successful record counts while preserving error messages");
 assert(html.includes('<button class="secondary compact-button" type="button" id="jumpToAoFaqs">FAQ</button>')&&!html.includes('<button class="primary" type="button" id="jumpToAoFaqs">FAQ</button>'),"About FAQ must match the compact secondary page actions");
-assert(html.includes('runtime-loader.js?v=98')&&runtimeLoader.includes('firebase-data.js?v=88')&&serviceWorker.includes('/firebase-data.js?v=88'),"Current Season refresh modules must use consistent cache-busted versions");
+assert(html.includes('runtime-loader.js?v=99')&&runtimeLoader.includes('firebase-data.js?v=88')&&serviceWorker.includes('/firebase-data.js?v=88'),"Current Season refresh modules must use consistent cache-busted versions");
 for (const route of ["current-season","captain-schedule","captain-score","ec-lineup","ec-score"]) assert(html.includes(`data-view="${route}"`),`Missing destination view: ${route}`);
 assert(!html.includes('id="currentSeasonFilter"')&&!html.includes('id="currentSeasonStatus"'),"Current Season must not repeat active-season context in a selector or status badge");
 assert(js.includes("<h2>Match Status Tracker</h2>")&&!js.includes('Match Tracker</h2>')&&!js.includes('${weeks.length} weeks</span>'),"Current Season dashboard must use the simplified Match Status Tracker heading without a week-count badge");
@@ -174,7 +175,15 @@ for (const privateField of ["captainUids", "approverUids", "internalNotes", "sub
 }
 assert(!`${firebaseData}${publicSeasonDashboard}`.includes('publicSeasons'),"Removed publicSeasons collection must not return");
 assert(js.includes('account.role === "Guest"')&&js.includes('"Active season: Unavailable"'),"Guest Home must not remain in a permanent loading state");
-assert(html.includes('data-view="admin" data-super-admin'),"Admin view must be Super Admin only");
+assert(html.includes('data-view="admin" data-access-any="ec"'),"Admin view must allow EC access to approved management panels");
+assert.equal((html.match(/data-admin-target="venues">Venue Master<\/button>/g)||[]).length,2,"EC desktop and mobile menus must include Venue Master");
+assert.equal((html.match(/data-admin-target="ao-content">About &amp; FAQ Update<\/button>/g)||[]).length,2,"EC desktop and mobile menus must include About & FAQ Update");
+assert(js.includes("button.dataset.adminTarget")&&js.includes("setAdminPanel(button.dataset.adminTarget)"),"EC management menu links must open their requested admin panel");
+assert(js.includes('const isAdminShortcut = route === "admin"')&&js.includes(':not([data-admin-target])'),"EC Admin shortcuts must remain plain menu items without duplicate active highlighting");
+assert(html.includes('app.js?v=147')&&serviceWorker.includes('/app.js?v=147'),"Simplified EC menu highlighting must use consistent cache-busted app versions");
+assert(html.includes('data-admin-panel="venues" data-access-any="ec"')&&html.includes('data-admin-panel="ao-content" data-access-any="ec"'),"Only approved Master Data panels must be exposed to EC users");
+assert(!html.includes('id="cancelAoContentEdit">Clear</button>')&&!html.includes('id="cancelAoCategoryEdit">Clear</button>')&&!html.includes('id="cancelAoFaqEdit">Clear</button>'),"About and FAQ forms must remove Clear buttons");
+for (const cancelId of ["cancelAoContentEdit","cancelAoCategoryEdit","cancelAoFaqEdit"]) assert(html.includes(`id="${cancelId}">Cancel</button>`),`${cancelId} must display Cancel`);
 assert(html.includes('data-view="approvals" data-access="approver"'),"Lineup approval must be limited to assigned season approvers");
 assert.equal((html.match(/data-access-strict="approver" data-route="approvals"/g)||[]).length,0,"Approve Lineup must not appear in the EC navigation menu");
 assert(html.includes('<button type="button" data-admin-panel="approve-lineup">Approve Lineup</button>'),"Admin Control must embed Approve Lineup");
@@ -507,6 +516,8 @@ assert(venueAdmin.includes('collection(db, "venues")'),"Venue Master Firestore l
 assert(venueAdmin.includes("saveEditedVenue"),"Venue Master editing is missing");
 assert(venueAdmin.includes("deleteVenue"),"Venue Master deletion is missing");
 assert(venueAdmin.includes('updateDoc(doc(db, "venues", venueId)'),"Venue edits must save to Firebase");
+assert(venueAdmin.includes("function canManageVenues()")&&venueAdmin.includes('(authorization.access || []).includes("ec")'),"Venue Master client access must include EC");
+assert(runtimeLoader.includes('venues:"./venue-admin.js?v=28"')&&serviceWorker.includes('/venue-admin.js?v=28'),"Venue Master EC access must use consistent cache-busted versions");
 assert(playerAdmin.includes("transaction.delete(oldIndexRef)"),"Changed player email must remove its old uniqueness index");
 for (const identitySync of ["playerEmailNormalized", "registrationSnapshot", "emailAtApproval", "all linked identity records verified"]) assert(playerAdmin.includes(identitySync), `Player identity synchronization is missing: ${identitySync}`);
 for (const field of ["firstName", "lastName", "fullName", "emailNormalized", "phone", "tShirtSize", "globalRank"]) assert(playerAdmin.includes(field), `Player Master field is missing: ${field}`);
@@ -562,6 +573,13 @@ for (const collectionName of ["aoContent", "aoFaqCategories", "aoFaqs"]) {
   assert(aoContent.includes(`"${collectionName}"`), `About AO module is missing ${collectionName}`);
 }
 assert(html.includes('data-admin-panel="ao-content"'), "AO Content & FAQ Admin panel is missing");
+assert(aoContent.includes("function canManageAo()")&&aoContent.includes('(authorization.access || []).includes("ec")'),"About and FAQ management client access must include EC");
+assert(html.includes('ao-content.js?v=4')&&serviceWorker.includes('/ao-content.js?v=4'),"About and FAQ EC access must use consistent cache-busted versions");
+assert(firestoreRules.includes("function isEC()")&&firestoreRules.includes("allow write: if isSuperAdmin() || isEC();"),"Firestore must allow active EC users to manage Venue Master");
+for (const collectionName of ["aoContent", "aoFaqCategories", "aoFaqs"]) {
+  const ruleStart = firestoreRules.indexOf(`match /${collectionName}/`);
+  assert(ruleStart >= 0 && firestoreRules.slice(ruleStart, ruleStart + 500).includes("allow create, update, delete: if isSuperAdmin() || isEC();"),`${collectionName} must allow EC management`);
+}
 assert(aoContent.includes('where("status", "==", "active")'), "Public About AO reads must request active records only");
 assert(html.includes("Only active FAQs in active categories"), "FAQ active-category guidance is missing");
 assert(aoContent.includes("window.print()"), "Categorized FAQ printing is missing");

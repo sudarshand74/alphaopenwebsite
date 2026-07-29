@@ -46,7 +46,7 @@
       <details class="nav-menu"><summary>History</summary><div><button data-route="schedule">Previous Seasons</button><button data-route="history">Player History</button></div></details>
       <details class="nav-menu" data-nav-roles="Captain"><summary>Captain</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="ec-lineup-status">Lineup Dashboard</button><button data-route="match-management">Update Schedule and Score</button></div></details>
       <details class="nav-menu" data-nav-roles="Neutral Approver"><summary>Neutral Approver</summary><div><button data-route="lineup">Submit Lineup</button><button data-route="approvals">Review/Approve Lineups</button><button data-route="reset-approved-lineup">Reset Approved Lineup</button></div></details>
-      <details class="nav-menu" data-nav-roles="EC"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button><button data-access="ec" data-route="ec-lineup">Correct Lineup & Score</button></div></details>
+      <details class="nav-menu" data-nav-roles="EC"><summary>EC</summary><div><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button><button data-access="ec" data-route="ec-lineup">Correct Lineup & Score</button><button data-access="ec" data-route="admin" data-admin-target="venues">Venue Master</button><button data-access="ec" data-route="admin" data-admin-target="ao-content">About &amp; FAQ Update</button></div></details>
       <button data-super-admin data-route="admin">Admin</button>
     </nav>
     <button class="sign-in-button" id="signInButton" hidden><span id="avatar">AO</span><span class="profile-copy"><strong id="profileName">Account</strong><small id="profileRole">Operations</small></span></button>
@@ -61,7 +61,7 @@
     <div class="drawer-group"><span>History</span><button data-route="schedule">Previous Seasons</button><button data-route="history">Player History</button></div>
     <div class="drawer-group" data-nav-roles="Captain"><span>Captain</span><button data-route="lineup">Submit Lineup</button><button data-route="ec-lineup-status">Lineup Dashboard</button><button data-route="match-management">Update Schedule and Score</button></div>
     <div class="drawer-group" data-nav-roles="Neutral Approver"><span>Neutral Approver</span><button data-route="lineup">Submit Lineup</button><button data-route="approvals">Review/Approve Lineups</button><button data-route="reset-approved-lineup">Reset Approved Lineup</button></div>
-    <div class="drawer-group" data-nav-roles="EC"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button><button data-access="ec" data-route="ec-lineup">Correct Lineup & Score</button></div>
+    <div class="drawer-group" data-nav-roles="EC"><span>EC</span><button data-access="ec" data-route="ec-roster">Manage Team Roster</button><button data-access="ec" data-route="ec-lineup-status">Lineup Dashboard</button><button data-access="ec" data-route="lineup">Submit Lineup</button><button data-access="ec" data-route="match-management">Schedule & Score</button><button data-access="ec" data-route="ec-lineup">Correct Lineup & Score</button><button data-access="ec" data-route="admin" data-admin-target="venues">Venue Master</button><button data-access="ec" data-route="admin" data-admin-target="ao-content">About &amp; FAQ Update</button></div>
     <button data-super-admin data-route="admin">Admin</button>
   </aside>
   <div class="scrim" id="scrim"></div>
@@ -265,18 +265,18 @@
       <section class="ao-public-section ao-faq-print-area" aria-labelledby="aoFaqHeading"><div class="section-heading ao-faq-heading"><div><span class="kicker">Helpful answers</span><h2 id="aoFaqHeading">Frequently Asked Questions</h2></div><button class="secondary compact-button" type="button" id="printAoFaqsInline">Print FAQs</button></div><div id="aoFaqList" class="ao-faq-list"></div></section>
     </section>
 
-    <section class="view content-wrap page-view" data-view="admin" data-super-admin>
-      <div class="page-heading"><div><span class="kicker">League administration</span><h1>Admin control room</h1><p>Choose a management area to maintain AlphaOpen records and access.</p></div></div>
+    <section class="view content-wrap page-view" data-view="admin" data-access-any="ec">
+      <div class="page-heading"><div><span class="kicker">League administration</span><h1>Admin control room</h1><p>Choose a management area to maintain AlphaOpen records and access.</p></div><div class="page-heading-actions"><button type="button" class="secondary compact-button" data-route="home">Home</button></div></div>
       <nav class="admin-subnav admin-grouped-nav" aria-label="Administration sections">
         <section class="admin-nav-group" aria-labelledby="adminMasterDataHeading">
           <h2 id="adminMasterDataHeading">Master Data</h2>
-          <button class="active" type="button" data-admin-panel="players">Player Master</button>
-          <button type="button" data-admin-panel="users">User Management</button>
-          <button type="button" data-admin-panel="identity-audit">Identity Reconciliation</button>
-          <button type="button" data-admin-panel="venues">Venue Master</button>
-          <button type="button" data-admin-panel="ao-content">AO Content &amp; FAQ</button>
+          <button class="active" type="button" data-admin-panel="players" data-super-admin>Player Master</button>
+          <button type="button" data-admin-panel="users" data-super-admin>User Management</button>
+          <button type="button" data-admin-panel="identity-audit" data-super-admin>Identity Reconciliation</button>
+          <button type="button" data-admin-panel="venues" data-access-any="ec">Venue Master</button>
+          <button type="button" data-admin-panel="ao-content" data-access-any="ec">About &amp; FAQ Update</button>
         </section>
-        <section class="admin-nav-group" aria-labelledby="adminSeasonHeading">
+        <section class="admin-nav-group" aria-labelledby="adminSeasonHeading" data-super-admin>
           <h2 id="adminSeasonHeading">Season</h2>
           <button type="button" data-admin-panel="seasons">Setup Season</button>
           <button type="button" data-admin-panel="season-teams">Season Teams</button>
@@ -284,7 +284,7 @@
           <button type="button" data-admin-panel="rosters">Manage Team Roster</button>
           <button type="button" data-admin-panel="lineup-approvers">Lineup Approvers</button>
         </section>
-        <section class="admin-nav-group" aria-labelledby="adminOperationsHeading">
+        <section class="admin-nav-group" aria-labelledby="adminOperationsHeading" data-super-admin>
           <h2 id="adminOperationsHeading">Operations</h2>
           <button type="button" data-admin-panel="submit-lineup">Submit Lineup</button>
           <button type="button" data-admin-panel="approve-lineup">Approve Lineup</button>
@@ -336,7 +336,7 @@
       </div>
 
       <div class="admin-section" data-admin-section="venues" hidden>
-        <section class="dashboard-card season-admin-card" id="venueManagementPanel" data-super-admin>
+        <section class="dashboard-card season-admin-card" id="venueManagementPanel" data-access-any="ec">
           <div class="card-top"><div><span class="kicker">Venue Management</span><h2>Venue Master</h2><p class="muted">Maintain venue IDs, names, addresses, courts, and active status.</p></div><div class="card-actions"><button class="secondary compact-button" id="refreshVenues" type="button">Refresh</button><span class="badge navy" id="venueMasterCount">0 venues</span></div></div>
           <div class="master-search"><input id="venueMasterSearch" type="search" placeholder="Search by Venue ID, name, address, city, or status" aria-label="Search Venue Master"></div>
           <div id="venueMasterList" class="venue-master-list"><p class="muted">Loading Venue Master…</p></div>
@@ -344,8 +344,8 @@
       </div>
 
       <div class="admin-section" data-admin-section="ao-content" hidden>
-        <section class="dashboard-card ao-admin-card" data-super-admin>
-          <div class="card-top"><div><span class="kicker">About AO Management</span><h2>History &amp; Seasons</h2><p class="muted">Create the public History, Current Season, and Past Seasons content.</p></div><span class="badge navy">Super Admin</span></div>
+        <section class="dashboard-card ao-admin-card" data-access-any="ec">
+          <div class="card-top"><div><span class="kicker">About AO Management</span><h2>History &amp; Seasons</h2><p class="muted">Create the public History, Current Season, and Past Seasons content.</p></div><span class="badge navy">EC / Admin</span></div>
           <form id="aoContentForm" class="ao-admin-form">
             <input id="aoContentId" type="hidden">
             <label>Section<select id="aoContentSection" required><option value="history">History</option><option value="currentSeason">Current Season</option><option value="pastSeason">Past Season</option></select></label>
@@ -356,27 +356,27 @@
             <label>Status<select id="aoContentStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label class="wide">Summary<textarea id="aoContentSummary" rows="2" maxlength="500"></textarea></label>
             <label class="wide">Content<textarea id="aoContentBody" rows="5" maxlength="5000" required></textarea></label>
-            <div class="form-actions wide"><button class="secondary" type="button" id="cancelAoContentEdit">Clear</button><button class="primary" type="submit">Save AO content</button></div>
+            <div class="form-actions wide"><button class="secondary" type="button" id="cancelAoContentEdit">Cancel</button><button class="primary" type="submit">Save AO content</button></div>
           </form>
           <div id="aoContentAdminMessage" class="info-box">Add a History, Current Season, or Past Season record.</div>
           <div id="aoContentAdminList" class="ao-admin-list"></div>
         </section>
 
-        <section class="dashboard-card ao-admin-card" data-super-admin>
-          <div class="card-top"><div><span class="kicker">FAQ Management</span><h2>FAQ Categories</h2><p class="muted">Categories are dynamic and control public grouping and print order.</p></div><span class="badge navy">Super Admin</span></div>
+        <section class="dashboard-card ao-admin-card" data-access-any="ec">
+          <div class="card-top"><div><span class="kicker">FAQ Management</span><h2>FAQ Categories</h2><p class="muted">Categories are dynamic and control public grouping and print order.</p></div><span class="badge navy">EC / Admin</span></div>
           <form id="aoCategoryForm" class="ao-admin-form compact">
             <input id="aoCategoryId" type="hidden">
             <label>Category name<input id="aoCategoryName" maxlength="100" required></label>
             <label>Display order<input id="aoCategoryOrder" type="number" min="0" max="999" value="1" required></label>
             <label>Status<select id="aoCategoryStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
-            <div class="form-actions"><button class="secondary" type="button" id="cancelAoCategoryEdit">Clear</button><button class="primary" type="submit">Save category</button></div>
+            <div class="form-actions"><button class="secondary" type="button" id="cancelAoCategoryEdit">Cancel</button><button class="primary" type="submit">Save category</button></div>
           </form>
           <div id="aoCategoryAdminMessage" class="info-box">Add as many FAQ categories as needed.</div>
           <div id="aoCategoryAdminList" class="ao-admin-list"></div>
         </section>
 
-        <section class="dashboard-card ao-admin-card" data-super-admin>
-          <div class="card-top"><div><span class="kicker">FAQ Management</span><h2>Questions &amp; Answers</h2><p class="muted">Only active FAQs in active categories appear publicly.</p></div><span class="badge navy">Super Admin</span></div>
+        <section class="dashboard-card ao-admin-card" data-access-any="ec">
+          <div class="card-top"><div><span class="kicker">FAQ Management</span><h2>Questions &amp; Answers</h2><p class="muted">Only active FAQs in active categories appear publicly.</p></div><span class="badge navy">EC / Admin</span></div>
           <form id="aoFaqForm" class="ao-admin-form">
             <input id="aoFaqId" type="hidden">
             <label>Category<select id="aoFaqCategory" required><option value="">Add a category first</option></select></label>
@@ -384,7 +384,7 @@
             <label>Status<select id="aoFaqStatus"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label class="wide">Question<input id="aoFaqQuestion" maxlength="300" required></label>
             <label class="wide">Answer<textarea id="aoFaqAnswer" rows="5" maxlength="5000" required></textarea></label>
-            <div class="form-actions wide"><button class="secondary" type="button" id="cancelAoFaqEdit">Clear</button><button class="primary" type="submit">Save FAQ</button></div>
+            <div class="form-actions wide"><button class="secondary" type="button" id="cancelAoFaqEdit">Cancel</button><button class="primary" type="submit">Save FAQ</button></div>
           </form>
           <div id="aoFaqAdminMessage" class="info-box">Create questions and arrange them within a category.</div>
           <div id="aoFaqAdminList" class="ao-admin-list"></div>
@@ -579,12 +579,12 @@
       </div>
       <nav class="footer-links" aria-label="Footer navigation">
         <h2>Quick Links</h2>
-        <a href="mailto:AlphaOpenEC@gmail.com">Contact Us</a>
-        <button type="button" data-route="ao">About</button>
-        <button type="button" data-route="ao" data-scroll-target="aoFaqHeading">FAQ</button>
         <button type="button" data-route="participant-agreement">Participant Agreement &amp; Waiver</button>
         <button type="button" data-route="privacy-policy">Privacy Policy</button>
         <button type="button" data-route="website-disclaimer">Website Disclaimer</button>
+        <button type="button" data-route="ao" data-scroll-target="aoFaqHeading">FAQ</button>
+        <button type="button" data-route="ao">About</button>
+        <a href="mailto:AlphaOpenEC@gmail.com">Contact Us</a>
       </nav>
       <div class="footer-social">
         <h2>Social Media</h2>
@@ -679,15 +679,15 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=145"></script>
+  <script src="app.js?v=147"></script>
   <script src="lineup-bootstrap.js?v=20"></script>
   <script src="approval-bootstrap.js?v=17"></script>
   <script src="lineup-reset-bootstrap.js?v=3"></script>
   <script src="ec-lineup-status-bootstrap.js?v=2"></script>
   <script src="match-management-bootstrap.js?v=34"></script>
   <script src="poster-generator.js?v=4"></script>
-  <script type="module" src="ao-content.js?v=3"></script>
-  <script type="module" src="runtime-loader.js?v=98"></script>
+  <script type="module" src="ao-content.js?v=4"></script>
+  <script type="module" src="runtime-loader.js?v=99"></script>
   <script src="pwa.js?v=26"></script>
   <dialog id="resetSeasonDialog"><form id="resetSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Destructive operation</span><h2>Reset season data</h2></div><button type="button" id="closeResetSeason" aria-label="Close">×</button></div><p class="muted">This keeps the Season Master and all global users/players, but permanently removes every operational and public child record for the selected season.</p><div class="info-box" id="resetSeasonScope"></div><label class="wide">Type the confirmation phrase<input id="resetSeasonConfirmation" autocomplete="off" spellcheck="false"></label><label class="check-row"><input id="resetSeasonAcknowledgement" type="checkbox"> I understand that teams, memberships, rosters, schedules, lineups, scores, standings, approvers, audits and published season data will be deleted.</label><div class="info-box" id="resetSeasonMessage">No data has been changed.</div><div class="form-actions"><button type="button" class="secondary" id="cancelResetSeason">Cancel</button><button type="submit" class="primary danger-button" id="confirmResetSeason" disabled>Delete season data</button></div></form></dialog>
 </body>

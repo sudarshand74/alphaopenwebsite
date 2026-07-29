@@ -24,6 +24,12 @@ service cloud.firestore {
         && get(userPath(request.auth.uid)).data.status == 'active';
     }
 
+    function isEC() {
+      return isActiveUser()
+        && get(userPath(request.auth.uid)).data.globalRoles is list
+        && get(userPath(request.auth.uid)).data.globalRoles.hasAny(['ec']);
+    }
+
     function hasStoredOperationsGlobalRole() {
       return isActiveUser()
         && get(userPath(request.auth.uid)).data.globalRoles is list
@@ -420,11 +426,11 @@ service cloud.firestore {
 
     match /venues/{venueId} {
       allow read: if signedIn() || resource.data.active == true;
-      allow write: if isSuperAdmin();
+      allow write: if isSuperAdmin() || isEC();
     }
 
     match /venuePrivate/{venueId} {
-      allow read, write: if isSuperAdmin();
+      allow read, write: if isSuperAdmin() || isEC();
     }
 
     match /systemConfig/{documentId} {
@@ -455,21 +461,21 @@ service cloud.firestore {
     }
 
     match /aoContent/{contentId} {
-      allow get: if resource.data.status == 'active' || isSuperAdmin();
-      allow list: if isSuperAdmin() || resource.data.status == 'active';
-      allow create, update, delete: if isSuperAdmin();
+      allow get: if resource.data.status == 'active' || isSuperAdmin() || isEC();
+      allow list: if isSuperAdmin() || isEC() || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin() || isEC();
     }
 
     match /aoFaqCategories/{categoryId} {
-      allow get: if resource.data.status == 'active' || isSuperAdmin();
-      allow list: if isSuperAdmin() || resource.data.status == 'active';
-      allow create, update, delete: if isSuperAdmin();
+      allow get: if resource.data.status == 'active' || isSuperAdmin() || isEC();
+      allow list: if isSuperAdmin() || isEC() || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin() || isEC();
     }
 
     match /aoFaqs/{faqId} {
-      allow get: if resource.data.status == 'active' || isSuperAdmin();
-      allow list: if isSuperAdmin() || resource.data.status == 'active';
-      allow create, update, delete: if isSuperAdmin();
+      allow get: if resource.data.status == 'active' || isSuperAdmin() || isEC();
+      allow list: if isSuperAdmin() || isEC() || resource.data.status == 'active';
+      allow create, update, delete: if isSuperAdmin() || isEC();
     }
 
     match /seasons/{seasonId} {

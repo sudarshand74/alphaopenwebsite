@@ -22,10 +22,12 @@ let adminContent = [];
 let adminCategories = [];
 let adminFaqs = [];
 
-function isSuperAdmin() {
+function canManageAo() {
   const authorization = window.alphaOpenAuthorization || {};
   return authorization.role === "Super Admin"
-    || (authorization.roles || []).includes("superAdmin");
+    || (authorization.roles || []).includes("superAdmin")
+    || (authorization.roles || []).includes("ec")
+    || (authorization.access || []).includes("ec");
 }
 
 function number(value, fallback = 0) {
@@ -212,7 +214,7 @@ function renderAdmin() {
 }
 
 async function loadAdmin() {
-  if (!isSuperAdmin() || !byId("aoContentAdminList")) return;
+  if (!canManageAo() || !byId("aoContentAdminList")) return;
   const [contentSnapshot, categorySnapshot, faqSnapshot] = await Promise.all([
     getDocs(collection(db, CONTENT)),
     getDocs(collection(db, CATEGORIES)),
@@ -246,7 +248,7 @@ function resetFaqForm() {
 
 async function saveContent(event) {
   event.preventDefault();
-  if (!isSuperAdmin()) throw new Error("Super Admin access is required.");
+  if (!canManageAo()) throw new Error("EC or Super Admin access is required.");
   const id = byId("aoContentId").value;
   const payload = {
     sectionType: byId("aoContentSection").value,
@@ -282,7 +284,7 @@ async function saveContent(event) {
 
 async function saveCategory(event) {
   event.preventDefault();
-  if (!isSuperAdmin()) throw new Error("Super Admin access is required.");
+  if (!canManageAo()) throw new Error("EC or Super Admin access is required.");
   const id = byId("aoCategoryId").value;
   const payload = {
     name: byId("aoCategoryName").value.trim(),
@@ -300,7 +302,7 @@ async function saveCategory(event) {
 
 async function saveFaq(event) {
   event.preventDefault();
-  if (!isSuperAdmin()) throw new Error("Super Admin access is required.");
+  if (!canManageAo()) throw new Error("EC or Super Admin access is required.");
   const id = byId("aoFaqId").value;
   const payload = {
     categoryId: byId("aoFaqCategory").value,
@@ -354,7 +356,7 @@ function editRecord(type, id) {
 }
 
 async function deleteRecord(type, id) {
-  if (!isSuperAdmin()) throw new Error("Super Admin access is required.");
+  if (!canManageAo()) throw new Error("EC or Super Admin access is required.");
   if (type === "category" && adminFaqs.some((faq) => faq.categoryId === id))
     throw new Error("Move or delete every FAQ in this category before deleting it.");
   const labels = { content: "AO content record", category: "FAQ category", faq: "FAQ" };
