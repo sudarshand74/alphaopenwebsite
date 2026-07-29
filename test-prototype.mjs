@@ -287,6 +287,8 @@ assert(firebaseData.includes("formattedPlayerLabel(playerId, null, record.player
 assert(seasonStructureAdmin.includes("formattedPlayerLabel(player?.playerId,null,nameOf(player))")&&seasonStructureAdmin.includes("captainIdentity"),"Teams and Captains must show Captain Name (Player ID) in the edit dropdown and list");
 assert(seasonStructureAdmin.includes('getDocs(collection(db,"playerPrivate"))')&&seasonStructureAdmin.includes('getDocs(collection(db,"players"))'),"Season Teams must merge private and canonical Player Master names");
 assert(seasonStructureAdmin.includes("Promise.allSettled")&&seasonStructureAdmin.includes("captainPlayerId=team=>"),"Season Teams captain loading must tolerate optional reference failures and legacy captain ID fields");
+assert(seasonBulkImport.includes('"alphaopen:season-data-changed"')&&seasonStructureAdmin.includes('"alphaopen:season-data-changed"'),"A successful season import must refresh Admin season selectors");
+assert(seasonStructureAdmin.includes("loadReferenceData(teamSeason.value)")&&seasonStructureAdmin.includes("loadReferenceData(matchupSeason.value)"),"Season Teams and Matchup Schedule refresh buttons must reload the season list");
 assert(js.includes("Build & Submit Lineup"),"Home lineup action must use the full submission label");
 assert(js.includes('String(season?.status || "").toLowerCase() === "completed"'),"Previous Season selector must include only seasons marked Completed");
 assert(js.includes("resetPreviousSeasonDashboardFilters()")&&js.includes('$("#previousSeasonFilter")?.addEventListener("change"'),"Changing Previous Season must reset all dashboard filters");

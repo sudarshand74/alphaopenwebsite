@@ -526,6 +526,11 @@ async function processImport(event) {
     window.alphaOpenAuthUI?.showMessage(
       `${season.seasonId} bulk upload completed`,
     );
+    window.dispatchEvent(
+      new CustomEvent("alphaopen:season-data-changed", {
+        detail: { seasonId: season.seasonId },
+      }),
+    );
     prepared = null;
     confirmId.disabled = true;
     ack.disabled = true;
