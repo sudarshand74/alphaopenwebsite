@@ -1,0 +1,24 @@
+.page-heading h1,
+.operations-copy h1,
+.legal-page-header h1 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.035em;
+}
+
+#currentSeasonTitle {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+[data-view="current-season"] > .page-heading {
+  margin-bottom: 0;
+}
+
+[data-view="current-season"] > .spring-journey-section {
+  margin-top: 2rem;
+}

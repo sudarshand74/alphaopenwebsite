@@ -14,7 +14,8 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=91">
+  <link rel="stylesheet" href="styles.css?v=92">
+  <link rel="stylesheet" href="page-heading-consistency.css?v=3">
   <link rel="stylesheet" href="lineup-workflow.css?v=1">
   <style>.managed-line-form .player-override-reason{grid-column:1/-1}@media(max-width:760px){.managed-line-form .player-override-reason{grid-column:auto}}</style>
   <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
@@ -101,8 +102,13 @@
     <section class="view active" data-view="home">
       <div class="home-grid content-wrap">
         <section class="dashboard-card welcome-card" id="welcomeCard">
-          <div class="card-top"><div><span class="kicker" id="workspaceKicker">Public Access</span><h2 id="welcomeTitle">Welcome to AlphaOpen</h2><p id="workspaceIdentity" class="workspace-identity" hidden></p><p id="welcomeCopy" class="muted">Follow scores, standings and upcoming league events.</p></div><span class="badge navy" id="roleBadge">Guest</span></div>
+          <div class="card-top"><div><span class="kicker" id="workspaceKicker">Public Access</span><h2 id="welcomeTitle">Welcome to AlphaOpen</h2><p id="workspaceIdentity" class="workspace-identity" hidden></p><p id="welcomeCopy" class="muted">Follow scores, standings, player history and league information on this site.</p></div><span class="badge navy" id="roleBadge">Guest</span></div>
           <div class="quick-actions" id="quickActions"></div>
+          <nav class="guest-resource-links" id="guestResourceLinks" aria-label="Public league resources">
+            <button type="button" data-resource-dialog="seasonScheduleDialog">Season Schedule</button>
+            <button type="button" data-resource-dialog="leagueRulesDialog">League Rules</button>
+            <button type="button" data-resource-dialog="aoValuesDialog">AO Values</button>
+          </nav>
         </section>
 
       </div>
@@ -110,12 +116,11 @@
     </section>
 
     <section class="view content-wrap page-view" data-view="current-season">
-      <a class="season-rules-notice" id="seasonRulesNotice" href="#rules" hidden>Please check Season Rules Here <span aria-hidden="true">&rarr;</span></a>
-      <div class="page-heading"><div><span class="kicker" id="currentSeasonKicker">Current Season · Loading season name…</span><h1 id="currentSeasonTitle">Loading active season…</h1><p id="currentSeasonDescription">Teams, schedule, standings and match results for the active season.</p></div><div class="heading-actions"><label class="active-season-display">Season<select id="currentSeasonFilter" disabled><option>Loading active season…</option></select></label><button type="button" class="secondary" data-route="home">Home</button><button type="button" class="secondary" data-route="season-dashboard">Season Dashboard</button><span class="badge lime" id="currentSeasonStatus">ACTIVE</span></div></div>
-      <section class="spring-journey-section live-season-section"><div class="section-heading"><span class="kicker" id="currentSeasonJourneyLabel">Active season journey</span><h2>Regular Season Standings & Playoffs</h2><p class="muted">Every team begins at zero. Weekly points and the playoff path update from approved results.</p></div><div id="fallSeasonJourney"><div class="dashboard-card empty-state"><b>Loading active-season standings and schedule...</b></div></div></section>
-      <section class="live-season-section"><div id="fallSeasonDashboard"><div class="dashboard-card empty-state"><b>Loading active-season Match Tracker…</b></div></div></section>
-      <section class="spring-rosters-section live-season-section"><div class="section-heading"><span class="kicker" id="currentSeasonTeamsLabel">Active season teams</span><h2>Teams, Captains & Ranks</h2><p class="muted">Ranked rosters are loaded from AlphaOpen records. Player results appear as approved line scores are completed.</p></div><div class="spring-roster-grid" id="fallRosterTeams" data-season-player-filter="fallPlayerFilter" data-season-results-section=".fall-live-results"><div class="dashboard-card empty-state"><b>Loading active-season rosters…</b></div></div></section>
-      <section class="fall-results-section fall-live-results live-season-section"><div class="section-heading"><div><span class="kicker" id="fallMatchesSeasonLabel">Active season matches</span><h2 id="fallMatchesTitle">Matches by Round</h2><p class="muted">Scheduled matchups begin at zero and gain lineup, scheduling, and score details through the season workflow.</p></div></div><div class="spring-result-filters dashboard-card"><label>Week Name<select id="fallWeekFilter" class="filter-select"><option value="all">All weeks</option><option value="F">Final</option><option value="SF">Semifinals</option><option value="QF">Quarterfinals</option><option value="W7">Week 7</option><option value="W6">Week 6</option><option value="W5">Week 5</option><option value="W4">Week 4</option><option value="W3">Week 3</option><option value="W2">Week 2</option><option value="W1">Week 1</option></select></label><label>Team Name<select id="fallTeamFilter" class="filter-select"><option value="all">All teams</option></select></label><label>Roster Player List<select id="fallPlayerFilter" class="filter-select"><option value="all">All roster players</option></select></label><label>Match Status<select id="fallStatusFilter" class="filter-select"><option value="all">All statuses</option><option value="completed">Completed</option><option value="toBeScheduled">To Be Scheduled</option><option value="scheduled">Scheduled</option><option value="canceled">Canceled</option></select></label></div><div id="fallSeasonResults"><div class="dashboard-card empty-state"><b>Loading active season…</b></div></div></section>
+      <div class="page-heading"><div><span class="kicker" id="currentSeasonKicker">Season: Loading active season…</span><h1 id="currentSeasonTitle">Season Dashboards</h1><p id="currentSeasonDescription">View standings, track &amp; view matches.</p></div><div class="heading-actions"><button type="button" class="secondary" data-route="home">Home</button></div></div>
+      <section class="spring-journey-section live-season-section"><div id="fallSeasonJourney"><div class="dashboard-card empty-state"><b>Loading active-season standings and schedule...</b></div></div></section>
+      <section class="live-season-section"><div id="fallSeasonDashboard"><div class="dashboard-card empty-state"><b>Loading Match Status Tracker…</b></div></div></section>
+      <section class="spring-rosters-section live-season-section"><div class="section-heading"><h2>Teams, Captains & Ranks</h2><p class="muted">Ranked rosters are loaded from AlphaOpen records. Player results appear as approved line scores are completed.</p></div><div class="spring-roster-grid" id="fallRosterTeams" data-season-player-filter="fallPlayerFilter" data-season-results-section=".fall-live-results"><div class="dashboard-card empty-state"><b>Loading active-season rosters…</b></div></div></section>
+      <section class="fall-results-section fall-live-results live-season-section"><div class="section-heading"><div><h2 id="fallMatchesTitle">Matches by Round</h2><p class="muted">Scheduled matchups begin at zero and gain lineup, scheduling, and score details through the season workflow.</p></div></div><div class="spring-result-filters dashboard-card"><label>Week Name<select id="fallWeekFilter" class="filter-select"><option value="all">All weeks</option><option value="F">Final</option><option value="SF">Semifinals</option><option value="QF">Quarterfinals</option><option value="W7">Week 7</option><option value="W6">Week 6</option><option value="W5">Week 5</option><option value="W4">Week 4</option><option value="W3">Week 3</option><option value="W2">Week 2</option><option value="W1">Week 1</option></select></label><label>Team Name<select id="fallTeamFilter" class="filter-select"><option value="all">All teams</option></select></label><label>Roster Player List<select id="fallPlayerFilter" class="filter-select"><option value="all">All roster players</option></select></label><label>Match Status<select id="fallStatusFilter" class="filter-select"><option value="all">All statuses</option><option value="completed">Completed</option><option value="toBeScheduled">To Be Scheduled</option><option value="scheduled">Scheduled</option><option value="canceled">Canceled</option></select></label></div><div id="fallSeasonResults"><div class="dashboard-card empty-state"><b>Loading active season…</b></div></div></section>
     </section>
 
     <section class="view content-wrap page-view" data-view="season-dashboard">
@@ -149,7 +154,7 @@
     </section>
 
     <section class="view content-wrap page-view" data-view="history">
-      <div class="page-heading"><div><span class="kicker">Public player dashboard</span><h1>Player History</h1></div><button type="button" class="secondary" data-route="home">Home</button></div>
+      <div class="page-heading"><div><span class="kicker">Player Dashboard</span><h1>Player History</h1></div><button type="button" class="secondary" data-route="home">Home</button></div>
       <div class="dashboard-card history-player-picker"><label>Player Name<select class="filter-select" id="historyPlayerFilter"><option value="">Select a player</option></select></label><label>Season<select class="filter-select" id="historySeasonFilter" aria-label="Filter history by season"><option value="all">All Seasons</option></select></label></div>
       <div class="history-summary" id="historySummary"></div>
       <div class="dashboard-card history-card"><div class="history-head"><div><h2>Playing history</h2><span class="muted">Active and completed published results</span></div></div><div id="historyRows"></div></div>
@@ -255,7 +260,7 @@
     </section>
 
     <section class="view content-wrap page-view ao-page" data-view="ao">
-      <div class="page-heading ao-page-heading"><div><span class="kicker">AlphaOpen</span><h1>About AO</h1><p>Our history, current season, past seasons, and answers to frequently asked questions.</p></div><div class="ao-heading-actions"><button class="primary" type="button" id="jumpToAoFaqs">FAQ</button><button class="secondary" type="button" id="printAoFaqs">Print FAQs</button></div></div>
+      <div class="page-heading ao-page-heading"><div><span class="kicker">AlphaOpen</span><h1>About AO</h1><p>Our history, current season, past seasons, and answers to frequently asked questions.</p></div><div class="ao-heading-actions"><button class="primary" type="button" id="jumpToAoFaqs">FAQ</button></div></div>
       <div id="aoPublicMessage" class="info-box">Loading AlphaOpen information…</div>
       <section class="ao-public-section" aria-labelledby="aoHistoryHeading"><div class="section-heading"><span class="kicker">Our story</span><h2 id="aoHistoryHeading">History</h2></div><div id="aoHistoryList" class="ao-content-list"></div></section>
       <section class="ao-public-section" aria-labelledby="aoCurrentHeading"><div class="section-heading"><span class="kicker">Playing now</span><h2 id="aoCurrentHeading">Current Season</h2></div><div id="aoCurrentSeasonList" class="ao-content-list"></div></section>
@@ -431,7 +436,7 @@
         <div><span class="kicker">AlphaOpen.org · Effective July 29, 2026</span><h1>Participant Agreement &amp; Waiver</h1><p>Assumption of risk, release of liability, and electronic participation agreement.</p></div>
         <button type="button" class="secondary" data-route="home">Return Home</button>
       </header>
-      <div class="legal-alert"><strong>Please read carefully.</strong> This agreement affects legal rights, including the right to sue.</div>
+      <div class="legal-alert"><strong>Please read carefully.</strong> This agreement affects legal rights, including the right to sue. Consult a qualified Georgia attorney before accepting if you have questions about its meaning or effect.</div>
       <article class="legal-document dashboard-card">
         <h2>1. Voluntary recreational participation</h2>
         <p>I voluntarily request to register for, be rostered in, attend, practice for, volunteer with, or participate in the AlphaOpen recreational tennis league and its related matches, practices, playoffs, meetings, social events, communications, and activities (collectively, the “Activities”). I understand that AlphaOpen is organized and administered primarily by unpaid volunteers. Players also participate voluntarily. AlphaOpen does not employ, train, supervise, certify, or warrant the skill, fitness, conduct, or safety of players, captains, officials, volunteers, spectators, or facility personnel.</p>
@@ -442,18 +447,22 @@
         <ul>
           <li>I will not participate while impaired or when illness, injury, weather, court conditions, equipment, or another circumstance makes participation unsafe.</li>
           <li>I am responsible for my health decisions, hydration, medication, protective equipment, transportation, personal property, and medical costs.</li>
+          <li>I am responsible for obtaining any health, accident, disability, automobile, renter’s, homeowner’s, or other insurance I believe is appropriate. AlphaOpen does not promise or provide insurance covering my injury, property, vehicle, equipment, or liability to others.</li>
           <li>I will inspect the court and surrounding area, use suitable equipment, follow facility rules and reasonable safety instructions, and promptly report hazards and injuries.</li>
           <li>I will follow AlphaOpen’s rules and standards of sportsmanship and will not engage in violence, harassment, discrimination, threats, or intentionally unsafe conduct.</li>
         </ul>
         <p>AlphaOpen does not provide medical advice, medical screening, personal coaching, transportation, security, or continuous supervision.</p>
 
         <h2>3. Acknowledgment and assumption of risks</h2>
-        <p>I understand that tennis and related Activities involve known and unknown risks that cannot be eliminated. These include slips, trips, falls, collisions, sudden stops and changes of direction; being struck by a ball, racket, net equipment, person, or object; sprains, strains, fractures, cuts, eye injuries, concussion, cardiac events, serious injury, disability, or death; overexertion, dehydration, heat illness, cold exposure, lightning, severe weather, poor air quality, sun exposure, insects, and animals; hazardous courts and surrounding areas; defective or unsuitable equipment; conduct, mistakes, negligence, or rule violations by other persons; travel; and exposure to communicable illness.</p>
+        <p>I understand that tennis and related Activities involve known and unknown risks that cannot be eliminated. These include slips, trips, falls, collisions, sudden stops and changes of direction; being struck by a ball, racket, net equipment, person, or object; sprains, strains, fractures, cuts, eye injuries, concussion, cardiac events, serious injury, disability, or death; overexertion, dehydration, heat illness, cold exposure, lightning, severe weather, poor air quality, sun exposure, insects, and animals; hazardous courts and surrounding areas; defective or unsuitable equipment; theft, loss, or damage to vehicles, rackets, phones, bags, clothing, and other property; conduct, mistakes, negligence, intentional or criminal acts, or rule violations by other persons; carpools and other travel; and exposure to communicable illness.</p>
+        <p>I understand that risks may arise before, during, or after play and from scheduling, ratings, rankings, roster and lineup decisions, communications, event changes or cancellations, facility selection, volunteer supervision, emergency response, or the acts or omissions of players, spectators, facility personnel, and other third parties.</p>
         <p>I knowingly and voluntarily accept and assume all inherent and other risks of the Activities, whether described above or not, including risks arising from the ordinary negligence of a Released Party, to the fullest extent permitted by applicable law.</p>
 
         <h2>4. Release and waiver of liability</h2>
         <p>In consideration for being allowed to participate, I, for myself and for my heirs, estate, personal representatives, guardians, successors, and assigns, release and forever discharge AlphaOpen.org and the unincorporated AlphaOpen recreational tennis association; its current and former Executive Committee members, officers, captains, coordinators, administrators, neutral approvers, scorekeepers, officials, agents, and other volunteers; other participating players and teams; and, as intended third-party beneficiaries, owners, operators, managers, sponsors, and licensors of facilities used for an Activity (collectively, the “Released Parties”).</p>
-        <p>This release applies to claims, demands, causes of action, damages, losses, costs, or expenses for bodily injury, illness, disability, death, property damage, or other loss arising out of or relating to an Activity, including a claim alleging the <strong>ordinary negligence</strong> of a Released Party, to the fullest extent permitted by law.</p>
+        <div class="legal-alert"><strong>Specific release of EC members, captains, and volunteers:</strong> I understand and agree that AlphaOpen Executive Committee members, captains, coordinators, administrators, officials, and other volunteers are unpaid individuals assisting a voluntary recreational league. To the fullest extent permitted by Georgia law, they are not personally responsible or liable to me for bodily or personal injury, illness, disability, death, property damage, theft, economic loss, or other damages arising out of or relating to an Activity, including damages alleged to have resulted from their <strong>ordinary negligence</strong>.</div>
+        <p>This release applies to all claims, demands, causes of action, damages, losses, costs, or expenses arising out of or relating to an Activity, whether caused by an act, omission, decision, condition, or occurrence, including claims concerning scheduling, team formation, rankings, rosters, lineups, rules enforcement, facility or court conditions, equipment, weather decisions, communications, supervision, first-aid or emergency decisions, transportation arranged informally among participants, and the <strong>ordinary negligence</strong> of a Released Party, to the fullest extent permitted by law.</p>
+        <p>The Released Parties are not insurers or guarantors of any participant’s safety or property. I remain responsible for safeguarding my vehicle, equipment, valuables, and other belongings and for any injury or property damage I cause to another person.</p>
         <p>This Agreement does not release liability that applicable law does not permit to be released, including liability finally determined to result from gross negligence, reckless or willful misconduct, or intentional harm.</p>
 
         <h2>5. Covenant not to sue and indemnity</h2>
@@ -468,6 +477,7 @@
 
         <h2>8. No warranties; independent facilities</h2>
         <p>Activities may occur at facilities AlphaOpen does not own, operate, inspect, or control. AlphaOpen does not warrant the condition, availability, accessibility, lighting, security, staffing, or fitness of a facility. Schedules, rosters, rankings, results, and website information may contain errors or change without notice. To the fullest extent permitted by law, the Activities and website are provided “as is” and “as available,” without warranties of any kind.</p>
+        <p>Facility owners and personnel, vendors, spectators, other players, drivers, and social-event hosts are independent third parties and are not AlphaOpen employees or agents merely because they assist with or are present at an Activity. AlphaOpen does not assume custody of personal property and is not a bailee for items brought to an Activity.</p>
 
         <h2>9. Rules, discipline, and disputes</h2>
         <p>I will first submit league-administration disputes through AlphaOpen’s published rules and Executive Committee procedures. This does not prevent anyone from seeking emergency assistance, reporting unlawful conduct, cooperating with authorities, or exercising a right that cannot legally be limited.</p>
@@ -593,6 +603,32 @@
     </form>
   </dialog>
 
+  <dialog id="seasonScheduleDialog" class="resource-dialog" aria-labelledby="seasonScheduleDialogTitle">
+    <form method="dialog">
+      <div class="dialog-head"><div><span class="kicker">AlphaOpen Fall 2026</span><h2 id="seasonScheduleDialogTitle">Season Schedule</h2></div><button value="cancel" aria-label="Close Season Schedule">×</button></div>
+      <div class="resource-image-stack">
+        <img src="assets/ao-fall-2026-calendar.jpg" alt="AlphaOpen Fall 2026 match calendar">
+        <img src="assets/ao-fall-2026-season-schedule.jpg" alt="AlphaOpen Fall 2026 overall season schedule">
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="leagueRulesDialog" class="resource-dialog resource-rules-dialog" aria-labelledby="leagueRulesDialogTitle">
+    <form method="dialog">
+      <div class="dialog-head"><div><span class="kicker">AlphaOpen</span><h2 id="leagueRulesDialogTitle">League Rules</h2></div><button value="cancel" aria-label="Close League Rules">×</button></div>
+      <iframe class="resource-rules-embed" title="AlphaOpen League Rules" src="https://docs.google.com/spreadsheets/d/1C3jAIwqstSheV3XRP6Mzko4VuORZvLA_Vpj8DH2Uo_Y/htmlembed?gid=1352745040&amp;single=true&amp;widget=false&amp;headers=false" loading="lazy"></iframe>
+    </form>
+  </dialog>
+
+  <dialog id="aoValuesDialog" class="resource-dialog" aria-labelledby="aoValuesDialogTitle">
+    <form method="dialog">
+      <div class="dialog-head"><div><span class="kicker">AlphaOpen</span><h2 id="aoValuesDialogTitle">AO Values</h2></div><button value="cancel" aria-label="Close AO Values">×</button></div>
+      <div class="resource-image-stack">
+        <img src="assets/ao-values.jpg" alt="AlphaOpen values: excellence, sportsmanship, and community">
+      </div>
+    </form>
+  </dialog>
+
   <nav class="bottom-nav" aria-label="Mobile navigation">
     <button data-route="home" class="active"><span>⌂</span>Home</button>
     <button data-route="current-season"><span>◫</span>Active</button>
@@ -646,7 +682,7 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=135"></script>
+  <script src="app.js?v=142"></script>
   <script src="lineup-bootstrap.js?v=20"></script>
   <script src="approval-bootstrap.js?v=17"></script>
   <script src="lineup-reset-bootstrap.js?v=3"></script>

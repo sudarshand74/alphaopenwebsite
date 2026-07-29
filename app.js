@@ -119,7 +119,7 @@ function renderWorkspace(account) {
   $("#roleBadge").textContent = account.role;
   const copy = {
     Guest:
-      "Follow scores, standings, player history and league information without an account.",
+      "Follow scores, standings, player history and league information on this site.",
     "Super Admin":
       "Manage every season setting, account, roster, approval and result.",
     EC: "Review season operations, rosters, replacements and data quality.",
@@ -1029,12 +1029,8 @@ function renderFallSeason() {
     activeWorkspaceSeason?.seasonId ||
     "";
   if (!fallResults) return;
-  if ($("#fallMatchesSeasonLabel"))
-    $("#fallMatchesSeasonLabel").textContent = seasonId
-      ? `Season · ${seasonName} (${seasonId})`
-      : `Season · ${seasonName}`;
   if ($("#fallMatchesTitle"))
-    $("#fallMatchesTitle").textContent = `${seasonName} Matches by Round`;
+    $("#fallMatchesTitle").textContent = "Matches by Round";
   if (!historyDataLoaded) {
     fallResults.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active season…</b></div>';
     return;
@@ -1045,8 +1041,6 @@ function renderFallSeason() {
     if (rosters) rosters.innerHTML = markup;
     fallResults.innerHTML = markup;
     filters.forEach((filter) => { filter.disabled = true; });
-    if ($("#fallMatchesSeasonLabel"))
-      $("#fallMatchesSeasonLabel").textContent = "Season · Not configured";
     if ($("#fallMatchesTitle"))
       $("#fallMatchesTitle").textContent = "Matches by Round";
     return;
@@ -1103,7 +1097,7 @@ function renderSeasonDashboard() {
     return;
   }
   if (!fallSeasonData) {
-    const markup = '<div class="dashboard-card empty-state"><b>No active season is configured</b><p>The Match Tracker will appear after an active season is published.</p></div>';
+    const markup = '<div class="dashboard-card empty-state"><b>No active season is configured</b><p>The Match Status Tracker will appear after an active season is published.</p></div>';
     panels.forEach((target) => { target.innerHTML = markup; });
     return;
   }
@@ -1178,7 +1172,7 @@ function renderSeasonDashboard() {
     return `<details class="season-dashboard-week"><summary>${summary}</summary><div class="season-dashboard-drilldown">${drilldownRows}${totalRow}</div></details>`;
   }).join("");
   const grand = weeks.flatMap(([, matchups]) => matchups.map(summarizeMatchup)).reduce((total, row) => ({ completed: total.completed + row.completed, scheduled: total.scheduled + row.scheduled, tbs: total.tbs + row.tbs, total: total.total + row.total, homePoints: total.homePoints + row.homePoints, awayPoints: total.awayPoints + row.awayPoints }), { completed: 0, scheduled: 0, tbs: 0, total: 0, homePoints: 0, awayPoints: 0 });
-  panel.innerHTML = `<div class="dashboard-card season-dashboard-card"><div class="journey-card-heading"><div><h2>${safeText(fallSeasonData.season?.name || fallSeasonData.season?.seasonId || "Active Season")} Match Tracker</h2><p>Expand a week to view its team matchups. Weeks awaiting all lineups remain summary-only.</p></div><span class="badge navy">${weeks.length} weeks</span></div><div class="season-dashboard-table">${columnHeader}${weekCards}<div class="season-dashboard-grid season-dashboard-grand"><b>Grand Total</b><span></span><span></span><span></span><strong>${grand.completed}</strong><strong>${grand.scheduled}</strong><strong>${grand.tbs}</strong><strong>${grand.total}</strong><span></span><span></span></div></div></div>`;
+  panel.innerHTML = `<div class="dashboard-card season-dashboard-card"><div class="journey-card-heading"><div><h2>Match Status Tracker</h2><p>Expand a week to view its team matchups. Weeks awaiting all lineups remain summary-only.</p></div></div><div class="season-dashboard-table">${columnHeader}${weekCards}<div class="season-dashboard-grid season-dashboard-grand"><b>Grand Total</b><span></span><span></span><span></span><strong>${grand.completed}</strong><strong>${grand.scheduled}</strong><strong>${grand.tbs}</strong><strong>${grand.total}</strong><span></span><span></span></div></div></div>`;
   panels.slice(1).forEach((target) => target.innerHTML = panel.innerHTML);
   panels.forEach((target) =>
     $$("[data-dashboard-status]", target).forEach((button) =>
@@ -2121,43 +2115,12 @@ function seasonDisplayName(season) {
 
 function updateCurrentSeasonContext(season) {
   const name = seasonDisplayName(season);
-  const headingName = season
-    ? (/\bseason$/i.test(name) ? name : `${name} Season`)
-    : "Season unavailable";
   const seasonId = season?.seasonId || "";
-  const status = season
-    ? String(season.status || "active").toUpperCase()
-    : "UNAVAILABLE";
-  const filter = $("#currentSeasonFilter");
-  if (filter)
-    filter.replaceChildren(
-      Object.assign(document.createElement("option"), {
-        value: seasonId,
-        textContent: seasonId ? `${name} (${seasonId})` : name,
-      }),
-    );
-  if ($("#currentSeasonTitle")) $("#currentSeasonTitle").textContent = headingName;
+  if ($("#currentSeasonTitle")) $("#currentSeasonTitle").textContent = "Season Dashboards";
   if ($("#currentSeasonKicker"))
-    $("#currentSeasonKicker").textContent = season
-      ? `Current Season · ${name}`
-      : "Current Season · Season unavailable";
+    $("#currentSeasonKicker").textContent = `Season: ${season ? name : "No active season"}`;
   if ($("#currentSeasonDescription"))
-    $("#currentSeasonDescription").textContent = seasonId
-      ? `${seasonId} teams, schedule, standings and match results.`
-      : "No active season is currently configured.";
-  if ($("#currentSeasonStatus")) {
-    $("#currentSeasonStatus").textContent = status;
-    $("#currentSeasonStatus").classList.toggle("lime", Boolean(season));
-    $("#currentSeasonStatus").classList.toggle("gray", !season);
-  }
-  if ($("#currentSeasonJourneyLabel"))
-    $("#currentSeasonJourneyLabel").textContent = season
-      ? `${name} season journey`
-      : "Season journey";
-  if ($("#currentSeasonTeamsLabel"))
-    $("#currentSeasonTeamsLabel").textContent = season
-      ? `${name} teams`
-      : "Season teams";
+    $("#currentSeasonDescription").textContent = "View standings, track & view matches.";
   if ($("#seasonDashboardDescription"))
     $("#seasonDashboardDescription").textContent =
       `Weekly completion, scheduling readiness, and team points for ${name}.`;
@@ -2166,7 +2129,6 @@ function updateCurrentSeasonContext(season) {
     (seasonId === "AO-F-2026"
       ? "https://docs.google.com/spreadsheets/d/1C3jAIwqstSheV3XRP6Mzko4VuORZvLA_Vpj8DH2Uo_Y/htmlembed?gid=1352745040&single=true&widget=false&headers=false"
       : "");
-  if ($("#seasonRulesNotice")) $("#seasonRulesNotice").hidden = !rulesUrl;
   if ($("#seasonRulesEmbed") && rulesUrl) {
     $("#seasonRulesEmbed").src = rulesUrl;
     $("#seasonRulesEmbed").title = `${name} Rules`;
@@ -2436,6 +2398,10 @@ $("#openFooterLogo")?.addEventListener("click", () =>
 );
 $("#jumpToAoFaqs")?.addEventListener("click", () =>
   $("#aoFaqHeading")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+);
+$$("[data-resource-dialog]").forEach((button) =>
+  button.addEventListener("click", () =>
+    document.getElementById(button.dataset.resourceDialog)?.showModal()),
 );
 $$("[data-admin-panel]").forEach((button) =>
   button.addEventListener("click", () =>
