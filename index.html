@@ -15,8 +15,8 @@
   <link rel="icon" href="assets/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="stylesheet" href="styles.css?v=92">
-  <link rel="stylesheet" href="page-heading-consistency.css?v=3">
-  <link rel="stylesheet" href="header-footer-consistency.css?v=6">
+  <link rel="stylesheet" href="page-heading-consistency.css?v=6">
+  <link rel="stylesheet" href="header-footer-consistency.css?v=7">
   <link rel="stylesheet" href="lineup-workflow.css?v=1">
   <style>.managed-line-form .player-override-reason{grid-column:1/-1}@media(max-width:760px){.managed-line-form .player-override-reason{grid-column:auto}}</style>
   <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
@@ -113,7 +113,7 @@
     </section>
 
     <section class="view content-wrap page-view" data-view="current-season">
-      <div class="page-heading"><div><span class="kicker" id="currentSeasonKicker">Season: Loading active season…</span><h1 id="currentSeasonTitle">Season Dashboards</h1><p id="currentSeasonDescription">View standings, track &amp; view matches.</p></div><div class="heading-actions"><button type="button" class="secondary" data-route="home">Home</button></div></div>
+      <div class="page-heading"><div><span class="kicker" id="currentSeasonKicker">Season: Loading active season…</span><h1 id="currentSeasonTitle">Season Dashboards</h1><p id="currentSeasonDescription">View standings, track &amp; view matches.</p></div><div class="page-heading-actions"><button type="button" class="secondary compact-button" id="refreshCurrentSeason">Refresh</button><button type="button" class="secondary compact-button" data-route="home">Home</button></div></div>
       <section class="spring-journey-section live-season-section"><div id="fallSeasonJourney"><div class="dashboard-card empty-state"><b>Loading active-season standings and schedule...</b></div></div></section>
       <section class="live-season-section"><div id="fallSeasonDashboard"><div class="dashboard-card empty-state"><b>Loading Match Status Tracker…</b></div></div></section>
       <section class="spring-rosters-section live-season-section"><div class="section-heading"><h2>Teams, Captains & Ranks</h2><p class="muted">Ranked rosters are loaded from AlphaOpen records. Player results appear as approved line scores are completed.</p></div><div class="spring-roster-grid" id="fallRosterTeams" data-season-player-filter="fallPlayerFilter" data-season-results-section=".fall-live-results"><div class="dashboard-card empty-state"><b>Loading active-season rosters…</b></div></div></section>
@@ -126,12 +126,12 @@
     </section>
 
     <section class="view content-wrap page-view" data-view="matches">
-      <div class="page-heading"><div><span class="kicker" id="matchesSeasonLabel">Season: Loading active season…</span><h1>Matches</h1><p>Today’s schedule, upcoming matches, and completed results.</p></div><div class="page-heading-actions"><button type="button" class="secondary compact-button" data-route="home">Home</button><button type="button" class="secondary compact-button" id="refreshMatches">Refresh</button><span class="badge navy">Live</span></div></div>
+      <div class="page-heading"><div><span class="kicker" id="matchesSeasonLabel">Season: Loading active season…</span><h1>Matches</h1><p>Today’s schedule, upcoming matches, and completed results.</p></div><div class="page-heading-actions"><button type="button" class="secondary compact-button" id="refreshMatches">Refresh</button><button type="button" class="secondary compact-button" data-route="home">Home</button></div></div>
       <div id="matchesPage" class="match-management-list"><div class="dashboard-card empty-state"><b>Loading matches…</b></div></div>
     </section>
 
     <section class="view content-wrap page-view" data-view="schedule">
-      <div class="page-heading spring-season-heading"><div><div class="season-title-line"><h1 id="previousSeasonTitle">Previous Season</h1><span class="badge gray">Completed / Read Only</span></div><p>Completed regular season and playoff results loaded from AlphaOpen records.</p></div><div class="heading-actions"><label class="active-season-display">Completed season<select id="previousSeasonFilter"><option value="">Select Completed Season</option></select></label><button type="button" class="secondary" data-route="home">Home</button></div></div>
+      <div class="page-heading spring-season-heading previous-season-heading"><div><div class="season-title-line"><h1 id="previousSeasonTitle">Previous Season</h1><span class="badge gray">Completed / Read Only</span></div><p>View Season Dashboards and Playoff Results for Completed Seasons of AlphaOpen.</p></div><div class="page-heading-actions"><select id="previousSeasonFilter" class="completed-season-select" aria-label="Select completed season"><option value="">Select Completed Season</option></select><button type="button" class="secondary compact-button" data-route="home">Home</button></div></div>
       <section class="fall-champion-card" id="spring2026Champion" hidden><div><span class="kicker light">Spring 2026 Champion</span><h2>Team Rohit</h2><p>Congratulations to Team Rohit, winners of the AlphaOpen Spring 2026 season.</p></div><div class="champion-mark" aria-hidden="true">🏆</div></section>
       <section class="dashboard-card fall-stats-card" id="spring2026Highlights" hidden><div class="card-top"><div><span class="kicker">Summary of the season</span><h2>Season highlights</h2><p class="muted">The people, competition, and community moments that defined Spring 2026.</p></div></div><div class="fall-stat-grid" id="springSeasonStats"><div><b>3 Kattas · 1 MSP · 1 EOS</b><span>Community</span></div><div><b>Amit Kulkarni · Season MVP</b><span>Excellence</span></div><div><b>60 of 165 matches in 3 sets</b><span>Sportsmanship</span></div></div></section>
       <section class="spring-journey-section"><div class="section-heading"><span class="kicker" id="previousSeasonJourneyLabel">Completed season journey</span><h2>Regular Season Standings & Playoffs</h2><p class="muted">Weekly points establish the regular-season seed; the playoff path shows how the championship was decided.</p></div><div id="springSeasonJourney"><div class="dashboard-card empty-state"><b>Loading standings and playoff results...</b></div></div></section>
@@ -151,7 +151,7 @@
     </section>
 
     <section class="view content-wrap page-view" data-view="history">
-      <div class="page-heading"><div><span class="kicker">Player Dashboard</span><h1>Player History</h1></div><button type="button" class="secondary" data-route="home">Home</button></div>
+      <div class="page-heading"><div><span class="kicker">Player Dashboard</span><h1>Player History</h1><p>View AlphaOpen players’ match history across seasons.</p></div><div class="page-heading-actions"><button type="button" class="secondary compact-button" data-route="home">Home</button></div></div>
       <div class="dashboard-card history-player-picker"><label>Player Name<select class="filter-select" id="historyPlayerFilter"><option value="">Select a player</option></select></label><label>Season<select class="filter-select" id="historySeasonFilter" aria-label="Filter history by season"><option value="all">All Seasons</option></select></label></div>
       <div class="history-summary" id="historySummary"></div>
       <div class="dashboard-card history-card"><div class="history-head"><div><h2>Playing history</h2><span class="muted">Active and completed published results</span></div></div><div id="historyRows"></div></div>
@@ -257,8 +257,8 @@
     </section>
 
     <section class="view content-wrap page-view ao-page" data-view="ao">
-      <div class="page-heading ao-page-heading"><div><span class="kicker">AlphaOpen</span><h1>About AO</h1><p>Our history, current season, past seasons, and answers to frequently asked questions.</p></div><div class="ao-heading-actions"><button class="primary" type="button" id="jumpToAoFaqs">FAQ</button></div></div>
-      <div id="aoPublicMessage" class="info-box">Loading AlphaOpen information…</div>
+      <div class="page-heading ao-page-heading"><div><span class="kicker">AlphaOpen</span><h1>About AO</h1><p>Our history, current season, past seasons, and answers to frequently asked questions.</p></div><div class="page-heading-actions"><button class="secondary compact-button" type="button" id="jumpToAoFaqs">FAQ</button><button type="button" class="secondary compact-button" data-route="home">Home</button></div></div>
+      <div id="aoPublicMessage" class="info-box" hidden></div>
       <section class="ao-public-section" aria-labelledby="aoHistoryHeading"><div class="section-heading"><span class="kicker">Our story</span><h2 id="aoHistoryHeading">History</h2></div><div id="aoHistoryList" class="ao-content-list"></div></section>
       <section class="ao-public-section" aria-labelledby="aoCurrentHeading"><div class="section-heading"><span class="kicker">Playing now</span><h2 id="aoCurrentHeading">Current Season</h2></div><div id="aoCurrentSeasonList" class="ao-content-list"></div></section>
       <section class="ao-public-section" aria-labelledby="aoPastHeading"><div class="section-heading"><span class="kicker">Season archive</span><h2 id="aoPastHeading">Past Seasons</h2></div><div id="aoPastSeasonsList" class="ao-content-list ao-past-grid"></div></section>
@@ -679,15 +679,15 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=144"></script>
+  <script src="app.js?v=145"></script>
   <script src="lineup-bootstrap.js?v=20"></script>
   <script src="approval-bootstrap.js?v=17"></script>
   <script src="lineup-reset-bootstrap.js?v=3"></script>
   <script src="ec-lineup-status-bootstrap.js?v=2"></script>
   <script src="match-management-bootstrap.js?v=34"></script>
   <script src="poster-generator.js?v=4"></script>
-  <script type="module" src="ao-content.js?v=2"></script>
-  <script type="module" src="runtime-loader.js?v=97"></script>
+  <script type="module" src="ao-content.js?v=3"></script>
+  <script type="module" src="runtime-loader.js?v=98"></script>
   <script src="pwa.js?v=26"></script>
   <dialog id="resetSeasonDialog"><form id="resetSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Destructive operation</span><h2>Reset season data</h2></div><button type="button" id="closeResetSeason" aria-label="Close">×</button></div><p class="muted">This keeps the Season Master and all global users/players, but permanently removes every operational and public child record for the selected season.</p><div class="info-box" id="resetSeasonScope"></div><label class="wide">Type the confirmation phrase<input id="resetSeasonConfirmation" autocomplete="off" spellcheck="false"></label><label class="check-row"><input id="resetSeasonAcknowledgement" type="checkbox"> I understand that teams, memberships, rosters, schedules, lineups, scores, standings, approvers, audits and published season data will be deleted.</label><div class="info-box" id="resetSeasonMessage">No data has been changed.</div><div class="form-actions"><button type="button" class="secondary" id="cancelResetSeason">Cancel</button><button type="submit" class="primary danger-button" id="confirmResetSeason" disabled>Delete season data</button></div></form></dialog>
 </body>

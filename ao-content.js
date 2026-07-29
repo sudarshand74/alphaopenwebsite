@@ -123,7 +123,8 @@ function renderPublicFaqs(categories, faqs) {
 
 async function loadPublicAo() {
   if (!byId("aoPublicMessage")) return;
-  byId("aoPublicMessage").textContent = "Loading AlphaOpen information…";
+  byId("aoPublicMessage").hidden = true;
+  byId("aoPublicMessage").textContent = "";
   const active = (name, maximum) =>
     getDocs(query(collection(db, name), where("status", "==", "active"), limit(maximum)));
   const [contentSnapshot, categorySnapshot, faqSnapshot] = await Promise.all([
@@ -137,8 +138,6 @@ async function loadPublicAo() {
   const faqs = map(faqSnapshot);
   renderPublicContent(content);
   renderPublicFaqs(categories, faqs);
-  byId("aoPublicMessage").textContent =
-    `${content.length} AO information record${content.length === 1 ? "" : "s"} and ${faqs.length} active FAQ${faqs.length === 1 ? "" : "s"}.`;
 }
 
 function adminRow(record, type, label, detail) {
@@ -399,6 +398,7 @@ byId("printAoFaqsInline")?.addEventListener("click", printFaqs);
 
 window.addEventListener("alphaopen:route-changed", (event) => {
   if (event.detail?.route === "ao") loadPublicAo().catch((error) => {
+    byId("aoPublicMessage").hidden = false;
     byId("aoPublicMessage").textContent = `About AO information is unavailable: ${error.message}`;
   });
 });
@@ -409,6 +409,7 @@ window.addEventListener("alphaopen:admin-panel-changed", (event) => {
 });
 onAuthStateChanged(auth, () => {
   if (location.hash === "#ao") loadPublicAo().catch((error) => {
+    byId("aoPublicMessage").hidden = false;
     byId("aoPublicMessage").textContent = `About AO information is unavailable: ${error.message}`;
   });
 });

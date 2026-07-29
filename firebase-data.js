@@ -238,7 +238,7 @@ async function loadGlobalActiveSeasonDashboard({ includeCompleted = false } = {}
       window.alphaOpenDataUI?.applyHistoryData(
         includeCompleted ? publishedHistorySeasons : [],
       );
-      return;
+      return { ok: true };
     }
     let dashboard = await loadPublicSeasonDashboard(seasonId);
     const refreshed = await publishPublicSeasonDashboard(seasonId).catch((error) => {
@@ -269,11 +269,15 @@ async function loadGlobalActiveSeasonDashboard({ includeCompleted = false } = {}
         ]
       : [dashboard];
     window.alphaOpenDataUI?.applyHistoryData(seasons);
+    return { ok: true };
   } catch (error) {
     console.error("Global active-season dashboard load failed", error);
+    const message =
+      error.message || "The global active-season dashboard could not be loaded.";
     window.alphaOpenDataUI?.showHistoryError(
-      error.message || "The global active-season dashboard could not be loaded.",
+      message,
     );
+    return { ok: false, message };
   }
 }
 
@@ -1296,6 +1300,13 @@ window.addEventListener("alphaopen:refresh-matches", async () => {
       detail: { ok: false, message: error.message || "Please try again." }
     }));
   }
+});
+
+window.addEventListener("alphaopen:refresh-current-season", async () => {
+  const result = await loadGlobalActiveSeasonDashboard();
+  window.dispatchEvent(new CustomEvent("alphaopen:current-season-refreshed", {
+    detail: result,
+  }));
 });
 
 window.addEventListener("alphaopen:admin-panel-changed", () => {

@@ -2545,6 +2545,21 @@ $("#refreshMatches")?.addEventListener("click", () => {
         '<div class="dashboard-card empty-state"><b>Refreshing matches…</b></div>';
   window.dispatchEvent(new CustomEvent("alphaopen:refresh-matches"));
 });
+$("#refreshCurrentSeason")?.addEventListener("click", () => {
+  const button = $("#refreshCurrentSeason");
+  button.disabled = true;
+  button.textContent = "Refreshing…";
+  window.dispatchEvent(new CustomEvent("alphaopen:refresh-current-season"));
+});
+window.addEventListener("alphaopen:current-season-refreshed", (event) => {
+  const button = $("#refreshCurrentSeason");
+  if (button) {
+    button.disabled = false;
+    button.textContent = "Refresh";
+  }
+  if (!event.detail?.ok)
+    showToast(event.detail?.message || "Season dashboards could not be refreshed.");
+});
 window.addEventListener("alphaopen:matches-refreshed", (event) => {
   const button = $("#refreshMatches");
   if (button) {

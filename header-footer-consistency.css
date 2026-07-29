@@ -21,9 +21,15 @@
 
 .app-header {
   height: 82px;
-  border-bottom: 4px solid var(--lime);
+  border-bottom: 0;
   color: #fff;
   backdrop-filter: none;
+}
+
+.site-footer {
+  margin-bottom: 0;
+  border-top: 0;
+  border-bottom: 0;
 }
 
 .brand-button {
