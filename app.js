@@ -105,7 +105,7 @@ function setAccount(key, announce = false) {
 
 function renderWorkspace(account) {
   $("#workspaceKicker").textContent =
-    account.role === "Guest" ? "Public league" : `${account.role} workspace`;
+    account.role === "Guest" ? "Public Access" : `${account.role} workspace`;
   $("#welcomeTitle").textContent =
     account.role === "Guest"
       ? "Welcome to AlphaOpen"
@@ -310,6 +310,14 @@ function bindRoutes(root = document) {
           }
         }
         navigate(button.dataset.route);
+        if (button.dataset.scrollTarget) {
+          requestAnimationFrame(() => {
+            document.getElementById(button.dataset.scrollTarget)?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          });
+        }
         button.closest("details")?.removeAttribute("open");
       });
     }
@@ -2409,7 +2417,7 @@ window.alphaOpenAuthUI = {
     pendingApprovalLineupCount = undefined;
     delete accounts.firebaseUser;
     setAccount("guest", announce);
-    $("#authStatus").textContent = "Guest access";
+    $("#authStatus").textContent = "Public Access Site";
   },
   setStatus(message) {
     $("#authStatus").textContent = message;
@@ -2423,6 +2431,12 @@ window.alphaOpenAuthUI = {
 };
 
 bindRoutes();
+$("#openFooterLogo")?.addEventListener("click", () =>
+  $("#footerLogoDialog")?.showModal(),
+);
+$("#jumpToAoFaqs")?.addEventListener("click", () =>
+  $("#aoFaqHeading")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+);
 $$("[data-admin-panel]").forEach((button) =>
   button.addEventListener("click", () =>
     setAdminPanel(button.dataset.adminPanel),

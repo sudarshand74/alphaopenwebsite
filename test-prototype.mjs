@@ -51,6 +51,8 @@ assert(firebaseClient.includes('"alphaopen-production"')&&firebaseClient.include
 assert(serviceWorker.includes('url.pathname.startsWith("/__/")'),"The service worker must never intercept Firebase Hosting reserved configuration URLs");
 
 for (const token of ["Â","â","Ã"]) assert(!`${html}${js}${css}`.includes(token),`Mojibake token found: ${token}`);
+assert(js.includes('"Public Access Site"')&&firebaseAuth.includes('"Public Access Site"'),"Public sessions must be labeled Public Access Site");
+assert(html.includes('href="https://www.facebook.com/"')&&html.includes('aria-label="Visit Facebook"'),"Footer Facebook icon must link to Facebook");
 for (const id of ["authStatus","profileName","profileRole","springRosterTeams","springSeasonResults","springWeekFilter","springTeamFilter","standingsRows","historyRows","lineupRows","approvalQueue","lineupResetSeason","lineupResetWeek","lineupResetHomeTeam","lineupResetForm","resetApprovedLineups","rosterRows","signInDialog","registrationPendingDialog","registrationPendingMessage","acknowledgeRegistrationPending","registrationBlockedDialog","registrationBlockedMessage","acknowledgeRegistrationBlocked","createSeasonDialog","createSeasonForm","seasonDialogTitle","seasonStatus","seasonAdminList","refreshActivePublicDashboard","publicDashboardRefreshMessage","playerMasterCard","playerMasterPanel","playerMasterSearch","venueManagementPanel","venueMasterSearch","venueMasterList","editVenueDialog","editVenueForm","editVenueId","editVenueName","editVenueStatus","userManagementSearch","addPlayerDialog","importPlayersDialog","editPlayerDialog","editPlayerId","editPlayerEmail","playerImportFile","openRegisteredUsers","registeredUsersCard","registeredUsersPanel","refreshRegisteredUsers","manageUserDialog","manageActiveSeasonLabel","managedPastSeasons","scoreDialog","seasonTeamsSeason","seasonTeamsList","seasonTeamDialog","seasonMatchupsSeason","seasonMatchupsList","seasonMatchupDialog"]) assert(html.includes(`id="${id}"`),`Missing #${id}`);
 assert(!html.includes('id="matchList"')&&!html.includes('Match browser'),"Duplicate Match Browser section must remain removed");
 for (const removedId of ["homeIdentityAvatar","homeIdentityStatus","homeIdentityName","homeIdentityEmail","homeAccessLevel"]) assert(!html.includes(`id="${removedId}"`),`Removed identity strip field remains: #${removedId}`);
@@ -64,6 +66,12 @@ assert(!html.includes('id="communityCarousel"')&&!html.includes('class="communit
 assert(!js.includes("initCommunityCarousel"),"Removed carousel JavaScript must not remain");
 assert(!css.includes(".community-carousel")&&!css.includes(".carousel-control")&&!css.includes(".carousel-dots"),"Removed carousel CSS must not remain");
 assert(css.includes('.view[data-view="home"] .home-grid')&&css.includes("margin-top:0"),"Home cards need non-overlapping spacing after carousel removal");
+assert(html.includes('id="workspaceKicker">Public Access')&&js.includes('? "Public Access"'),"Guest home title must use Public Access");
+assert(css.includes('.view[data-view="home"] .home-grid{margin-top:0;min-height:0'),"Public home must not force viewport-height whitespace");
+assert(html.includes('id="openFooterLogo"')&&html.includes('id="footerLogoDialog"')&&js.includes('$("#footerLogoDialog")?.showModal()'),"Footer logo must open an enlarged dialog");
+assert(html.includes('id="jumpToAoFaqs"')&&html.includes('data-scroll-target="aoFaqHeading"'),"About and footer FAQ controls must target the FAQ section");
+assert(js.includes("button.dataset.scrollTarget")&&js.includes("scrollIntoView"),"Footer section links must scroll to their target");
+assert(js.includes('$("#jumpToAoFaqs")?.addEventListener'),"About FAQ button must work independently of remote content loading");
 assert(js.includes("No AO playing history found for ${safeText(selectedPlayerName)}"),"Player History must name the selected player in the AO empty state");
 const userFacingCopy = [html, js, runtimeLoader, rosterAdminShared, identityReconciliation, lineupApproverAdmin, venueAdmin, seasonStructureAdmin, seasonBulkImport].join("\n");
 for (const forbiddenCopy of ["Loading Firebase","No Firebase","from Firebase","to Firebase","Firebase backend","Firebase line","Firebase roster","Firebase scores","Firebase data could","Firebase standings","Firebase disabled","Firebase session","Firebase UID"]) {

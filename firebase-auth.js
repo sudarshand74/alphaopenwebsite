@@ -307,7 +307,7 @@ async function startGoogleSignIn() {
   try {
     await signInWithPopup(auth, provider);
   } catch (error) {
-    ui.setStatus("Guest access");
+    ui.setStatus("Public Access Site");
     ui.showMessage(friendlyAuthError(error));
   } finally {
     continueButton.disabled = false;
