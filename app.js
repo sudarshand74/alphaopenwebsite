@@ -547,9 +547,7 @@ function openSpringPlayerMatches(playerName) {
 }
 function openSeasonPlayerMatches(playerName, filterId, resultsSelector) {
   const filter = $(`#${filterId}`),
-    key = normalizeSpringPlayer(
-      String(playerName || "").replace(/\s*\([^)]*\)\s*$/, ""),
-    );
+    key = normalizeSpringPlayer(playerName);
   if (!filter || !key) return;
   filter.value = key;
   filterId === "fallPlayerFilter" ? renderFallSeason() : renderSpringSeason();
@@ -584,10 +582,8 @@ function playerNameIdLabel(player = {}, rankNumber) {
       player.displayName,
       player.fullName,
     ),
-    identity = name && /^HIST-/i.test(playerId)
-      ? `${name} (Historical record)`
-      : name && playerId
-        ? `${name} (${playerId})`
+    identity = name && playerId
+      ? `${name} (${playerId})`
       : name || playerId || "Player name unavailable";
   return rankNumber !== undefined && rankNumber !== null && rankNumber !== ""
     ? `R${Number(rankNumber)}-${identity}`
@@ -612,16 +608,7 @@ function renderSpringJourney(teamMap) {
     linesByMatchup = new Map(),
     weekDates = {},
     weekStartDates = {},
-    lineupSubmissionDates = {},
-    actualFirstDates = {},
-    actualLastDates = {},
-    isCompletedSeason =
-      String(springSeasonData.season?.status || "").toLowerCase() ===
-      "completed",
-    validDate = (value) => {
-      const date = value?.toDate ? value.toDate() : value ? new Date(value) : null;
-      return date && !Number.isNaN(date.valueOf()) ? date : null;
-    };
+    lineupSubmissionDates = {};
   (springSeasonData.weeks || []).forEach((week) => {
     const stage = canonicalStage(week.weekId);
     if (weeklyStages.includes(stage)) {
@@ -654,20 +641,6 @@ function renderSpringJourney(teamMap) {
     weekStartDates[stage] ||=
       matchup.weekStartAt || matchup.scheduledStartAt;
     lineupSubmissionDates[stage] ||= matchup.lineupDeadlineAt;
-    (linesByMatchup.get(matchup.matchupId) || []).forEach((line) => {
-      const playedAt = validDate(line.scheduledAt);
-      if (!playedAt) return;
-      if (
-        !actualFirstDates[stage] ||
-        playedAt.valueOf() < actualFirstDates[stage].valueOf()
-      )
-        actualFirstDates[stage] = playedAt;
-      if (
-        !actualLastDates[stage] ||
-        playedAt.valueOf() > actualLastDates[stage].valueOf()
-      )
-        actualLastDates[stage] = playedAt;
-    });
     const home = recordsByTeam.get(matchup.homeTeamId),
       away = recordsByTeam.get(matchup.awayTeamId);
     if (home) {
@@ -750,34 +723,10 @@ function renderSpringJourney(teamMap) {
           .join("")}</div>`;
       })
       .join("");
-  const hasRecordedDates = (dates) =>
-      weeklyStages.some((stage) => Boolean(validDate(dates[stage]))),
-    hasOfficialWeekStarts = hasRecordedDates(weekStartDates),
-    hasOfficialPlayByDates = hasRecordedDates(weekDates);
-  if (isCompletedSeason) {
-    weeklyStages.forEach((stage) => {
-      if (!validDate(weekStartDates[stage]))
-        weekStartDates[stage] = actualFirstDates[stage];
-      if (!validDate(weekDates[stage])) weekDates[stage] = actualLastDates[stage];
-    });
-  }
   const scheduleRow = (label, dates) =>
     `<div class="journey-standing-row journey-date-row"><span></span><b>${label}</b>${weeklyStages.map((stage) => `<span>${safeText(dates[stage] ? formatDate(dates[stage]) : "TBD")}</span>`).join("")}<span></span><span></span></div>`;
-  const scheduleRows = [
-    !isCompletedSeason || hasRecordedDates(lineupSubmissionDates)
-      ? scheduleRow("Lineup submission", lineupSubmissionDates)
-      : "",
-    scheduleRow(
-      isCompletedSeason && !hasOfficialWeekStarts ? "First match" : "Week start",
-      weekStartDates,
-    ),
-    scheduleRow(
-      isCompletedSeason && !hasOfficialPlayByDates ? "Last match" : "Play by",
-      weekDates,
-    ),
-  ].join("");
   panel.style.setProperty("--season-week-count", weeklyStages.length);
-  panel.innerHTML = `<div class="dashboard-card journey-standings"><div class="journey-card-heading"><div><h3>Regular Season Standings</h3><p>Points earned by week</p></div><span class="badge navy">${weeklyStages.length} weeks</span></div><div class="journey-table"><div class="journey-standing-row journey-standing-head"><span>Seed</span><span>Team</span>${weeklyStages.map((stage) => `<span>${stage}</span>`).join("")}<span>Total</span><span>Avg</span></div>${scheduleRows}${standingRows}</div></div><div class="dashboard-card playoff-journey"><div class="journey-card-heading"><div><h3>Playoff Path</h3><p>Quarterfinals through the championship</p></div><span class="badge gray">Season playoffs</span></div><div class="playoff-bracket">${playoffColumns}</div></div>`;
+  panel.innerHTML = `<div class="dashboard-card journey-standings"><div class="journey-card-heading"><div><h3>Regular Season Standings</h3><p>Points earned by week</p></div><span class="badge navy">${weeklyStages.length} weeks</span></div><div class="journey-table"><div class="journey-standing-row journey-standing-head"><span>Seed</span><span>Team</span>${weeklyStages.map((stage) => `<span>${stage}</span>`).join("")}<span>Total</span><span>Avg</span></div>${scheduleRow("Lineup submission", lineupSubmissionDates)}${scheduleRow("Week start", weekStartDates)}${scheduleRow("Play by", weekDates)}${standingRows}</div></div><div class="dashboard-card playoff-journey"><div class="journey-card-heading"><div><h3>Playoff Path</h3><p>Quarterfinals through the championship</p></div><span class="badge gray">Season playoffs</span></div><div class="playoff-bracket">${playoffColumns}</div></div>`;
   const isFallContext = Boolean(panel.closest('[data-view="current-season"]'));
   $$("[data-open-spring-matchup]", panel).forEach((button) =>
     button.addEventListener("click", () =>
@@ -1361,11 +1310,7 @@ function renderSpringSeason() {
         name,
         playerId,
         label:
-          /^HIST-/i.test(playerId)
-            ? `${name} (Historical record)`
-            : playerId && name !== playerId
-              ? `${name} (${playerId})`
-              : name,
+          playerId && name !== playerId ? `${name} (${playerId})` : name,
       });
   });
   if (playerFilter) {

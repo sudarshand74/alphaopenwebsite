@@ -246,10 +246,6 @@ const formatPlayer = vm.runInNewContext(`(()=>{${cleanNameSource}\n${resolvedNam
 assert.equal(formatPlayer("P1003", null, "P1003", "Anita Patel"),"Anita Patel (P1003)","ID-only canonical names must fall back to the real snapshot name");
 assert.equal(formatPlayer("P1003", 7, "Anita Patel"),"R7-Anita Patel (P1003)","Ranked player labels must use Rank-Player Name (Player ID)");
 assert(js.includes(".map((player) => playerNameIdLabel(player))"),"Matches Home and Away players must show Player Name (Player ID)");
-assert(js.includes('`${name} (Historical record)`'),"Historical-only players must not expose internal HIST identifiers");
-assert(js.includes('replace(/\\s*\\([^)]*\\)\\s*$/, "")'),"Roster player links must still select the matching player after a display qualifier");
-assert(js.includes('actualFirstDates')&&js.includes('actualLastDates'),"Completed seasons must derive a safe actual match-date range when week metadata is absent");
-assert(js.includes('"First match"')&&js.includes('"Last match"'),"Derived completed-season dates must be labeled as actual match dates");
 assert(matchManagementModule.includes("formattedPlayerLabel("),"Match Management must show names instead of Player IDs");
 assert(lineupSubmit.includes("label: rosterPlayerLabel(item)"),"Submit Lineup must show Rank-Player Name (Player ID)");
 assert(lineupApprove.includes("line?.[`player${number}Rank`]")&&lineupApprove.includes("formattedPlayerLabel(")&&lineupApprove.includes("rosterNamesById"),"Approve Lineup must show Rank-Player Name (Player ID) with a roster-name fallback");
