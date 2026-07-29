@@ -180,6 +180,8 @@ function renderOperationsAccess(filter = "") {
     return !term || [
       grant.playerId,
       grant.emailNormalized,
+      player?.emailNormalized,
+      grant.replacedByEmail,
       grant.status,
       grant.displayNameSnapshot,
       playerName(player),
@@ -193,13 +195,16 @@ function renderOperationsAccess(filter = "") {
   panel.innerHTML = filtered.length
     ? filtered.map((grant) => {
       const player = players.find((item) => item.playerId === grant.playerId);
-      const activated = usersByEmail.get(normalizeEmail(grant.emailNormalized));
+      const grantEmail = normalizeEmail(grant.emailNormalized);
+      const playerMasterEmail = normalizeEmail(player?.emailNormalized);
+      const emailChanged = Boolean(playerMasterEmail && grantEmail && playerMasterEmail !== grantEmail);
+      const activated = usersByEmail.get(playerMasterEmail || grantEmail);
       const teams = (grant.teamIds || []).length ? grant.teamIds.join(", ") : "No team-specific access";
       return `<div class="operations-access-row">
-        <div><b>${escapeHtml(formattedPlayerLabel(grant.playerId, null, playerName(player), grant.displayNameSnapshot))}</b><small>${escapeHtml(grant.emailNormalized)}</small></div>
+        <div><b>${escapeHtml(formattedPlayerLabel(grant.playerId, null, playerName(player), grant.displayNameSnapshot))}</b><small>${escapeHtml(playerMasterEmail || grantEmail)}</small>${emailChanged ? `<small>Previous approval: ${escapeHtml(grantEmail)}</small>` : ""}</div>
         <div class="operations-access-role-list">${(grant.roles || []).map((role) => `<span class="badge navy">${escapeHtml(ROLE_LABELS[role] || role)}</span>`).join("")}<small class="operations-access-team-note">${escapeHtml(teams)}</small></div>
         <div><span class="badge ${grant.status === "approved" ? "lime" : "gray"}">${escapeHtml(grant.status || "approved")}</span><small>${activated?.status === "active" ? "Google account activated" : activated ? `Account ${activated.status || "pending"}` : "Awaiting first sign-in"}</small></div>
-        <div class="operations-access-actions"><button class="secondary compact-button" type="button" data-edit-operations-access="${escapeHtml(grant.emailNormalized)}">Edit</button>${grant.status === "approved" ? `<button class="danger-button compact-button" type="button" data-revoke-operations-access="${escapeHtml(grant.emailNormalized)}">Revoke</button>` : ""}</div>
+        <div class="operations-access-actions"><button class="secondary compact-button" type="button" data-edit-operations-access="${escapeHtml(grant.emailNormalized)}">${emailChanged && grant.status !== "approved" ? "Provision new email" : "Edit"}</button>${grant.status === "approved" ? `<button class="danger-button compact-button" type="button" data-revoke-operations-access="${escapeHtml(grant.emailNormalized)}">Revoke</button>` : ""}</div>
       </div>`;
     }).join("")
     : `<div class="empty-state compact"><b>${term ? "No matching approved access" : "No Operations access approved yet"}</b><p>${term ? "Try a different search." : "Approve a Captain, EC member, or Neutral Approver before their first Google sign-in."}</p></div>`;
@@ -230,14 +235,19 @@ function openAccessEditor(email = "") {
   const grant = grants.find((item) => normalizeEmail(item.emailNormalized) === normalizeEmail(email));
   $("#operationsAccessDialogTitle").textContent = grant ? "Edit approved Operations access" : "Approve Operations access";
   $("#operationsAccessOriginalEmail").value = grant?.emailNormalized || "";
+  $("#operationsAccessOriginalId").value = grant?.accessId || "";
   $("#operationsAccessPlayerId").value = grant?.playerId || "";
   const player = players.find((item) => item.playerId === grant?.playerId);
-  $("#operationsAccessEmail").value = grant?.emailNormalized || normalizeEmail(player?.emailNormalized);
+  const playerMasterEmail = normalizeEmail(player?.emailNormalized);
+  const grantEmail = normalizeEmail(grant?.emailNormalized);
+  $("#operationsAccessEmail").value = playerMasterEmail || grantEmail;
   $("#operationsAccessStatus").value = grant?.status === "revoked" ? "revoked" : "approved";
   document.querySelectorAll('[name="operationsAccessRole"]').forEach((input) => {
     input.checked = Boolean(grant?.roles?.includes(input.value));
   });
-  $("#operationsAccessMessage").textContent = "The person can sign in only with the exact verified Google email stored in Player Master.";
+  $("#operationsAccessMessage").textContent = grantEmail && playerMasterEmail && grantEmail !== playerMasterEmail
+    ? `Player Master changed this email from ${grantEmail} to ${playerMasterEmail}. Saving will revoke the old approval and provision the new email.`
+    : "The person can sign in only with the exact verified Google email stored in Player Master.";
   updateTeamSummary();
   openDialog(dialog);
 }
@@ -265,7 +275,7 @@ function selectedAccessRecord() {
   };
 }
 
-async function saveGrant(record, originalEmail = "", options = {}) {
+async function saveGrant(record, originalEmail = "", originalAccessId = "", options = {}) {
   const existingGrant = grants.find((item) =>
     normalizeEmail(item.emailNormalized) === record.emailNormalized
   );
@@ -288,7 +298,7 @@ async function saveGrant(record, originalEmail = "", options = {}) {
     updatedByUid: auth.currentUser.uid,
   }, { merge: true });
   if (originalEmail && normalizeEmail(originalEmail) !== record.emailNormalized) {
-    batch.set(doc(db, "operationsAccess", accessDocumentId(originalEmail)), {
+    batch.set(doc(db, "operationsAccess", originalAccessId || accessDocumentId(originalEmail)), {
       status: "revoked",
       replacedByEmail: record.emailNormalized,
       updatedAt: now,
@@ -363,7 +373,11 @@ async function submitAccess(event) {
   try {
     button.disabled = true;
     const record = selectedAccessRecord();
-    await saveGrant(record, $("#operationsAccessOriginalEmail").value);
+    await saveGrant(
+      record,
+      $("#operationsAccessOriginalEmail").value,
+      $("#operationsAccessOriginalId").value,
+    );
     closeDialog(dialog);
     await loadOperationsAccess();
   } catch (error) {

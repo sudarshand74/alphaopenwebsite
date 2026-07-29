@@ -8,6 +8,7 @@ const editDialog = document.querySelector("#editVenueDialog");
 const editForm = document.querySelector("#editVenueForm");
 const editMessage = document.querySelector("#editVenueMessage");
 let venues = [];
+let editingVenueId = null;
 
 function canManageVenues() {
   const authorization = window.alphaOpenAuthorization || {};
@@ -26,9 +27,30 @@ function closeEditVenue() {
   else editDialog.removeAttribute("open");
 }
 
+function showVenueDialog() {
+  if (typeof editDialog.showModal === "function") editDialog.showModal();
+  else editDialog.setAttribute("open", "");
+}
+
+function openAddVenue() {
+  if (!canManageVenues()) return;
+  editingVenueId = null;
+  editForm.reset();
+  document.querySelector("#editVenueId").readOnly = false;
+  document.querySelector("#editVenueStatus").value = "active";
+  document.querySelector("#editVenueTitle").textContent = "Add venue";
+  document.querySelector("#editVenueCopy").textContent = "Create a Venue Master record. Venue ID becomes permanent after saving.";
+  editMessage.textContent = "Enter a unique Venue ID using letters, numbers, hyphens, or underscores.";
+  showVenueDialog();
+  document.querySelector("#editVenueId").focus();
+}
+
 function openEditVenue(venueId) {
   const venue = venues.find(item => item.venueId === venueId);
   if (!venue) return;
+  editingVenueId = venue.venueId;
+  editForm.reset();
+  document.querySelector("#editVenueId").readOnly = true;
   document.querySelector("#editVenueId").value = venue.venueId;
   document.querySelector("#editVenueName").value = venueName(venue) === "Unnamed venue" ? "" : venueName(venue);
   document.querySelector("#editVenueAddress1").value = venue.addressLine1 || venue.address || venue.fullAddress || "";
@@ -38,9 +60,10 @@ function openEditVenue(venueId) {
   document.querySelector("#editVenuePostalCode").value = venue.postalCode || "";
   document.querySelector("#editVenueCourtCount").value = venue.courtCount ?? venue.courts ?? "";
   document.querySelector("#editVenueStatus").value = venue.status === "inactive" || venue.active === false ? "inactive" : "active";
+  document.querySelector("#editVenueTitle").textContent = "Edit venue";
+  document.querySelector("#editVenueCopy").textContent = "Update the Venue Master record. Venue ID is permanent.";
   editMessage.textContent = "Changes are saved directly to AlphaOpen records.";
-  if (typeof editDialog.showModal === "function") editDialog.showModal();
-  else editDialog.setAttribute("open", "");
+  showVenueDialog();
 }
 
 function renderVenues(filter = "") {
@@ -60,9 +83,14 @@ function renderVenues(filter = "") {
 async function saveEditedVenue(event) {
   event.preventDefault();
   if (!canManageVenues()) return;
-  const venueId = document.querySelector("#editVenueId").value;
-  const venue = venues.find(item => item.venueId === venueId);
-  if (!venue) { editMessage.textContent = "This venue no longer exists. Refresh Venue Master."; return; }
+  const isNew = !editingVenueId;
+  const venueId = document.querySelector("#editVenueId").value.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]*$/.test(venueId)) {
+    editMessage.textContent = "Venue ID must use only letters, numbers, hyphens, or underscores.";
+    return;
+  }
+  const venue = isNew ? null : venues.find(item => item.venueId === editingVenueId);
+  if (!isNew && !venue) { editMessage.textContent = "This venue no longer exists. Refresh Venue Master."; return; }
   const name = document.querySelector("#editVenueName").value.trim();
   const addressLine1 = document.querySelector("#editVenueAddress1").value.trim();
   const addressLine2 = document.querySelector("#editVenueAddress2").value.trim();
@@ -75,19 +103,32 @@ async function saveEditedVenue(event) {
   const fullAddress = [address, city, state, postalCode].filter(Boolean).join(", ");
   if (!name) { editMessage.textContent = "Venue name is required."; return; }
   document.querySelector("#saveEditedVenue").disabled = true;
-  editMessage.textContent = "Saving venue…";
+  editMessage.textContent = isNew ? "Adding venue…" : "Saving venue…";
   try {
-    await updateDoc(doc(db, "venues", venueId), {
+    const payload = {
       venueId, name, venueName: name, address, addressLine1, addressLine2, city, state, postalCode, fullAddress,
       courtCount: courtValue === "" ? null : Number(courtValue), status, active: status === "active",
       updatedByUid: auth.currentUser.uid, updatedAt: serverTimestamp()
-    });
+    };
+    if (isNew) {
+      const venueRef = doc(db, "venues", venueId);
+      await runTransaction(db, async transaction => {
+        if ((await transaction.get(venueRef)).exists()) throw new Error(`${venueId} already exists in Venue Master.`);
+        transaction.set(venueRef, {
+          ...payload,
+          createdByUid: auth.currentUser.uid,
+          createdAt: serverTimestamp()
+        });
+      });
+    } else {
+      await updateDoc(doc(db, "venues", editingVenueId), payload);
+    }
     closeEditVenue();
-    window.alphaOpenAuthUI.showMessage(`${venueId} updated in Venue Master`);
+    window.alphaOpenAuthUI.showMessage(`${venueId} ${isNew ? "added to" : "updated in"} Venue Master`);
     await loadVenues();
   } catch (error) {
-    console.error("Venue update failed", error);
-    editMessage.textContent = error.message || "The venue could not be updated.";
+    console.error("Venue save failed", error);
+    editMessage.textContent = error.message || "The venue could not be saved.";
   } finally {
     document.querySelector("#saveEditedVenue").disabled = false;
   }
@@ -128,6 +169,7 @@ async function loadVenues() {
 }
 
 search.addEventListener("input", event => renderVenues(event.target.value));
+document.querySelector("#addVenue").addEventListener("click", openAddVenue);
 document.querySelector("#refreshVenues").addEventListener("click", loadVenues);
 document.querySelector("#closeEditVenue").addEventListener("click", closeEditVenue);
 document.querySelector("#cancelEditVenue").addEventListener("click", closeEditVenue);
