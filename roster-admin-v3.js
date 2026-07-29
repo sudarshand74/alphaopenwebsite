@@ -191,7 +191,7 @@ async function loadPlayers() {
     .sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
   playerById = new Map(players.map((item) => [item.playerId, item]));
   playerSelect.innerHTML =
-    '<option value="">Select a Firebase player</option>' +
+    '<option value="">Select an AO player</option>' +
     players
       .map(
         (item) =>
@@ -217,7 +217,7 @@ async function loadRoster() {
     statusBox.textContent = "Manage Team Roster only loads active-season data.";
     return;
   }
-  panel.innerHTML = '<p class="muted">Loading Firebase team rosters...</p>';
+  panel.innerHTML = '<p class="muted">Loading team rosters...</p>';
   try {
     await loadPlayers();
     const seasonId = seasonSelect.value,
@@ -291,7 +291,7 @@ async function loadRoster() {
     statusBox.textContent = `${teamsById.size} teams · ${activeByRank.size} ranked assignments · ${history.length} replacement history rows.`;
   } catch (error) {
     panel.innerHTML = `<div class="empty-state compact"><b>Roster could not be loaded</b><p>${esc(error.message)}</p></div>`;
-    statusBox.textContent = "Firebase roster access failed.";
+    statusBox.textContent = "Team roster access failed.";
   }
 }
 function startAssignment(id) {

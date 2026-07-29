@@ -236,7 +236,7 @@ async function ensureBootstrapAdminPlayerLink(user, userRef, common) {
       transaction.get(userRef), transaction.get(playerRef), transaction.get(linkRef)
     ]);
     if (!userSnapshot.exists()) throw new Error("The protected Super Admin profile is missing.");
-    if (!playerSnapshot.exists()) throw new Error(`${BOOTSTRAP_ADMIN_PLAYER_ID} is missing from Firebase Player Master.`);
+    if (!playerSnapshot.exists()) throw new Error(`${BOOTSTRAP_ADMIN_PLAYER_ID} is missing from Player Master.`);
     if (playerSnapshot.data().emailNormalized?.toLowerCase() !== BOOTSTRAP_ADMIN_EMAIL) throw new Error(`${BOOTSTRAP_ADMIN_PLAYER_ID} does not match the protected Super Admin email.`);
     if (linkSnapshot.exists() && linkSnapshot.data().uid !== user.uid) throw new Error(`${BOOTSTRAP_ADMIN_PLAYER_ID} is already linked to another Google account.`);
     transaction.update(userRef, {
@@ -247,7 +247,7 @@ async function ensureBootstrapAdminPlayerLink(user, userRef, common) {
       playerId: BOOTSTRAP_ADMIN_PLAYER_ID, uid: user.uid, emailAtApproval: BOOTSTRAP_ADMIN_EMAIL,
       status: "active", linkMethod: "superAdminOverride", approvedByUid: linkSnapshot.exists() ? linkSnapshot.data().approvedByUid : user.uid,
       approvedAt: linkSnapshot.exists() ? linkSnapshot.data().approvedAt : serverTimestamp(), revokedByUid: null, revokedAt: null,
-      reason: "Protected account owner linked to verified Firebase Player Master record"
+      reason: "Protected account owner linked to verified Player Master record"
     }, { merge: true });
   });
   return (await getDoc(userRef)).data();

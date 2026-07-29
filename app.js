@@ -410,7 +410,7 @@ function openSpringLineEditor(line, matchup) {
     $(`#springAwaySet${number}`).value = set?.awayScore ?? set?.away ?? "";
   });
   $("#springLineEditorMessage").textContent =
-    "Changes update the operational and public Firebase records together.";
+      "Changes update the operational and public records together.";
   $("#springLineEditor").showModal();
 }
 
@@ -1028,7 +1028,7 @@ function renderFallSeason() {
   if ($("#fallMatchesTitle"))
     $("#fallMatchesTitle").textContent = `${seasonName} Matches by Round`;
   if (!historyDataLoaded) {
-    fallResults.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active season from Firebase…</b></div>';
+    fallResults.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active season…</b></div>';
     return;
   }
   if (!fallSeasonData) {
@@ -1091,7 +1091,7 @@ function renderSeasonDashboard() {
     panel = panels[0];
   if (!panel) return;
   if (!historyDataLoaded) {
-    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active-season dashboard from Firebase…</b></div>';
+    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading active-season dashboard…</b></div>';
     return;
   }
   if (!fallSeasonData) {
@@ -1204,7 +1204,7 @@ function renderSpringSeason() {
       panel.innerHTML = markup;
     };
   if (!previousSeasonListLoaded) {
-    setEmpty("Loading completed seasons from Firebase…", "");
+    setEmpty("Loading completed seasons…", "");
     return;
   }
   if (selectedPreviousSeasonLoading) {
@@ -1592,7 +1592,7 @@ function renderSpringSeason() {
                     });
                   })
                   .join("")
-              : '<div class="fall-lines-empty">Line scores will appear after they are published in Firebase.</div>';
+      : '<div class="fall-lines-empty">Line scores will appear after they are published.</div>';
             return `<details class="dashboard-card fall-match-card" data-spring-matchup-id="${safeText(matchup.matchupId)}"><summary><span class="fall-match-label">${label}</span><span class="fall-match-title"><b>${safeText(home)} <em>vs</em> ${safeText(away)}</b><small>${safeText(matchup.matchupId)}</small></span><span class="fall-team-score"><b>${homeWins}-${awayWins}</b><small>${homeTotalPoints}-${awayTotalPoints} total pts</small></span><span class="matchup-status-actions"><span class="badge ${matchupStatusClass}">${safeText(matchupDisplayStatus)}</span>${submitLineupAction}</span></summary><div class="fall-line-details"><div class="fall-details-head"><h4>Match details</h4></div>${details}<div class="fall-points-total"><span>Total points won</span><b>${safeText(home)}: ${homeTotalPoints}</b><b>${safeText(away)}: ${awayTotalPoints}</b></div></div></details>`;
           })
           .join("")}</div></section>`;
@@ -1623,9 +1623,9 @@ function renderStandings() {
   if (!leagueDataLoaded) {
     if ($("#miniStandings"))
       $("#miniStandings").innerHTML =
-        '<p class="muted">Loading Firebase standings…</p>';
+        '<p class="muted">Loading standings…</p>';
     $("#standingsRows").innerHTML =
-      '<div class="empty-state compact"><p>Loading Firebase standings…</p></div>';
+        '<div class="empty-state compact"><p>Loading standings…</p></div>';
     return;
   }
   if ($("#miniStandings"))
@@ -1648,7 +1648,7 @@ function renderMatches(filter = "all") {
   if (!$("#matchList")) return;
   if (!leagueDataLoaded) {
     $("#matchList").innerHTML =
-      '<div class="empty-state"><b>Loading matches from Firebase…</b></div>';
+        '<div class="empty-state"><b>Loading matches…</b></div>';
     return;
   }
   const rows = matchups.filter((x) => filter === "all" || x.weekId === filter);
@@ -1665,11 +1665,11 @@ function renderMatches(filter = "all") {
           return `<article class="dashboard-card match-card"><div class="match-meta"><span class="badge navy">${stageLabel(x.weekId)}</span><span>${dateText}</span><span class="verified-dot">✓ ${x.status === "completed" ? "Completed" : x.status}</span></div><div class="match-score"><div class="${homeWin ? "winner" : ""}"><span class="team-mark blue">${home[0]}</span><b>Team ${home}</b><strong>${x.homeTeamPoints}</strong></div><span>vs</span><div class="${!homeWin ? "winner" : ""}"><span class="team-mark orange">${away[0]}</span><b>Team ${away}</b><strong>${x.awayTeamPoints}</strong></div></div><button class="text-button match-details" data-match="${x.matchupId}">${x.completedLineCount} completed${x.canceledLineCount ? ` · ${x.canceledLineCount} canceled` : ""} →</button></article>`;
         })
         .join("")
-    : '<div class="empty-state"><b>No Firebase matches found for this stage</b></div>';
+          : '<div class="empty-state"><b>No AO matches found for this stage</b></div>';
   $$(".match-details").forEach((button) =>
     button.addEventListener("click", () =>
       showToast(
-        `${lineMatches.filter((line) => line.matchupId === button.dataset.match).length} line records loaded from Firebase`,
+            `${lineMatches.filter((line) => line.matchupId === button.dataset.match).length} line records loaded`,
       ),
     ),
   );
@@ -1766,7 +1766,7 @@ function renderMatchesPage() {
   if (seasonLabel)
     seasonLabel.textContent = `Season: ${leagueSeason?.name || leagueSeason?.seasonName || leagueSeason?.seasonId || "Active season"}`;
   if (!leagueDataLoaded) {
-    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading matches from Firebase…</b></div>';
+  panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading matches…</b></div>';
     return;
   }
   const matchupIndex = new Map(matchups.map((matchup) => [matchup.matchupId, matchup]));
@@ -1893,7 +1893,7 @@ function renderMatchesPage() {
   const panel = $("#matchesPage");
   if (!panel) return;
   if (!leagueDataLoaded) {
-    panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading matches from Firebase…</b></div>';
+  panel.innerHTML = '<div class="dashboard-card empty-state"><b>Loading matches…</b></div>';
     return;
   }
   const matchupIndex = new Map(matchups.map((matchup) => [matchup.matchupId, matchup]));
@@ -1932,7 +1932,7 @@ function renderMatchesPage() {
 function renderHistory(account) {
   if (!historyDataLoaded) {
     $("#historyRows").innerHTML =
-      '<div class="empty-state"><b>Loading all-season Firebase history…</b></div>';
+      '<div class="empty-state"><b>Loading all-season playing history…</b></div>';
     return;
   }
   const playerIndex = new Map(historyPlayerDirectory);
@@ -2073,7 +2073,7 @@ function renderHistory(account) {
             }),
         )
         .join("")
-    : `<div class="empty-state"><b>${selectedPlayerId ? "No Firebase match history found" : "Select a player"}</b><p>${selectedPlayerId ? `Completed published matches linked to ${safeText(selectedPlayerName)} will appear here.` : "Use the Player Name dropdown above to view public match history."}</p></div>`;
+    : `<div class="empty-state"><b>${selectedPlayerId ? `No AO playing history found for ${safeText(selectedPlayerName)}` : "Select a player"}</b><p>${selectedPlayerId ? "Completed published matches will appear here." : "Use the Player Name dropdown above to view public match history."}</p></div>`;
 }
 
 function renderFirebaseOnlyStates() {
@@ -2085,88 +2085,7 @@ function renderFirebaseOnlyStates() {
       '<p class="muted">Participation loads from active roster slots.</p>';
   if ($("#approvalRows"))
     $("#approvalRows").innerHTML =
-      '<div class="empty-state compact"><b>No Firebase lineup pair ready</b></div>';
-}
-
-function initCommunityCarousel() {
-  const carousel = $("#communityCarousel"),
-    track = $("#communitySlides"),
-    slides = $$(".community-slide", carousel),
-    dots = $("#communityDots");
-  if (!carousel || !track || slides.length < 2) return;
-  let current = 0,
-    timer = null,
-    touchStart = null;
-  dots.innerHTML = slides
-    .map(
-      (_, index) =>
-        `<button type="button" aria-label="Show community photo ${index + 1}" data-slide="${index}"></button>`,
-    )
-    .join("");
-  const dotButtons = $$("button", dots);
-  const show = (index) => {
-    current = (index + slides.length) % slides.length;
-    track.style.transform = `translateX(-${current * 100}%)`;
-    slides.forEach((slide, i) => {
-      slide.classList.toggle("active", i === current);
-      slide.setAttribute("aria-hidden", String(i !== current));
-    });
-    dotButtons.forEach((dot, i) => {
-      dot.classList.toggle("active", i === current);
-      dot.setAttribute("aria-current", i === current ? "true" : "false");
-    });
-  };
-  const stop = () => {
-    if (timer) {
-      window.clearInterval(timer);
-      timer = null;
-    }
-  };
-  const start = () => {
-    stop();
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches)
-      timer = window.setInterval(() => show(current + 1), 4500);
-  };
-  $("#communityPrevious").addEventListener("click", () => {
-    show(current - 1);
-    start();
-  });
-  $("#communityNext").addEventListener("click", () => {
-    show(current + 1);
-    start();
-  });
-  dotButtons.forEach((dot) =>
-    dot.addEventListener("click", () => {
-      show(Number(dot.dataset.slide));
-      start();
-    }),
-  );
-  carousel.addEventListener("mouseenter", stop);
-  carousel.addEventListener("mouseleave", start);
-  carousel.addEventListener("focusin", stop);
-  carousel.addEventListener("focusout", start);
-  carousel.addEventListener(
-    "touchstart",
-    (event) => {
-      touchStart = event.changedTouches[0].clientX;
-      stop();
-    },
-    { passive: true },
-  );
-  carousel.addEventListener(
-    "touchend",
-    (event) => {
-      const distance = event.changedTouches[0].clientX - touchStart;
-      if (Math.abs(distance) > 45) show(current + (distance < 0 ? 1 : -1));
-      start();
-    },
-    { passive: true },
-  );
-  document.addEventListener("visibilitychange", () =>
-    document.hidden ? stop() : start(),
-  );
-  show(0);
-  start();
+      '<div class="empty-state compact"><b>No AO lineup pair ready</b></div>';
 }
 
 function openDrawer() {
@@ -2452,12 +2371,12 @@ window.alphaOpenDataUI = {
     leagueDataLoaded = true;
     if ($("#matchList"))
       $("#matchList").innerHTML =
-        `<div class="empty-state"><b>Firebase data could not be loaded</b><p>${message}</p></div>`;
+      `<div class="empty-state"><b>AO data could not be loaded</b><p>${message}</p></div>`;
     $("#standingsRows").innerHTML =
-      '<div class="empty-state"><b>Firebase standings unavailable</b></div>';
+      '<div class="empty-state"><b>AO standings unavailable</b></div>';
     if ($("#miniStandings"))
       $("#miniStandings").innerHTML =
-        '<p class="muted">Firebase standings unavailable.</p>';
+      '<p class="muted">AO standings unavailable.</p>';
   },
 };
 
@@ -2614,7 +2533,7 @@ $("#springLineEditorForm")?.addEventListener("submit", (event) => {
   };
   $("#saveSpringLineEditor").disabled = true;
   $("#springLineEditorMessage").textContent =
-    "Saving lineup and score to Firebase…";
+      "Saving lineup and score…";
   window.dispatchEvent(
     new CustomEvent("alphaopen:update-spring-line", { detail: payload }),
   );
@@ -2634,7 +2553,7 @@ $("#refreshMatches")?.addEventListener("click", () => {
   button.disabled = true;
   button.textContent = "Refreshing…";
   $("#matchesPage").innerHTML =
-    '<div class="dashboard-card empty-state"><b>Refreshing matches from Firebase…</b></div>';
+        '<div class="dashboard-card empty-state"><b>Refreshing matches…</b></div>';
   window.dispatchEvent(new CustomEvent("alphaopen:refresh-matches"));
 });
 window.addEventListener("alphaopen:matches-refreshed", (event) => {
@@ -2667,6 +2586,5 @@ window.addEventListener("popstate", () =>
 renderStandings();
 renderMatches();
 renderFirebaseOnlyStates();
-initCommunityCarousel();
 setAccount("guest");
 navigate(location.hash.slice(1) || "home");

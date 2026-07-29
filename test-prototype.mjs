@@ -60,9 +60,15 @@ assert(!js.includes('Signed in · ${user.email}')&&!js.includes('${authorization
 assert(!html.includes('class="hero-overlay"'),"Home image must not contain overlay text");
 assert(!html.includes('class="hero"'),"Removed home banner must not remain");
 assert(!`${html}${serviceWorker}`.includes("ao-league-banner.jpeg"),"Removed home banner must not be referenced");
-assert.equal((html.match(/<figure class="community-slide(?: active)?">/g)||[]).length,9,"Community carousel must contain all 9 replacement images");
-assert(html.indexOf('class="community-section community-feature"') < html.indexOf('class="home-grid content-wrap"'),"Community carousel must appear above the home cards");
-assert(js.includes("initCommunityCarousel")&&js.includes("setInterval")&&js.includes("4500"),"Automatic community carousel is missing");
+assert(!html.includes('id="communityCarousel"')&&!html.includes('class="community-section community-feature"'),"Home carousel must be removed");
+assert(!js.includes("initCommunityCarousel"),"Removed carousel JavaScript must not remain");
+assert(!css.includes(".community-carousel")&&!css.includes(".carousel-control")&&!css.includes(".carousel-dots"),"Removed carousel CSS must not remain");
+assert(css.includes('.view[data-view="home"] .home-grid')&&css.includes("margin-top:0"),"Home cards need non-overlapping spacing after carousel removal");
+assert(js.includes("No AO playing history found for ${safeText(selectedPlayerName)}"),"Player History must name the selected player in the AO empty state");
+const userFacingCopy = [html, js, runtimeLoader, rosterAdminShared, identityReconciliation, lineupApproverAdmin, venueAdmin, seasonStructureAdmin, seasonBulkImport].join("\n");
+for (const forbiddenCopy of ["Loading Firebase","No Firebase","from Firebase","to Firebase","Firebase backend","Firebase line","Firebase roster","Firebase scores","Firebase data could","Firebase standings","Firebase disabled","Firebase session","Firebase UID"]) {
+  assert(!userFacingCopy.includes(forbiddenCopy),`User-facing database-vendor wording remains: ${forbiddenCopy}`);
+}
 assert(js.includes('$("#profileRole").textContent = account.role'),"Header role binding is missing");
 for (const panel of ["players","users","venues","seasons","season-teams","season-matchups","rosters","lineup-approvers","submit-lineup","approve-lineup","update-lineup","schedule-score"]) assert(html.includes(`data-admin-panel="${panel}"`) && html.includes(`data-admin-section="${panel}"`), `Missing Admin submenu: ${panel}`);
 for (const heading of ["Master Data","Season","Operations"]) assert(html.includes(`>${heading}</h2>`),`Missing Admin group: ${heading}`);

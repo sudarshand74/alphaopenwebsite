@@ -26,13 +26,13 @@ async function renderApprovers(){
 async function load(){
   const seasonSelect=$("#lineupApproverSeason"),playerSelect=$("#lineupApproverPlayer");
   if(!seasonSelect||!playerSelect)return;
-  seasonSelect.innerHTML='<option value="">Loading Firebase seasons…</option>';
-  message("Connected. Reading seasons from Firebase…");
+  seasonSelect.innerHTML='<option value="">Loading seasons…</option>';
+  message("Loading season records…");
   try{
     const seasons=await getDocs(collection(db,"seasons"));
     const rows=seasons.docs.map(item=>({id:item.id,...item.data()})).sort((a,b)=>Number(b.year||0)-Number(a.year||0));
-    seasonSelect.innerHTML=rows.map(item=>`<option value="${esc(item.id)}">${esc(item.name||item.id)}</option>`).join("")||'<option value="">No Firebase seasons found</option>';
-    if(!rows.length){message("Firebase returned zero season records.");return;}
+    seasonSelect.innerHTML=rows.map(item=>`<option value="${esc(item.id)}">${esc(item.name||item.id)}</option>`).join("")||'<option value="">No AO seasons found</option>';
+    if(!rows.length){message("No AO season records found.");return;}
     message(`${rows.length} seasons loaded. Reading registered players…`);
     await renderApprovers();
     const [users,playerMaster]=await Promise.all([getDocs(collection(db,"users")),getDocs(collection(db,"players"))]);
@@ -44,8 +44,8 @@ async function load(){
     playerSelect.innerHTML='<option value="">Select a registered player</option>'+players.map(item=>`<option value="${esc(item.uid)}">${esc(item.playerName)} · ${esc(item.playerId)}</option>`).join("");
     message(`${rows.length} seasons · ${players.length} registered players available.${removedLegacyAssignments?` Removed ${removedLegacyAssignments} invalid legacy approver records.`:""}`);
   }catch(error){
-    seasonSelect.innerHTML='<option value="">Firebase load failed</option>';
-    message(`Firebase load failed (${error.code||"error"}): ${error.message}`);
+    seasonSelect.innerHTML='<option value="">Season load failed</option>';
+    message(`Season records could not be loaded (${error.code||"error"}): ${error.message}`);
     console.error("Direct lineup approver load failed",error);
   }
 }
@@ -89,7 +89,7 @@ function ownControls(){
 
 ownControls();
 const localDevelopment=["localhost","127.0.0.1","::1"].includes(location.hostname);
-message(localDevelopment?"Firebase disabled in local development.":"Waiting for the authenticated Firebase session…");
+message(localDevelopment?"Live data is disabled in local development.":"Waiting for an authenticated AlphaOpen session…");
 if(!localDevelopment)onAuthStateChanged(auth,user=>{
   if(!user){const select=$("#lineupApproverSeason");if(select)select.innerHTML='<option value="">Sign in required</option>';message("Sign in as Super Admin to load seasons.");return;}
   if(user.email?.toLowerCase()!=="sudarshandesai74@gmail.com"){message("Only the protected Super Admin can manage season approvers.");return;}

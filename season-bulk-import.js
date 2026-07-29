@@ -515,7 +515,7 @@ async function processImport(event) {
         completedByUid: auth.currentUser.uid,
       },
     });
-    summary.textContent = `Writing ${operations.length} validated Firebase records…`;
+    summary.textContent = `Writing ${operations.length} validated season records…`;
     await commitBatchOperations(operations);
     if (season.status === "active") {
       await publishPublicSeasonDashboard(season.seasonId);
@@ -608,12 +608,12 @@ function appendSnapshotRows(target, snapshot, context = {}) {
 }
 async function exportEntireDatabase() {
   if (!isAdmin()) {
-    window.alphaOpenAuthUI?.showMessage("Only Super Admin can export the Firebase database.");
+    window.alphaOpenAuthUI?.showMessage("Only Super Admin can export the AlphaOpen database.");
     return;
   }
   const button = $("#exportDatabase");
   button.disabled = true;
-  button.textContent = "Reading Firebase…";
+  button.textContent = "Reading AlphaOpen records…";
   try {
     const XLSX = await loadXlsx();
     const sheets = new Map();
@@ -789,7 +789,7 @@ async function exportEntireDatabase() {
     );
     const totalDocuments = [...sheets.values()].reduce((total, rows) => total + rows.length, 0);
     window.alphaOpenAuthUI?.showMessage(
-      `${totalDocuments} Firebase documents exported across ${sheets.size} worksheets.`,
+      `${totalDocuments} records exported across ${sheets.size} worksheets.`,
     );
   } catch (error) {
     console.error("Firebase database export failed", error);

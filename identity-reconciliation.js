@@ -290,7 +290,7 @@ async function collectAudit() {
   });
   linksByUid.forEach((records, uid) => {
     if (uid && records.length > 1)
-      issues.push(issue("DUPLICATE_LINKS", "error", "Firebase UID linked to multiple players",
+      issues.push(issue("DUPLICATE_LINKS", "error", "Authentication UID linked to multiple players",
         `${uid} is actively linked to ${records.map(record => record.playerId || record.id).join(", ")}.`, { uid }));
   });
 
@@ -348,7 +348,7 @@ async function collectAudit() {
         if (!link || link.status !== "active" || !link.uid || !userByUid.has(link.uid)) {
           issues.push(issue("CAPTAIN_ACCOUNT_MISSING", "warning",
             `${tree.season.id} · ${team.name || team.id}: captain account not linked`,
-            `${playerId} is assigned as captain, but no active Firebase UID can be resolved.`,
+            `${playerId} is assigned as captain, but no active authentication UID can be resolved.`,
             { seasonId: tree.season.id, teamId: team.id, playerId }));
           return;
         }
@@ -763,7 +763,7 @@ async function runAudit() {
   auditRunning = true;
   const button = $("#runIdentityAudit"), panel = $("#identityAuditResults");
   button.disabled = true;
-  panel.innerHTML = '<div class="empty-state compact"><b>Scanning live Firebase identity trees…</b><p>This is one controlled read of each required collection.</p></div>';
+  panel.innerHTML = '<div class="empty-state compact"><b>Scanning live identity records…</b><p>This is one controlled read of each required collection.</p></div>';
   try {
     auditState = await collectAudit();
     renderAudit();

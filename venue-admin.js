@@ -33,7 +33,7 @@ function openEditVenue(venueId) {
   document.querySelector("#editVenuePostalCode").value = venue.postalCode || "";
   document.querySelector("#editVenueCourtCount").value = venue.courtCount ?? venue.courts ?? "";
   document.querySelector("#editVenueStatus").value = venue.status === "inactive" || venue.active === false ? "inactive" : "active";
-  editMessage.textContent = "Changes are saved directly to Firebase.";
+  editMessage.textContent = "Changes are saved directly to AlphaOpen records.";
   if (typeof editDialog.showModal === "function") editDialog.showModal();
   else editDialog.setAttribute("open", "");
 }
@@ -70,7 +70,7 @@ async function saveEditedVenue(event) {
   const fullAddress = [address, city, state, postalCode].filter(Boolean).join(", ");
   if (!name) { editMessage.textContent = "Venue name is required."; return; }
   document.querySelector("#saveEditedVenue").disabled = true;
-  editMessage.textContent = "Saving venue to Firebase…";
+  editMessage.textContent = "Saving venue…";
   try {
     await updateDoc(doc(db, "venues", venueId), {
       venueId, name, venueName: name, address, addressLine1, addressLine2, city, state, postalCode, fullAddress,
