@@ -1,0 +1,153 @@
+:root {
+  --alphaopen-brand-frame: linear-gradient(135deg, #05152f, #0c2f62);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.app-header,
+.site-footer {
+  background: var(--alphaopen-brand-frame);
+}
+
+.app-header {
+  height: 82px;
+  border-bottom: 4px solid var(--lime);
+  color: #fff;
+  backdrop-filter: none;
+}
+
+.brand-button {
+  flex: 0 0 auto;
+  border-radius: 11px;
+  background: #fff;
+  padding: 5px 10px;
+  box-shadow: 0 7px 20px rgba(0, 0, 0, .18);
+}
+
+.brand-button img {
+  width: 108px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.header-tagline {
+  margin-left: -18px;
+  color: #fff;
+  font-size: .84rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.footer-brand button {
+  width: fit-content;
+  justify-self: center;
+}
+
+.footer-brand img {
+  margin-inline: auto;
+}
+
+.footer-social {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+}
+
+.app-header .desktop-nav > button,
+.app-header .nav-menu > summary {
+  color: #dce7f8;
+}
+
+.app-header .desktop-nav > button:hover,
+.app-header .nav-menu > summary:hover,
+.app-header .nav-menu[open] > summary {
+  background: rgba(255, 255, 255, .14);
+  color: #fff;
+}
+
+.app-header .desktop-nav > button.active {
+  background: #fff;
+  color: var(--navy);
+}
+
+.app-header .nav-menu.active > summary {
+  background: #fff;
+  color: var(--navy);
+}
+
+.app-header .nav-menu > div button {
+  color: var(--ink);
+}
+
+.app-header .nav-menu > div button:hover,
+.app-header .nav-menu > div button.active {
+  background: #edf3fb;
+  color: var(--blue);
+}
+
+.app-header .menu-button {
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .app-header {
+    height: 88px;
+  }
+
+  .app-header .brand-button {
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    margin: 0;
+    transform: translateX(-50%);
+  }
+
+  .header-tagline {
+    display: block;
+    position: absolute;
+    top: 64px;
+    left: 50%;
+    margin: 0;
+    transform: translateX(-50%);
+    font-size: .68rem;
+    line-height: 1;
+  }
+
+  .brand-button img {
+    width: 94px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .brand-button {
+    padding: 4px 8px;
+  }
+
+  .brand-button img {
+    width: 86px;
+    height: 40px;
+  }
+
+  .header-tagline {
+    top: 60px;
+  }
+
+  .footer-social {
+    justify-items: center;
+  }
+
+  .footer-social .facebook-mark {
+    margin-inline: auto;
+  }
+}

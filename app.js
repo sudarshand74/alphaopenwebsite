@@ -261,6 +261,15 @@ function navigate(route) {
   $$("[data-route]").forEach((button) =>
     button.classList.toggle("active", button.dataset.route === route),
   );
+  $$(".desktop-nav .nav-menu").forEach((menu) =>
+    menu.classList.toggle(
+      "active",
+      Boolean(menu.querySelector(`[data-route="${route}"]`)),
+    ),
+  );
+  $$(".desktop-nav details[open]").forEach((menu) =>
+    menu.removeAttribute("open"),
+  );
   closeDrawer();
   if (location.hash !== `#${route}`)
     history.pushState({ route }, "", `#${route}`);

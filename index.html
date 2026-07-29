@@ -16,6 +16,7 @@
   <link rel="apple-touch-icon" href="assets/icon-192.png">
   <link rel="stylesheet" href="styles.css?v=92">
   <link rel="stylesheet" href="page-heading-consistency.css?v=3">
+  <link rel="stylesheet" href="header-footer-consistency.css?v=6">
   <link rel="stylesheet" href="lineup-workflow.css?v=1">
   <style>.managed-line-form .player-override-reason{grid-column:1/-1}@media(max-width:760px){.managed-line-form .player-override-reason{grid-column:auto}}</style>
   <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
@@ -30,17 +31,13 @@
   <style>.season-import-preview{display:grid;gap:8px;max-height:280px;overflow:auto;margin:14px 0}.season-import-counts{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.season-import-counts span{display:grid;gap:2px;padding:11px;border-radius:10px;background:#eef3f8;color:#667386;font-size:.68rem;text-transform:uppercase}.season-import-counts b{color:#071a38;font-size:1.25rem}.dialog-label{display:grid;gap:6px;margin-top:13px;color:#536176;font-size:.78rem;font-weight:750}.dialog-label input[type="text"],.dialog-label>input{border:1px solid #c8d2dd;border-radius:10px;padding:10px}.dialog-label span{display:flex;align-items:flex-start;gap:8px}@media(max-width:650px){.season-import-counts{grid-template-columns:1fr 1fr}}</style>
 </head>
 <body>
-  <div class="prototype-bar">
-    <span><b>AlphaOpen</b><span class="desktop-only"> · Live season data</span></span>
-    <span id="authStatus" role="status">Checking secure session…</span>
-  </div>
-
   <header class="app-header">
+    <span id="authStatus" class="visually-hidden" role="status">Checking secure session…</span>
     <button class="menu-button" id="menuButton" aria-label="Open navigation">☰</button>
     <button class="brand-button" data-route="home" aria-label="AlphaOpen home">
       <img src="assets/alphaopen-logo.png" alt="AlphaOpen">
-      <span><strong>AlphaOpen</strong><small>Where friends compete</small></span>
     </button>
+    <span class="header-tagline">Where Friends Compete</span>
     <nav class="desktop-nav" aria-label="Main navigation">
       <button data-route="home" class="active">Home</button>
       <button data-route="current-season">Active Season</button>
@@ -682,7 +679,7 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=142"></script>
+  <script src="app.js?v=144"></script>
   <script src="lineup-bootstrap.js?v=20"></script>
   <script src="approval-bootstrap.js?v=17"></script>
   <script src="lineup-reset-bootstrap.js?v=3"></script>
