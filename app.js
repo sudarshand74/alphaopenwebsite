@@ -203,7 +203,7 @@ function renderWorkspace(account) {
     [
       "weekly-lineup-dashboard",
       "Weekly Lineup Dashboard",
-      "View fully approved weekly lineups and public line-match status.",
+      "View Fully Approved Weekly Lineups by Team and current status of those matches",
     ],
   ];
   if (
@@ -1298,6 +1298,14 @@ function populateWeeklyLineupFilters(resetCaptain = false) {
     weekSelect = $("#weeklyLineupWeek"),
     captainSelect = $("#weeklyLineupCaptain");
   if (!seasonSelect || !weekSelect || !captainSelect) return;
+  if (!weeklyLineupIndexLoaded) {
+    seasonSelect.innerHTML = '<option value="">Loading active season…</option>';
+    weekSelect.innerHTML = '<option value="">Select Week</option>';
+    captainSelect.innerHTML = '<option value="">Select Captain Name</option>';
+    weekSelect.disabled = true;
+    captainSelect.disabled = true;
+    return;
+  }
   const season = activeWorkspaceSeason,
     dataMatchups = [...(season?.weeklyMatchups || [])].sort(
       (a, b) =>
@@ -1488,16 +1496,13 @@ function renderWeeklyLineupDashboard() {
 
   const rows = lines.map((line) => ({ line, status: weeklyDashboardLineStatus(line) })),
     counts = {
-      upcoming: rows.filter((row) => row.status !== "completed").length,
       scheduled: rows.filter((row) => row.status === "scheduled").length,
       toBeScheduled: rows.filter((row) => row.status === "toBeScheduled").length,
       completed: rows.filter((row) => row.status === "completed").length,
     },
     visibleRows = weeklyLineupMatchFilter === "all"
       ? rows
-      : weeklyLineupMatchFilter === "upcoming"
-        ? rows.filter((row) => row.status !== "completed")
-        : rows.filter((row) => row.status === weeklyLineupMatchFilter),
+      : rows.filter((row) => row.status === weeklyLineupMatchFilter),
     statusLabels = {
       scheduled: ["Scheduled", "scheduled"],
       toBeScheduled: ["To Be Scheduled", "tbs"],
@@ -1506,11 +1511,10 @@ function renderWeeklyLineupDashboard() {
   matchesPanel.innerHTML = `<section class="weekly-matches-shell">
     <div class="weekly-matches-heading"><span class="kicker">Match Status</span><h2>Weekly Lineup Status</h2><p>${safeText(weekLabel)} · ${safeText(homeName)} vs ${safeText(awayName)}</p></div>
     <div class="weekly-status-filters" role="group" aria-label="Filter line matches by status">
-      ${weeklyDashboardStatusButton("upcoming", "Upcoming", counts.upcoming)}
+      ${weeklyDashboardStatusButton("all", "All", rows.length)}
+      ${weeklyDashboardStatusButton("completed", "Completed", counts.completed)}
       ${weeklyDashboardStatusButton("scheduled", "Scheduled", counts.scheduled)}
       ${weeklyDashboardStatusButton("toBeScheduled", "To Be Scheduled", counts.toBeScheduled)}
-      ${weeklyDashboardStatusButton("completed", "Completed", counts.completed)}
-      ${weeklyDashboardStatusButton("all", "All", rows.length)}
     </div>
     <div class="weekly-match-table">
       <div class="weekly-match-head"><span>Line</span><span>Players</span><span>Schedule</span><span>Status</span><span>Score / Pts</span></div>
@@ -2703,6 +2707,85 @@ window.alphaOpenDataUI = {
       '<p class="muted">AO standings unavailable.</p>';
   },
 };
+
+const WEEKLY_INDEX_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const WEEKLY_INDEX_PROJECT_BY_HOST = new Map([
+  ["alphaopen-development-2026.web.app", "alphaopen-development-2026"],
+  ["alphaopen-development-2026.firebaseapp.com", "alphaopen-development-2026"],
+  ["alphaopen-test-system.web.app", "alphaopen-test-system"],
+  ["alphaopen-test-system.firebaseapp.com", "alphaopen-test-system"],
+  ["alphaopen-production.web.app", "alphaopen-production"],
+  ["alphaopen-production.firebaseapp.com", "alphaopen-production"],
+]);
+let weeklyIndexPreloadPromise = null;
+let weeklyIndexPreloadValue = null;
+
+function decodeWeeklyIndexValue(value = {}) {
+  if ("stringValue" in value) return value.stringValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return Number(value.doubleValue);
+  if ("booleanValue" in value) return Boolean(value.booleanValue);
+  if ("timestampValue" in value) return value.timestampValue;
+  if ("nullValue" in value) return null;
+  if (value.arrayValue) return (value.arrayValue.values || []).map(decodeWeeklyIndexValue);
+  if (value.mapValue) return Object.fromEntries(
+    Object.entries(value.mapValue.fields || {}).map(([key, nested]) => [key, decodeWeeklyIndexValue(nested)]),
+  );
+  return null;
+}
+
+function weeklyIndexCache(projectId) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(`alphaopen:weekly-index:${projectId}`) || "null");
+    if (
+      !cached?.value ||
+      Date.now() - Number(cached.cachedAt || 0) > WEEKLY_INDEX_CACHE_MAX_AGE_MS ||
+      cached.value.status !== "active"
+    ) return null;
+    return cached.value;
+  } catch {
+    return null;
+  }
+}
+
+window.alphaOpenLoadWeeklyLineupIndex = function alphaOpenLoadWeeklyLineupIndex() {
+  const projectId = WEEKLY_INDEX_PROJECT_BY_HOST.get(location.hostname);
+  if (!projectId) return Promise.reject(new Error("The Weekly Dashboard public index is unavailable on this host."));
+  if (weeklyIndexPreloadPromise) return weeklyIndexPreloadPromise;
+  const cached = weeklyIndexPreloadValue || weeklyIndexCache(projectId);
+  if (cached) {
+    weeklyIndexPreloadValue = cached;
+    window.alphaOpenDataUI.applyWeeklyLineupIndex(cached);
+  }
+  const endpoint = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/publicConfig/activeSeason`;
+  weeklyIndexPreloadPromise = fetch(endpoint, {cache: "no-store", headers: {Accept: "application/json"}})
+    .then((response) => {
+      if (!response.ok) throw new Error(`Active season lookup failed with HTTP ${response.status}.`);
+      return response.json();
+    })
+    .then((document) => Object.fromEntries(
+      Object.entries(document.fields || {}).map(([key, value]) => [key, decodeWeeklyIndexValue(value)]),
+    ))
+    .then((active) => {
+      if (active.status !== "active" || !active.seasonId) throw new Error("No active season is available.");
+      weeklyIndexPreloadValue = active;
+      try {
+        localStorage.setItem(`alphaopen:weekly-index:${projectId}`, JSON.stringify({cachedAt: Date.now(), value: active}));
+      } catch { /* Storage can be unavailable in private browsing. */ }
+      window.alphaOpenDataUI.applyWeeklyLineupIndex(active);
+      return active;
+    })
+    .catch((error) => {
+      weeklyIndexPreloadPromise = null;
+      if (cached) return cached;
+      throw error;
+    });
+  return weeklyIndexPreloadPromise;
+};
+
+if ((location.hash.slice(1) || "home") === "weekly-lineup-dashboard") {
+  window.alphaOpenLoadWeeklyLineupIndex().catch(() => { /* Firebase loader provides the visible error state. */ });
+}
 
 window.alphaOpenAuthUI = {
   applyUser(user, authorization = {}, announce = false) {

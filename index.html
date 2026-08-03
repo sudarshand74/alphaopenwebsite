@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="page-heading-consistency.css?v=6">
   <link rel="stylesheet" href="header-footer-consistency.css?v=7">
   <link rel="stylesheet" href="lineup-workflow.css?v=1">
-  <link rel="stylesheet" href="weekly-lineup-dashboard.css?v=1">
+  <link rel="stylesheet" href="weekly-lineup-dashboard.css?v=2">
   <style>.managed-line-form .player-override-reason{grid-column:1/-1}@media(max-width:760px){.managed-line-form .player-override-reason{grid-column:auto}}</style>
   <style>.spring-result-filters label.active-season-filter{color:#064f9d}.spring-result-filters .filter-select.active-season-filter-select{border:2px solid #1268bd;background:#eef7ff;box-shadow:0 0 0 3px rgba(18,104,189,.12);color:#063b70}.selected-season-player{border-radius:5px;background:#fff1a8;color:#071a35;padding:2px 4px;font-weight:900}</style>
   <style>.quick-actions{grid-template-columns:1fr}.managed-player-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 22px 0}.managed-player-grid label{display:grid;gap:6px;font-size:.75rem;font-weight:850}.managed-player-grid select{width:100%;border:1px solid #cbd4de;border-radius:9px;background:#fff;padding:10px}.badge.red{background:#fee2e2;color:#991b1b}.match-detail{display:grid;gap:10px;padding:18px 0;border-top:1px solid var(--line);font-size:.82rem}.match-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--blue);font-size:.72rem;font-weight:900;text-transform:uppercase}.match-detail-title b{font-size:.98rem}.match-detail-identifiers,.match-detail-meta{display:flex;flex-wrap:wrap;gap:5px 20px;color:var(--muted);font-size:.72rem}.match-detail-identifiers b,.match-detail-meta b{color:var(--ink)}.match-detail-team{display:grid;gap:3px;padding:3px 0}.match-detail-team strong{font-size:.9rem}.match-detail-versus{color:var(--muted);font-size:.7rem;font-weight:900}.match-detail-result,.match-detail-status{display:flex;align-items:center;flex-wrap:wrap;gap:8px 24px}.match-detail-result{padding-top:4px;font-size:.88rem}.match-detail-status{justify-content:space-between}.match-detail-status strong{color:var(--blue)}.history-card .match-detail{border-bottom:2px solid var(--navy)}.history-card .match-detail+.match-detail{border-top:0}.selected-history-player{border-radius:4px;background:#dbeafe;color:#0d2f64;padding:2px 4px;font-weight:900}.match-detail .fall-admin-links{justify-self:start}@media(max-width:760px){.managed-player-grid{grid-template-columns:1fr}.match-detail{gap:9px}.match-detail-head{align-items:flex-start}.match-detail-head .badge{flex:none}.match-detail-identifiers,.match-detail-meta{display:grid;gap:5px}.match-detail-result,.match-detail-status{align-items:flex-start}}</style>
@@ -695,7 +695,7 @@
     <button class="icon-button" id="dismissInstall" aria-label="Dismiss install prompt">×</button>
   </aside>
   <div class="network-status" id="networkStatus" role="status" hidden>You’re offline. Saved league data is still available.</div>
-  <script src="app.js?v=153"></script>
+  <script src="app.js?v=155"></script>
   <script src="lineup-bootstrap.js?v=20"></script>
   <script src="approval-bootstrap.js?v=17"></script>
   <script src="lineup-reset-bootstrap.js?v=3"></script>
@@ -703,7 +703,7 @@
   <script src="match-management-bootstrap.js?v=34"></script>
   <script src="poster-generator.js?v=4"></script>
   <script type="module" src="ao-content.js?v=4"></script>
-  <script type="module" src="runtime-loader.js?v=104"></script>
+  <script type="module" src="runtime-loader.js?v=106"></script>
   <script src="pwa.js?v=26"></script>
   <dialog id="resetSeasonDialog"><form id="resetSeasonForm"><div class="dialog-head"><div><span class="kicker">Super Admin · Destructive operation</span><h2>Reset season data</h2></div><button type="button" id="closeResetSeason" aria-label="Close">×</button></div><p class="muted">This keeps the Season Master and all global users/players, but permanently removes every operational and public child record for the selected season.</p><div class="info-box" id="resetSeasonScope"></div><label class="wide">Type the confirmation phrase<input id="resetSeasonConfirmation" autocomplete="off" spellcheck="false"></label><label class="check-row"><input id="resetSeasonAcknowledgement" type="checkbox"> I understand that teams, memberships, rosters, schedules, lineups, scores, standings, approvers, audits and published season data will be deleted.</label><div class="info-box" id="resetSeasonMessage">No data has been changed.</div><div class="form-actions"><button type="button" class="secondary" id="cancelResetSeason">Cancel</button><button type="submit" class="primary danger-button" id="confirmResetSeason" disabled>Delete season data</button></div></form></dialog>
 </body>
