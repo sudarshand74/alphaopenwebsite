@@ -143,7 +143,7 @@ async function loadActiveSeason(user = auth.currentUser) {
         name: active.name || active.seasonName || active.seasonId,
         status: "active",
         updatedAt: serverTimestamp(),
-      });
+      }, {merge: true});
     }
     window.alphaOpenDataUI?.applySeasons([active]);
     window.alphaOpenDataUI?.applyActiveSeason(active);
@@ -284,6 +284,12 @@ async function loadGlobalActiveSeasonDashboard({ includeCompleted = false } = {}
 
 async function loadWeeklyLineupIndex() {
   try {
+    if (window.alphaOpenLoadWeeklyLineupIndex) {
+      const active = await window.alphaOpenLoadWeeklyLineupIndex();
+      weeklyLineupIndex = active;
+      window.alphaOpenDataUI?.applyWeeklyLineupIndex(active);
+      return;
+    }
     const snapshot = await getDoc(PUBLIC_ACTIVE_SEASON_REF);
     const active = snapshot.exists() && snapshot.data().status === "active"
       ? {...snapshot.data(), ref: snapshot.ref}
