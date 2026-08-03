@@ -1,5 +1,5 @@
 const LOCAL_HOSTS=new Set(["localhost","127.0.0.1","::1"]),isLocalDevelopment=LOCAL_HOSTS.has(location.hostname),useFirebaseEmulator=isLocalDevelopment&&new URLSearchParams(location.search).get("firebase")==="emulator";
-const coreModules=["./firebase-auth.js?v=44","./firebase-data.js?v=88"];
+const coreModules=["./firebase-auth.js?v=44","./firebase-data.js?v=90"];
 const loadedFeatureModules=new Map();
 const importFeature=path=>{if(!loadedFeatureModules.has(path))loadedFeatureModules.set(path,import(path));return loadedFeatureModules.get(path);};
 const adminModuleForPanel={players:"./player-admin.js?v=45",users:"./operations-access-admin.js?v=3","identity-audit":"./identity-reconciliation.js?v=12",rosters:"./roster-admin-v3.js?v=21",venues:"./venue-admin.js?v=29",seasons:"./season-bulk-import.js?v=20","season-teams":"./season-structure-admin.js?v=12","season-matchups":"./season-structure-admin.js?v=12","lineup-approvers":"./lineup-approver-admin.js?v=5"};
@@ -13,6 +13,15 @@ function loadRouteFeature(route){
 
 if(!isLocalDevelopment||useFirebaseEmulator){
   await import("./firebase-client.js?v=5");
+  if(window.alphaOpenFirebaseProjectId==="alphaopen-test-system"){
+    document.body.classList.add("test-system");
+    const testSystemBanner=document.createElement("div");
+    testSystemBanner.className="test-system-banner";
+    testSystemBanner.setAttribute("role","status");
+    testSystemBanner.innerHTML="<b>Test System</b><span>UAT environment · Data is isolated from Production</span>";
+    document.body.prepend(testSystemBanner);
+    document.title=`Test System · ${document.title}`;
+  }
   const results=await Promise.allSettled(coreModules.map(path=>import(path)));
   results.forEach((result,index)=>{if(result.status==="rejected")console.error(`AlphaOpen module failed: ${coreModules[index]}`,result.reason);});
   const currentRoute=()=>location.hash.slice(1)||"home";
