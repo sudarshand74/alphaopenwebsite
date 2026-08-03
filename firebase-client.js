@@ -23,11 +23,14 @@ const localDevelopmentConfig = {
 
 const allowedProjectIds = new Set([
   "alphaopen-development-2026",
+  "alphaopen-test-system",
   "alphaopen-production",
 ]);
 const expectedProjectByHost = new Map([
   ["alphaopen-development-2026.web.app", "alphaopen-development-2026"],
   ["alphaopen-development-2026.firebaseapp.com", "alphaopen-development-2026"],
+  ["alphaopen-test-system.web.app", "alphaopen-test-system"],
+  ["alphaopen-test-system.firebaseapp.com", "alphaopen-test-system"],
   ["alphaopen-production.web.app", "alphaopen-production"],
   ["alphaopen-production.firebaseapp.com", "alphaopen-production"],
 ]);

@@ -5,7 +5,7 @@ import vm from "node:vm";
 const html = await fs.readFile("index.html","utf8");
 const js = (await fs.readFile("app.js","utf8")).replace(/\r\n/g, "\n");
 const pageHeadingCss = await fs.readFile("page-heading-consistency.css","utf8");
-const headerFooterCss = await fs.readFile("header-footer-consistency.css","utf8");
+const headerFooterCss = (await fs.readFile("header-footer-consistency.css","utf8")).replace(/\r\n/g, "\n");
 const css = `${await fs.readFile("styles.css","utf8")}\n${pageHeadingCss}\n${headerFooterCss}\n${await fs.readFile("lineup-workflow.css","utf8")}`;
 const manifest = JSON.parse(await fs.readFile("manifest.webmanifest","utf8"));
 const serviceWorker = await fs.readFile("service-worker.js","utf8");
@@ -49,7 +49,8 @@ for (const staleVersion of ["firebase-client.js?v=1", "firebase-client.js?v=2", 
   assert(!`${runtimeLoader}${lineupSubmit}${lineupApprove}${lineupReset}${lineupWorkflowClient}${lineupUpdate}${rosterAdminShared}${playerAdmin}${matchManagementModule}`.includes(staleVersion),`Mixed shared Firebase client version remains: ${staleVersion}`);
 }
 assert(firebaseClient.includes('fetch("/__/firebase/init.json"'),"Firebase Hosting must supply the deployed project's automatic SDK configuration");
-assert(firebaseClient.includes('"alphaopen-production"')&&firebaseClient.includes("expectedProjectByHost"),"Firebase client must allow only the approved development and production projects");
+assert(firebaseClient.includes('"alphaopen-test-system"')&&firebaseClient.includes('"alphaopen-production"')&&firebaseClient.includes("expectedProjectByHost"),"Firebase client must allow only the approved development, test, and production projects");
+assert(runtimeLoader.includes('window.alphaOpenFirebaseProjectId==="alphaopen-test-system"')&&runtimeLoader.includes("Test System"),"UAT must display a persistent Test System warning");
 assert(serviceWorker.includes('url.pathname.startsWith("/__/")'),"The service worker must never intercept Firebase Hosting reserved configuration URLs");
 
 for (const token of ["Â","â","Ã"]) assert(!`${html}${js}${css}`.includes(token),`Mojibake token found: ${token}`);
@@ -117,7 +118,7 @@ assert(html.includes('<span class="kicker">Player Dashboard</span><h1>Player His
 assert(html.includes("Follow scores, standings, player history and league information on this site.")&&js.includes("Follow scores, standings, player history and league information on this site.")&&!`${html}${js}`.includes("league information without an account"),"Home welcome copy must describe information available on this site");
 assert(!html.includes('class="prototype-bar"')&&html.includes('id="authStatus" class="visually-hidden"'),"The redundant utility header must be removed while preserving accessible session status");
 assert(html.includes('header-footer-consistency.css?v=7')&&serviceWorker.includes('/header-footer-consistency.css?v=7'),"Header and footer consistency styles must load online and offline");
-assert(headerFooterCss.includes("--alphaopen-brand-frame")&&headerFooterCss.includes(".app-header,\n.site-footer"),"Header and footer must share the existing footer blue treatment");
+assert(headerFooterCss.includes("--alphaopen-brand-frame")&&/\.app-header,\r?\n\.site-footer/.test(headerFooterCss),"Header and footer must share the existing footer blue treatment");
 assert(headerFooterCss.includes(".brand-button")&&headerFooterCss.includes("background: #fff")&&html.includes('assets/alphaopen-logo.png'),"The AlphaOpen header logo must remain legible on a light panel");
 assert(headerFooterCss.includes("left: 50%")&&headerFooterCss.includes("translateX(-50%)"),"The AlphaOpen header logo must remain centered on phones");
 assert(html.includes('<span class="header-tagline">Where Friends Compete</span>')&&headerFooterCss.includes(".header-tagline")&&headerFooterCss.includes("color: #fff"),"Header must show the AlphaOpen tagline in white beside the logo");
@@ -130,7 +131,8 @@ assert(html.includes('<div class="page-heading-actions"><button type="button" cl
 assert(js.includes('"alphaopen:refresh-current-season"')&&js.includes('"alphaopen:current-season-refreshed"')&&firebaseData.includes('window.addEventListener("alphaopen:refresh-current-season"')&&firebaseData.includes("loadGlobalActiveSeasonDashboard()"),"Season Dashboards Refresh must reload active-season data and restore its button");
 assert(html.includes('id="aoPublicMessage" class="info-box" hidden')&&!aoContent.includes("${content.length} AO information record")&&aoContent.includes('byId("aoPublicMessage").hidden = false'),"About AO must hide successful record counts while preserving error messages");
 assert(html.includes('<button class="secondary compact-button" type="button" id="jumpToAoFaqs">FAQ</button>')&&!html.includes('<button class="primary" type="button" id="jumpToAoFaqs">FAQ</button>'),"About FAQ must match the compact secondary page actions");
-assert(html.includes('runtime-loader.js?v=102')&&runtimeLoader.includes('firebase-data.js?v=88')&&serviceWorker.includes('/firebase-data.js?v=88'),"Current Season refresh modules must use consistent cache-busted versions");
+assert(html.includes('runtime-loader.js?v=104')&&runtimeLoader.includes('firebase-data.js?v=90')&&serviceWorker.includes('/firebase-data.js?v=90'),"Current Season refresh modules must use consistent cache-busted versions");
+assert(firebaseData.includes('route === "weekly-lineup-dashboard"')&&firebaseData.includes('await loadWeeklyLineupIndex()'),"Weekly Lineup Dashboard route must load only the public active-season index");
 for (const route of ["current-season","captain-schedule","captain-score","ec-lineup","ec-score"]) assert(html.includes(`data-view="${route}"`),`Missing destination view: ${route}`);
 assert(!html.includes('id="currentSeasonFilter"')&&!html.includes('id="currentSeasonStatus"'),"Current Season must not repeat active-season context in a selector or status badge");
 assert(js.includes("<h2>Match Status Tracker</h2>")&&!js.includes('Match Tracker</h2>')&&!js.includes('${weeks.length} weeks</span>'),"Current Season dashboard must use the simplified Match Status Tracker heading without a week-count badge");
@@ -155,7 +157,7 @@ assert(html.includes("View AlphaOpen players’ match history across seasons."),
 assert(!html.includes('Completed regular season and playoff results loaded from AlphaOpen records.'),"Previous Seasons must remove the old description");
 assert(html.includes('<option value="">Select Completed Season</option>'),"Previous Seasons must default to Select Completed Season");
 assert(js.includes("applyCompletedSeasonOptions(seasons = [])")&&js.includes('toLowerCase() === "completed"'),"Previous Seasons must be limited to seasons marked Completed");
-assert(firebaseData.includes('if (route === "current-season" || route === "season-dashboard")'),"Current Season route must load active-season Firebase data");
+assert(firebaseData.includes('route === "current-season"')&&firebaseData.includes('route === "season-dashboard"'),"Current Season route must load active-season Firebase data");
 assert(!firebaseData.includes('doc(db, "seasons", "AO-F-2026")'),"Current-season data loading must not be fixed to Fall 2026");
 assert(firebaseData.includes('doc(db, "publicConfig", "activeSeason")'),"Guest-safe active-season metadata document is missing");
 assert(firebaseData.includes("await getDoc(PUBLIC_ACTIVE_SEASON_REF)"),"Guest Home must read safe active-season metadata");
@@ -180,7 +182,25 @@ assert.equal((html.match(/data-admin-target="venues">Venue Master<\/button>/g)||
 assert.equal((html.match(/data-admin-target="ao-content">About &amp; FAQ Update<\/button>/g)||[]).length,2,"EC desktop and mobile menus must include About & FAQ Update");
 assert(js.includes("button.dataset.adminTarget")&&js.includes("setAdminPanel(button.dataset.adminTarget)"),"EC management menu links must open their requested admin panel");
 assert(js.includes('const isAdminShortcut = route === "admin"')&&js.includes(':not([data-admin-target])'),"EC Admin shortcuts must remain plain menu items without duplicate active highlighting");
-assert(html.includes('app.js?v=147')&&serviceWorker.includes('/app.js?v=147'),"Simplified EC menu highlighting must use consistent cache-busted app versions");
+assert(html.includes('app.js?v=153')&&serviceWorker.includes('/app.js?v=153'),"Simplified EC menu highlighting must use consistent cache-busted app versions");
+assert(html.includes('data-view="weekly-lineup-dashboard"')&&!html.includes('data-view="weekly-lineup-dashboard" data-access='),"Weekly Lineup Dashboard must remain a public view");
+assert.equal((html.match(/data-route="weekly-lineup-dashboard"/g)||[]).length,4,"Captain and EC desktop and mobile menus must link to Weekly Lineup Dashboard");
+assert(/\[\s*"weekly-lineup-dashboard",\s*"Weekly Lineup Dashboard"/.test(js),"Home quick actions must link to Weekly Lineup Dashboard");
+assert(!js.includes('Fully approved lineup and public match status.'),"Weekly Lineup Dashboard must not display the redundant approved-status banner");
+assert(html.includes('<span class="kicker">Weekly Matchup View</span><h1>Weekly Matchup Dashboard</h1>'),"Weekly matchup page must use the requested heading");
+assert(html.includes('id="weeklyLineupFiltersTitle">Weekly Lineup</h2>'),"Weekly matchup filters must use the Weekly Lineup heading");
+assert(js.includes('<h2>Weekly Lineup Status</h2>'),"Selected matchup status section must use the Weekly Lineup Status heading");
+assert(js.includes('alphaopen:weekly-lineup-requested')&&js.includes('weeklyLineupDataLoading'),"Weekly lineup details must load only after both selectors identify a matchup");
+assert(firebaseData.includes('loadWeeklyLineupMatchup')&&firebaseData.includes('loadPublicMatchLines(seasonId, [{matchupId}])'),"Weekly lineup loading must query only the selected matchup lines");
+assert(publicSeasonDashboard.includes('weeklyMatchups')&&publicSeasonDashboard.includes('rosterNamesByPlayerId')&&publicSeasonDashboard.includes('PUBLIC_ACTIVE_SEASON_REF'),"Public active-season metadata must publish roster-derived captain matchup options");
+assert(firestoreRules.includes("documentId in ['activeSeason', 'activeSeasonDashboard']"),"Season EC publishing must keep the public active-season index synchronized");
+const preferredCaptainSource = js.match(/function preferredWeeklyCaptainOption\(account = \{\}, captainOptions = \[\]\) \{[\s\S]*?^\}/m)?.[0];
+assert(preferredCaptainSource,"Signed-in captain defaulting helper is missing");
+const preferredWeeklyCaptainOption = vm.runInNewContext(`(${preferredCaptainSource})`);
+const captainChoices = [{value:"M1|T1",teamId:"T1",captainPlayerIds:["P1"]},{value:"M2|T2",teamId:"T2",captainPlayerIds:["P2"]}];
+assert.equal(preferredWeeklyCaptainOption({role:"Captain",playerId:"P2",teamIds:[]},captainChoices)?.value,"M2|T2","Captain must default by roster-linked player ID");
+assert.equal(preferredWeeklyCaptainOption({role:"Captain",playerId:"",teamIds:["T1"]},captainChoices)?.value,"M1|T1","Captain must fall back to an authorized team assignment");
+assert.equal(preferredWeeklyCaptainOption({role:"Guest",playerId:"P2",teamIds:[]},captainChoices),null,"Guest must keep Captain Name blank");
 assert(html.includes('data-admin-panel="venues" data-access-any="ec"')&&html.includes('data-admin-panel="ao-content" data-access-any="ec"'),"Only approved Master Data panels must be exposed to EC users");
 assert(!html.includes('id="cancelAoContentEdit">Clear</button>')&&!html.includes('id="cancelAoCategoryEdit">Clear</button>')&&!html.includes('id="cancelAoFaqEdit">Clear</button>'),"About and FAQ forms must remove Clear buttons");
 for (const cancelId of ["cancelAoContentEdit","cancelAoCategoryEdit","cancelAoFaqEdit"]) assert(html.includes(`id="${cancelId}">Cancel</button>`),`${cancelId} must display Cancel`);

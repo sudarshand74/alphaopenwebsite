@@ -13,6 +13,7 @@ import {auth, db} from "./firebase-client.js?v=5";
 import {loadCanonicalPlayers} from "./player-identity.js?v=5";
 
 const PUBLIC_DASHBOARD_REF = doc(db, "publicConfig", "activeSeasonDashboard");
+const PUBLIC_ACTIVE_SEASON_REF = doc(db, "publicConfig", "activeSeason");
 const PUBLIC_COMPLETED_DASHBOARDS = "publicSeasonDashboards";
 const PUBLIC_COMPLETED_SEASONS = "publicCompletedSeasons";
 const MAX_PROJECTION_BYTES = 850000;
@@ -259,10 +260,60 @@ export async function publishPublicSeasonDashboard(seasonId) {
   const targetRef = seasonStatus === "active"
     ? PUBLIC_DASHBOARD_REF
     : doc(db, PUBLIC_COMPLETED_DASHBOARDS, seasonId);
-  await setDoc(targetRef, {
+  const dashboardWrite = setDoc(targetRef, {
     ...projection,
     updatedAt: serverTimestamp(),
   });
+  if (seasonStatus === "active") {
+    const teamsById = new Map(projection.teams.map((team) => [team.teamId, team]));
+    const rosterNamesByPlayerId = new Map(
+      projection.rosterAssignments
+        .filter((assignment) => assignment.playerId && assignment.playerNameSnapshot)
+        .map((assignment) => [assignment.playerId, assignment.playerNameSnapshot]),
+    );
+    const captainNameForTeam = (team = {}) =>
+      (team.captainPlayerIds || [])
+        .map((playerId) => rosterNamesByPlayerId.get(playerId))
+        .find(Boolean) ||
+      team.captainNameSnapshot ||
+      team.name ||
+      team.shortName ||
+      team.teamId ||
+      "Captain TBD";
+    const weeklyMatchups = projection.matchups.map((matchup) => {
+      const home = teamsById.get(matchup.homeTeamId) || {};
+      const away = teamsById.get(matchup.awayTeamId) || {};
+      return {
+        matchupId: matchup.matchupId,
+        weekId: matchup.weekId,
+        homeTeamId: matchup.homeTeamId,
+        awayTeamId: matchup.awayTeamId,
+        homeTeamNameSnapshot:
+          matchup.homeTeamNameSnapshot || home.name || home.shortName || matchup.homeTeamId,
+        awayTeamNameSnapshot:
+          matchup.awayTeamNameSnapshot || away.name || away.shortName || matchup.awayTeamId,
+        homeCaptainName: captainNameForTeam(home),
+        awayCaptainName: captainNameForTeam(away),
+        homeCaptainPlayerIds: home.captainPlayerIds || [],
+        awayCaptainPlayerIds: away.captainPlayerIds || [],
+      };
+    });
+    await Promise.all([
+      dashboardWrite,
+      setDoc(PUBLIC_ACTIVE_SEASON_REF, {
+        seasonId,
+        name: projection.season.name || seasonId,
+        status: "active",
+        linesPerMatchup: Number(projection.season.linesPerMatchup || 5),
+        weeks: projection.weeks.map((week) =>
+          copy(week, ["weekId", "label", "sequence", "stage"])),
+        weeklyMatchups,
+        updatedAt: serverTimestamp(),
+      }, {merge: true}),
+    ]);
+  } else {
+    await dashboardWrite;
+  }
   if (seasonStatus !== "active") {
     await setDoc(completedSeasonRef, {
       seasonId,

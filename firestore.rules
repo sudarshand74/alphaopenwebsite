@@ -443,7 +443,7 @@ service cloud.firestore {
     match /publicConfig/{documentId} {
       allow read: if true;
       allow write: if isSuperAdmin()
-        || (documentId == 'activeSeasonDashboard'
+        || (documentId in ['activeSeason', 'activeSeasonDashboard']
           && request.resource.data.seasonId is string
           && isSeasonEC(request.resource.data.seasonId));
     }

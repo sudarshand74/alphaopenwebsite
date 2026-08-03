@@ -7,7 +7,7 @@ import {
   loadPublicMatchLines,
   loadPublicSeasonDashboard,
   publishPublicSeasonDashboard,
-} from "./public-season-dashboard.js?v=15";
+} from "./public-season-dashboard.js?v=16";
 import { refreshSeasonPublicRecords } from "./season-public-sync.js?v=1";
 import {
   collection,
@@ -27,6 +27,7 @@ import {
   where
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 let publishedHistorySeasons = [];
+let weeklyLineupIndex = null;
 const readCache = new Map();
 const PUBLIC_READ_TTL_MS = 5 * 60 * 1000;
 const OPERATIONAL_READ_TTL_MS = 60 * 1000;
@@ -278,6 +279,70 @@ async function loadGlobalActiveSeasonDashboard({ includeCompleted = false } = {}
       message,
     );
     return { ok: false, message };
+  }
+}
+
+async function loadWeeklyLineupIndex() {
+  try {
+    const snapshot = await getDoc(PUBLIC_ACTIVE_SEASON_REF);
+    const active = snapshot.exists() && snapshot.data().status === "active"
+      ? {...snapshot.data(), ref: snapshot.ref}
+      : null;
+    weeklyLineupIndex = active;
+    window.alphaOpenDataUI?.applyWeeklyLineupIndex(active);
+  } catch (error) {
+    console.error("Weekly lineup index load failed", error);
+    weeklyLineupIndex = null;
+    window.alphaOpenDataUI?.applyWeeklyLineupIndex(
+      null,
+      error.message || "The active-season matchup list could not be loaded.",
+    );
+  }
+}
+
+async function loadWeeklyLineupMatchup({seasonId = "", weekId = "", matchupId = ""} = {}) {
+  try {
+    if (!seasonId || !weekId || !matchupId) {
+      throw new Error("Select both Week and Captain Name.");
+    }
+    const active = weeklyLineupIndex;
+    if (!active || active.seasonId !== seasonId) {
+      throw new Error("The active season changed. Reload this page and try again.");
+    }
+    const matchup = (active.weeklyMatchups || []).find(
+      (item) => item.matchupId === matchupId && item.weekId === weekId,
+    );
+    if (!matchup) throw new Error("The selected weekly matchup is unavailable.");
+    const lineMatches = await loadPublicMatchLines(seasonId, [{matchupId}]);
+    const teams = [
+      {
+        teamId: matchup.homeTeamId,
+        name: matchup.homeTeamNameSnapshot,
+        captainNameSnapshot: matchup.homeCaptainName,
+      },
+      {
+        teamId: matchup.awayTeamId,
+        name: matchup.awayTeamNameSnapshot,
+        captainNameSnapshot: matchup.awayCaptainName,
+      },
+    ];
+    window.alphaOpenDataUI?.applyWeeklyLineupData({
+      season: {
+        seasonId: active.seasonId,
+        name: active.name || active.seasonId,
+        status: active.status,
+        linesPerMatchup: Number(active.linesPerMatchup || 5),
+      },
+      teams,
+      matchups: [matchup],
+      lineMatches,
+    });
+  } catch (error) {
+    console.error("Selected weekly lineup load failed", error);
+    window.alphaOpenDataUI?.applyWeeklyLineupData(
+      null,
+      error.message || "The selected weekly matchup could not be loaded.",
+    );
   }
 }
 
@@ -1238,6 +1303,10 @@ async function loadForRoute(route, user = auth.currentUser) {
     await loadPendingApprovalCount(user);
     return;
   }
+  if (route === "weekly-lineup-dashboard") {
+    await loadWeeklyLineupIndex();
+    return;
+  }
   if (route === "current-season" || route === "season-dashboard") {
     await loadGlobalActiveSeasonDashboard();
     return;
@@ -1263,6 +1332,10 @@ async function loadForRoute(route, user = auth.currentUser) {
 
 window.addEventListener("alphaopen:completed-season-selected", (event) => {
   loadSelectedCompletedSeason(event.detail?.seasonId || "");
+});
+
+window.addEventListener("alphaopen:weekly-lineup-requested", (event) => {
+  loadWeeklyLineupMatchup(event.detail || {});
 });
 
 onAuthStateChanged(auth, user => {

@@ -5,6 +5,7 @@ const accounts = {
     avatar: "G",
     role: "Guest",
     access: [],
+    roles: [],
     playerId: null,
   },
 };
@@ -28,6 +29,12 @@ let springSeasonData = null;
 let fallSeasonData = null;
 let springLineEditIndex = new Map();
 let pendingApprovalLineupCount;
+let weeklyLineupMatchFilter = "all";
+let weeklyLineupIndexLoaded = false;
+let weeklyLineupData = null;
+let weeklyLineupDataLoading = false;
+let weeklyLineupDataError = "";
+let weeklyLineupRequestKey = "";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -101,6 +108,14 @@ function setAccount(key, announce = false) {
   renderHistory(account);
   renderSpringSeason();
   renderFallSeason();
+  if (requestedRoute === "weekly-lineup-dashboard") {
+    weeklyLineupData = null;
+    weeklyLineupDataLoading = false;
+    weeklyLineupDataError = "";
+    weeklyLineupRequestKey = "";
+    populateWeeklyLineupFilters(true);
+    renderWeeklyLineupDashboard();
+  }
   if (announce)
     showToast(key === "guest" ? "Signed out" : `Signed in as ${account.name}`);
 }
@@ -185,6 +200,11 @@ function renderWorkspace(account) {
       "Matches",
       "Click here to see today’s, upcoming and recently completed matches and generate posters on the fly.",
     ],
+    [
+      "weekly-lineup-dashboard",
+      "Weekly Lineup Dashboard",
+      "View fully approved weekly lineups and public line-match status.",
+    ],
   ];
   if (
     account.role === "Super Admin" ||
@@ -256,6 +276,7 @@ function navigate(route) {
     renderHistory(accounts[currentAccountKey]);
   }
   if(route==="ec-roster") mountRosterPanel("ecRosterMount");
+  if(route==="weekly-lineup-dashboard") renderWeeklyLineupDashboard();
   if(route==="admin"&&$("[data-admin-panel].active")?.dataset.adminPanel==="rosters")mountRosterPanel("adminRosterMount");
   $$(".view").forEach((view) =>
     view.classList.toggle("active", view === target),
@@ -1208,6 +1229,306 @@ function renderSeasonDashboard() {
     ),
   );
 }
+function weeklyDashboardStageOrder(stage) {
+  const canonical = canonicalStage(stage);
+  return /^W\d+$/.test(canonical)
+    ? Number(canonical.slice(1))
+    : ({ QF: 80, SF: 90, F: 100 }[canonical] || 999);
+}
+
+function weeklyDashboardTeamMap() {
+  return new Map((weeklyLineupData?.teams || []).map((team) => [team.teamId, team]));
+}
+
+function weeklyDashboardCaptain(team = {}) {
+  return team.captainNameSnapshot || fullTeamName(team.teamId, team.name, weeklyDashboardTeamMap());
+}
+
+function weeklyDashboardPlayerName(player = {}) {
+  return (
+    historyPlayerDirectory.get(player.playerId) ||
+    player.nameSnapshot ||
+    player.playerNameSnapshot ||
+    player.name ||
+    player.playerId ||
+    "Player TBD"
+  );
+}
+
+function weeklyDashboardRank(player = {}) {
+  const rank = Number(player.rankNumber ?? player.rankSnapshot);
+  return Number.isFinite(rank) && rank > 0 ? `R${rank}` : "R–";
+}
+
+function weeklyDashboardSor(line, side) {
+  const stored = Number(line?.[`${side}Sor`]);
+  if (Number.isFinite(stored)) return stored;
+  const ranks = (line?.[`${side}Players`] || [])
+    .map((player) => Number(player.rankNumber ?? player.rankSnapshot))
+    .filter(Number.isFinite);
+  return ranks.length ? ranks.reduce((sum, rank) => sum + rank, 0) : "–";
+}
+
+function weeklyDashboardLineStatus(line = {}) {
+  const scheduleStatus = String(line.scheduleStatus || "").toLowerCase();
+  const scoreStatus = String(line.scoreStatus || "").toLowerCase();
+  if (
+    line.winnerTeamId ||
+    scheduleStatus === "completed" ||
+    ["published", "locked", "confirmed"].includes(scoreStatus)
+  ) return "completed";
+  if (["scheduled", "confirmed"].includes(scheduleStatus) || scoreStatus === "scheduled")
+    return "scheduled";
+  return "toBeScheduled";
+}
+
+function preferredWeeklyCaptainOption(account = {}, captainOptions = []) {
+  const isCaptain = account.role === "Captain" || (account.roles || []).includes("captain");
+  if (!isCaptain) return null;
+  const teamIds = new Set(account.teamIds || []);
+  return captainOptions.find(
+    (option) =>
+      teamIds.has(option.teamId) ||
+      (account.playerId && option.captainPlayerIds.includes(account.playerId)),
+  ) || null;
+}
+
+function populateWeeklyLineupFilters(resetCaptain = false) {
+  const seasonSelect = $("#weeklyLineupSeason"),
+    weekSelect = $("#weeklyLineupWeek"),
+    captainSelect = $("#weeklyLineupCaptain");
+  if (!seasonSelect || !weekSelect || !captainSelect) return;
+  const season = activeWorkspaceSeason,
+    dataMatchups = [...(season?.weeklyMatchups || [])].sort(
+      (a, b) =>
+        weeklyDashboardStageOrder(a.weekId) - weeklyDashboardStageOrder(b.weekId) ||
+        String(a.matchupId).localeCompare(String(b.matchupId)),
+    );
+  seasonSelect.innerHTML = season?.seasonId
+    ? `<option value="${safeText(season.seasonId)}">${safeText(seasonDisplayName(season))}</option>`
+    : '<option value="">No active season</option>';
+  const selectedWeek = weekSelect.value,
+    weekLabels = new Map(
+      (season?.weeks || []).map((week) => [
+        canonicalStage(week.weekId),
+        week.label || seasonStageTitle(week.weekId),
+      ]),
+    ),
+    weekIds = [...new Set([
+      ...(season?.weeks || []).map((week) => canonicalStage(week.weekId)),
+      ...dataMatchups.map((matchup) => canonicalStage(matchup.weekId)),
+    ].filter(Boolean))].sort(
+      (a, b) => weeklyDashboardStageOrder(a) - weeklyDashboardStageOrder(b),
+    );
+  weekSelect.innerHTML = `<option value="">Select Week</option>${weekIds
+    .map((weekId) => `<option value="${safeText(weekId)}">${safeText(weekLabels.get(weekId) || seasonStageTitle(weekId))}</option>`)
+    .join("")}`;
+  weekSelect.disabled = !weekIds.length;
+  if (weekIds.includes(selectedWeek)) weekSelect.value = selectedWeek;
+  const previousCaptain = resetCaptain ? "" : captainSelect.value,
+    selectedMatchups = dataMatchups.filter(
+      (matchup) => canonicalStage(matchup.weekId) === weekSelect.value,
+    ),
+    teamMap = weeklyDashboardTeamMap(),
+    captainOptions = selectedMatchups.flatMap((matchup) => {
+      const home = teamMap.get(matchup.homeTeamId) || {
+          teamId: matchup.homeTeamId,
+          name: matchup.homeTeamNameSnapshot,
+          captainNameSnapshot: matchup.homeCaptainName,
+        },
+        away = teamMap.get(matchup.awayTeamId) || {
+          teamId: matchup.awayTeamId,
+          name: matchup.awayTeamNameSnapshot,
+          captainNameSnapshot: matchup.awayCaptainName,
+        };
+      return [
+        {
+          value: `${matchup.matchupId}|${matchup.homeTeamId}`,
+          label: `${fullTeamName(home.teamId, home.name, teamMap)} - ${weeklyDashboardCaptain(home)}`,
+          teamId: matchup.homeTeamId,
+          captainPlayerIds: matchup.homeCaptainPlayerIds || [],
+        },
+        {
+          value: `${matchup.matchupId}|${matchup.awayTeamId}`,
+          label: `${fullTeamName(away.teamId, away.name, teamMap)} - ${weeklyDashboardCaptain(away)}`,
+          teamId: matchup.awayTeamId,
+          captainPlayerIds: matchup.awayCaptainPlayerIds || [],
+        },
+      ];
+    });
+  captainSelect.innerHTML = `<option value="">Select Captain Name</option>${captainOptions
+    .map((option) => `<option value="${safeText(option.value)}">${safeText(option.label)}</option>`)
+    .join("")}`;
+  captainSelect.disabled = !weekSelect.value || !captainOptions.length;
+  if (!resetCaptain && captainOptions.some((option) => option.value === previousCaptain)) {
+    captainSelect.value = previousCaptain;
+  } else {
+    const account = accounts[currentAccountKey] || accounts.guest,
+      preferred = preferredWeeklyCaptainOption(account, captainOptions);
+    if (preferred) captainSelect.value = preferred.value;
+  }
+}
+
+function weeklyDashboardPlayerMarkup(player = {}) {
+  return `<span><span class="weekly-rank">${safeText(weeklyDashboardRank(player))}</span> ${safeText(weeklyDashboardPlayerName(player))}</span>`;
+}
+
+function weeklyDashboardTeamMarkup(team, side, lines) {
+  return `<article class="weekly-team ${side}">
+    <div class="weekly-team-heading"><small>${safeText(side)} team · Captain ${safeText(weeklyDashboardCaptain(team))}</small><h3>${safeText(fullTeamName(team.teamId, team.name, weeklyDashboardTeamMap()))}</h3></div>
+    <div class="weekly-line-head"><span>Line</span><span>Rank / Player</span><span>SOR</span></div>
+    ${lines.map((line) => {
+      const players = line[`${side}Players`] || [];
+      return `<div class="weekly-line-row"><span class="weekly-line-label">L${Number(line.lineNumber || 0)}</span><span class="weekly-player-pair">${players.map(weeklyDashboardPlayerMarkup).join('<span class="weekly-player-separator"> / </span>')}</span><strong class="weekly-sor">${safeText(weeklyDashboardSor(line, side))}</strong></div>`;
+    }).join("")}
+  </article>`;
+}
+
+function weeklyDashboardStatusButton(value, label, count) {
+  return `<button type="button" class="weekly-status-filter ${weeklyLineupMatchFilter === value ? "active" : ""}" data-weekly-match-filter="${value}"><b>${count}</b>${label}</button>`;
+}
+
+function renderWeeklyLineupDashboard() {
+  const comparison = $("#weeklyLineupComparison"),
+    matchesPanel = $("#weeklyMatchesDashboard"),
+    message = $("#weeklyLineupMessage"),
+    weekSelect = $("#weeklyLineupWeek"),
+    captainSelect = $("#weeklyLineupCaptain");
+  if (!comparison || !matchesPanel || !message || !weekSelect || !captainSelect) return;
+  message.hidden = false;
+  if (!weeklyLineupIndexLoaded) {
+    message.textContent = "Loading active season…";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  if (!activeWorkspaceSeason) {
+    populateWeeklyLineupFilters();
+    message.textContent = "No active season is available.";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  populateWeeklyLineupFilters();
+  if (!weekSelect.value) {
+    message.textContent = "Select a week to load the available captains.";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  if (!captainSelect.value) {
+    message.textContent = "Select Captain Name to view the fully approved matchup.";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  const [matchupId] = captainSelect.value.split("|"),
+    requestKey = `${activeWorkspaceSeason.seasonId}|${weekSelect.value}|${matchupId}`;
+  if (weeklyLineupRequestKey !== requestKey) {
+    weeklyLineupRequestKey = requestKey;
+    weeklyLineupData = null;
+    weeklyLineupDataError = "";
+    weeklyLineupDataLoading = true;
+    window.dispatchEvent(new CustomEvent("alphaopen:weekly-lineup-requested", {
+      detail: {
+        seasonId: activeWorkspaceSeason.seasonId,
+        weekId: weekSelect.value,
+        matchupId,
+      },
+    }));
+  }
+  if (weeklyLineupDataLoading) {
+    message.textContent = "Loading the selected weekly matchup…";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  if (weeklyLineupDataError) {
+    message.textContent = weeklyLineupDataError;
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  const matchup = (weeklyLineupData?.matchups || []).find((item) => item.matchupId === matchupId),
+    lines = (weeklyLineupData?.lineMatches || [])
+      .filter((line) => line.matchupId === matchupId)
+      .sort((a, b) => Number(a.lineNumber || 0) - Number(b.lineNumber || 0));
+  if (!matchup) {
+    message.textContent = "The selected matchup could not be found.";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  const expectedLines = Number(matchup.linesPerMatchup || weeklyLineupData?.season?.linesPerMatchup || 5),
+    fullyApproved = matchup.lineupsPublished === true || lines.length >= expectedLines;
+  if (!fullyApproved || !lines.length) {
+    message.textContent = "A fully approved lineup is not yet available for this matchup.";
+    comparison.innerHTML = "";
+    matchesPanel.innerHTML = "";
+    return;
+  }
+  const teamMap = weeklyDashboardTeamMap(),
+    home = teamMap.get(matchup.homeTeamId) || {
+      teamId: matchup.homeTeamId,
+      name: matchup.homeTeamNameSnapshot,
+    },
+    away = teamMap.get(matchup.awayTeamId) || {
+      teamId: matchup.awayTeamId,
+      name: matchup.awayTeamNameSnapshot,
+    },
+    homeName = fullTeamName(home.teamId, home.name, teamMap),
+    awayName = fullTeamName(away.teamId, away.name, teamMap),
+    weekLabel = seasonStageTitle(matchup.weekId);
+  message.textContent = "";
+  message.hidden = true;
+  comparison.innerHTML = `<section class="weekly-lineup-shell">
+    <div class="weekly-matchup-heading"><div><span class="kicker">${safeText(weekLabel)}</span><h2>${safeText(homeName)} vs ${safeText(awayName)}</h2><p>${safeText(weeklyLineupData?.season?.name || weeklyLineupData?.season?.seasonId || "Active Season")}</p></div></div>
+    <div class="weekly-team-grid">${weeklyDashboardTeamMarkup(home, "home", lines)}${weeklyDashboardTeamMarkup(away, "away", lines)}</div>
+  </section>`;
+
+  const rows = lines.map((line) => ({ line, status: weeklyDashboardLineStatus(line) })),
+    counts = {
+      upcoming: rows.filter((row) => row.status !== "completed").length,
+      scheduled: rows.filter((row) => row.status === "scheduled").length,
+      toBeScheduled: rows.filter((row) => row.status === "toBeScheduled").length,
+      completed: rows.filter((row) => row.status === "completed").length,
+    },
+    visibleRows = weeklyLineupMatchFilter === "all"
+      ? rows
+      : weeklyLineupMatchFilter === "upcoming"
+        ? rows.filter((row) => row.status !== "completed")
+        : rows.filter((row) => row.status === weeklyLineupMatchFilter),
+    statusLabels = {
+      scheduled: ["Scheduled", "scheduled"],
+      toBeScheduled: ["To Be Scheduled", "tbs"],
+      completed: ["Completed", "completed"],
+    };
+  matchesPanel.innerHTML = `<section class="weekly-matches-shell">
+    <div class="weekly-matches-heading"><span class="kicker">Match Status</span><h2>Weekly Lineup Status</h2><p>${safeText(weekLabel)} · ${safeText(homeName)} vs ${safeText(awayName)}</p></div>
+    <div class="weekly-status-filters" role="group" aria-label="Filter line matches by status">
+      ${weeklyDashboardStatusButton("upcoming", "Upcoming", counts.upcoming)}
+      ${weeklyDashboardStatusButton("scheduled", "Scheduled", counts.scheduled)}
+      ${weeklyDashboardStatusButton("toBeScheduled", "To Be Scheduled", counts.toBeScheduled)}
+      ${weeklyDashboardStatusButton("completed", "Completed", counts.completed)}
+      ${weeklyDashboardStatusButton("all", "All", rows.length)}
+    </div>
+    <div class="weekly-match-table">
+      <div class="weekly-match-head"><span>Line</span><span>Players</span><span>Schedule</span><span>Status</span><span>Score / Pts</span></div>
+      ${visibleRows.length ? visibleRows.map(({ line, status }) => {
+        const [statusLabel, statusClass] = statusLabels[status],
+          completed = status === "completed",
+          winnerName = completed && line.winnerTeamId
+            ? fullTeamName(line.winnerTeamId, "", teamMap)
+            : "",
+          score = completed ? lineScore(line) : "—",
+          points = `${Number(line.homePoints || 0)}–${Number(line.awayPoints || 0)}`,
+          outcome = winnerName ? `${winnerName} won` : "Result published";
+        return `<div class="weekly-match-row"><strong>L${Number(line.lineNumber || 0)}</strong><span class="weekly-match-players"><span>${safeText(playerPair(line.homePlayers))} <em>vs</em></span><span>${safeText(playerPair(line.awayPlayers))}</span></span><span class="weekly-match-schedule"><b>${safeText(status === "toBeScheduled" ? "Date & time pending" : formatPlayedAt(line.scheduledAt))}</b><small>${safeText(status === "toBeScheduled" ? "Venue pending" : line.venueNameSnapshot || line.venueId || "Venue pending")}</small></span><strong class="weekly-match-status ${statusClass}">${statusLabel}</strong><span class="weekly-match-result">${completed ? `<b>${safeText(score)}</b><small class="weekly-match-outcome">${safeText(outcome)} · Pts ${safeText(points)}</small>` : "—"}</span></div>`;
+      }).join("") : '<div class="weekly-dashboard-empty">No line matches in this status.</div>'}
+    </div>
+  </section>`;
+}
+
 function renderSpringSeason() {
   const panel = $("#springSeasonResults");
   if (!panel) return;
@@ -2227,6 +2548,23 @@ window.alphaOpenDataUI = {
     updateCurrentSeasonContext(activeWorkspaceSeason);
     renderWorkspace(accounts[currentAccountKey]);
   },
+  applyWeeklyLineupIndex(season, errorMessage = "") {
+    activeWorkspaceSeason = season || null;
+    weeklyLineupIndexLoaded = true;
+    weeklyLineupData = null;
+    weeklyLineupDataLoading = false;
+    weeklyLineupDataError = errorMessage;
+    weeklyLineupRequestKey = "";
+    updateCurrentSeasonContext(activeWorkspaceSeason);
+    populateWeeklyLineupFilters(true);
+    renderWeeklyLineupDashboard();
+  },
+  applyWeeklyLineupData(data, errorMessage = "") {
+    weeklyLineupData = data || null;
+    weeklyLineupDataLoading = false;
+    weeklyLineupDataError = errorMessage;
+    renderWeeklyLineupDashboard();
+  },
   applyPendingApprovalCount(count) {
     pendingApprovalLineupCount = count !== null && Number.isFinite(Number(count)) ? Number(count) : null;
     renderWorkspace(accounts[currentAccountKey]);
@@ -2311,6 +2649,7 @@ window.alphaOpenDataUI = {
     renderSpringSeason();
     renderFallSeason();
     renderSeasonDashboard();
+    renderWeeklyLineupDashboard();
   },
   applyPlayerDirectory(players) {
     historyPlayerDirectory = new Map(
@@ -2337,6 +2676,7 @@ window.alphaOpenDataUI = {
     renderSpringSeason();
     renderFallSeason();
     renderSeasonDashboard();
+    renderWeeklyLineupDashboard();
   },
   showMatchesUnavailable(message, season = null) {
     const panel = $("#matchesPage");
@@ -2374,6 +2714,7 @@ window.alphaOpenAuthUI = {
       avatar: initials(playerName),
       role: authorization.role || "Pending approval",
       access: authorization.access || [],
+      roles: authorization.roles || [],
       playerId: authorization.playerId || null,
       teamIds: authorization.teamIds || [],
     };
@@ -2445,6 +2786,29 @@ $("#fallWeekFilter")?.addEventListener("change", renderFallSeason);
 $("#fallTeamFilter")?.addEventListener("change", renderFallSeason);
 $("#fallPlayerFilter")?.addEventListener("change", renderFallSeason);
 $("#fallStatusFilter")?.addEventListener("change", renderFallSeason);
+$("#weeklyLineupWeek")?.addEventListener("change", () => {
+  weeklyLineupMatchFilter = "all";
+  weeklyLineupData = null;
+  weeklyLineupDataLoading = false;
+  weeklyLineupDataError = "";
+  weeklyLineupRequestKey = "";
+  populateWeeklyLineupFilters(true);
+  renderWeeklyLineupDashboard();
+});
+$("#weeklyLineupCaptain")?.addEventListener("change", () => {
+  weeklyLineupMatchFilter = "all";
+  weeklyLineupData = null;
+  weeklyLineupDataLoading = false;
+  weeklyLineupDataError = "";
+  weeklyLineupRequestKey = "";
+  renderWeeklyLineupDashboard();
+});
+$("#weeklyMatchesDashboard")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-weekly-match-filter]");
+  if (!button) return;
+  weeklyLineupMatchFilter = button.dataset.weeklyMatchFilter || "all";
+  renderWeeklyLineupDashboard();
+});
 $("#previousSeasonFilter")?.addEventListener("change", (event) => {
   resetPreviousSeasonDashboardFilters();
   springSeasonData = null;
@@ -2595,5 +2959,6 @@ window.addEventListener("popstate", () =>
 renderStandings();
 renderMatches();
 renderFirebaseOnlyStates();
+renderWeeklyLineupDashboard();
 setAccount("guest");
 navigate(location.hash.slice(1) || "home");
