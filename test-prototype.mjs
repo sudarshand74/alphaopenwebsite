@@ -57,7 +57,7 @@ for (const token of ["Â","â","Ã"]) assert(!`${html}${js}${css}`.includes(toke
 assert(js.includes('"Public Access Site"')&&firebaseAuth.includes('"Public Access Site"'),"Public sessions must be labeled Public Access Site");
 assert(html.includes('href="https://www.facebook.com/"')&&html.includes('aria-label="Visit Facebook"'),"Footer Facebook icon must link to Facebook");
 for (const resourceDialogId of ["seasonScheduleDialog","leagueRulesDialog","aoValuesDialog"]) assert(html.includes(`id="${resourceDialogId}"`),`Missing guest resource dialog #${resourceDialogId}`);
-for (const resourceAsset of ["ao-fall-2026-calendar.jpg","ao-fall-2026-season-schedule.jpg","ao-values.jpg"]) assert(html.includes(`assets/${resourceAsset}`)&&serviceWorker.includes(`/assets/${resourceAsset}`),`Guest resource asset is not available offline: ${resourceAsset}`);
+for (const resourceAsset of ["ao-fall-2026-schedule-2026.jpeg","ao-values.jpg"]) assert(html.includes(`assets/${resourceAsset}`)&&serviceWorker.includes(`/assets/${resourceAsset}`),`Guest resource asset is not available offline: ${resourceAsset}`);
 assert(html.includes(">Season Schedule</button>")&&html.includes(">League Rules</button>")&&html.includes(">AO Values</button>"),"Guest Home must include simple resource links");
 assert(!js.includes('$("#guestResourceLinks").hidden = account.role !== "Guest"')&&js.includes("[data-resource-dialog]"),"Home resource popups must remain available to guests and signed-in users");
 for (const waiverProtection of ["Specific release of EC members, captains, and volunteers","not personally responsible or liable","bodily or personal injury","property damage","ordinary negligence","gross negligence"]) assert(html.includes(waiverProtection),`Participant waiver is missing explicit protection language: ${waiverProtection}`);
@@ -261,6 +261,10 @@ assert(publicSeasonDashboard.includes("loadPublicCompletedSeasons")&&publicSeaso
 assert(publicSeasonDashboard.includes("loadPublicCompletedSeasonDashboard(seasonId)"),"A completed dashboard must load only after a season is selected");
 assert(publicSeasonDashboard.includes('doc(db, PUBLIC_COMPLETED_DASHBOARDS, seasonId)'),"Completed seasons must publish to independent guest-safe dashboard documents");
 assert(firestoreRules.includes("match /publicSeasonDashboards/{seasonId}")&&firestoreRules.includes("match /publicCompletedSeasons/{seasonId}")&&firestoreRules.includes("resource.data.status == 'completed'"),"Completed-season metadata and dashboard projections must be publicly readable and status restricted");
+for (const publicProjection of ["publicSeasonDashboards", "publicCompletedSeasons"]) {
+  const ruleStart = firestoreRules.indexOf(`match /${publicProjection}/{seasonId}`);
+  assert(ruleStart >= 0 && firestoreRules.slice(ruleStart, ruleStart + 300).includes("allow delete: if isSuperAdmin() || isSeasonEC(seasonId);"),`${publicProjection} cleanup must allow an authorized EC to republish an active season`);
+}
 assert(matchManagement.includes("Confirm final score?")&&matchManagement.includes("window.confirm"),"Completed scores must require confirmation");
 assert(matchManagementModule.includes('winnerLine.textContent = winner + " Won"'),"Score preview must show the winning team on a separate line");
 assert(matchManagementModule.includes('"Winner: " + winningTeamName'),"Score confirmation must identify the winning team");
@@ -270,10 +274,14 @@ assert(matchManagementModule.includes("select.disabled = true")&&matchManagement
 assert(matchManagementModule.includes("Players are locked from the approved lineup"),"Schedule & Score must explain how lineup players are changed");
 assert(!matchManagementModule.includes("payload.homePlayers")&&!matchManagementModule.includes("payload.awayPlayers"),"Schedule & Score must never write player assignments");
 assert(!firestoreRules.includes("'homePlayers', 'awayPlayers', 'venueId'"),"EC Schedule & Score rule must not permit player changes");
+assert(firestoreRules.includes("|| ((isEC() || isSeasonEC(seasonId))")&&firestoreRules.includes("resource.data.scheduleStatus in ['toBeScheduled', 'scheduled']"),"EC Schedule & Score must allow schedule-only updates to open matches");
 assert(css.includes(".managed-player-grid select:disabled"),"Read-only Schedule & Score players must be greyed out");
 assert(lineupSubmit.includes("memberRoles.includes(\"ec\")")&&lineupSubmit.includes("globalRoles.includes(\"superAdmin\")"),"Lineup manager access must resolve from authoritative Firebase roles");
 assert(lineupSubmit.includes("state.matchups.flatMap")&&!lineupSubmit.includes("const eligible = state.matchups.filter"),"Lineup week options must include every configured regular-season matchup");
 for (const field of ["venueAddressSnapshot","updatedAt"]) assert(firestoreRules.includes(`'${field}'`), `Captain schedule rule is missing ${field}`);
+const captainScheduleRule = firestoreRules.indexOf("allow update: if isMatchupTeamCaptain(seasonId, matchupId)");
+const workflowLineUpdateRule = firestoreRules.indexOf("allow update: if isWorkflowActor(seasonId, matchupId)", captainScheduleRule);
+assert(captainScheduleRule >= 0 && workflowLineUpdateRule > captainScheduleRule,"Captain Schedule & Score authorization must short-circuit before the more expensive workflow and EC rules");
 assert(html.includes('data-view="matches"')&&html.includes('id="matchesPage"'),"Matches page is missing");
 assert(html.includes('id="matchesSeasonLabel"')&&js.includes("seasonLabel.textContent = `Season:"),"Matches page must display the active season name");
 assert(html.includes('id="refreshMatches">Refresh</button><button type="button" class="secondary compact-button" data-route="home">Home</button>'),"Matches page must place Refresh before its Home button");
@@ -376,6 +384,7 @@ assert(firebaseData.includes('status === "completed"')&&firebaseData.includes("c
 assert(firebaseData.includes('if (![\"active\", \"completed\"].includes(status)) return;'),"Only Active and Completed seasons may use the per-season public refresh");
 assert(firebaseData.includes("result.matchupCount")&&firebaseData.includes("result.standingCount")&&firebaseData.includes("refreshedAt"),"Per-season refresh must report counts and timestamp");
 assert(firestoreRules.includes("derivedRecordsUpdatedByUid")&&firestoreRules.includes("calculatedByUid == request.auth.uid"),"Derived matchup and standings writes must be restricted to the authenticated EC/Admin");
+assert(firestoreRules.includes("return isSuperAdmin() || isEC() || hasSeasonRole(seasonId, 'ec');"),"Global ECs must satisfy season-level refresh and public-publishing permissions");
 assert(publicSeasonDashboard.includes('["tobescheduled", "scheduled", "completed"].includes(scheduleStatus)'),"Guest publication must be driven directly by Match Line schedule status");
 assert(firestoreRules.includes("match /playerOverrides/{overrideId}")&&firestoreRules.includes("allow create: if isSuperAdmin()"),"Only Super Admin may create immutable player-override audits");
 assert(rosterAdminShared.includes("formattedPlayerLabel(item.playerId, null, nameOf(item))")&&rosterAdminShared.includes("nextName = nameOf(next)"),"Manage Ranked Player must use the private Player Master name in Player Name (Player ID) labels and snapshots");

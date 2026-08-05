@@ -187,7 +187,7 @@ service cloud.firestore {
     }
 
     function isSeasonEC(seasonId) {
-      return isSuperAdmin() || hasSeasonRole(seasonId, 'ec');
+      return isSuperAdmin() || isEC() || hasSeasonRole(seasonId, 'ec');
     }
 
     function isCaptainForTeam(seasonId, teamId) {
@@ -451,13 +451,13 @@ service cloud.firestore {
     match /publicSeasonDashboards/{seasonId} {
       allow read: if isSuperAdmin() || resource.data.status == 'completed';
       allow create, update: if isSuperAdmin() || isSeasonEC(seasonId);
-      allow delete: if isSuperAdmin();
+      allow delete: if isSuperAdmin() || isSeasonEC(seasonId);
     }
 
     match /publicCompletedSeasons/{seasonId} {
       allow read: if isSuperAdmin() || resource.data.status == 'completed';
       allow create, update: if isSuperAdmin() || isSeasonEC(seasonId);
-      allow delete: if isSuperAdmin();
+      allow delete: if isSuperAdmin() || isSeasonEC(seasonId);
     }
 
     match /aoContent/{contentId} {
@@ -687,6 +687,13 @@ service cloud.firestore {
             && isWorkflowActor(seasonId, matchupId);
           allow delete: if isSuperAdmin();
           allow update: if isSuperAdmin();
+          allow update: if isMatchupTeamCaptain(seasonId, matchupId)
+            && resource.data.scheduleStatus in ['toBeScheduled', 'scheduled']
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'venueId', 'venueNameSnapshot', 'venueAddressSnapshot', 'scheduledAt', 'sets',
+              'scheduleStatus', 'scoreStatus', 'homePoints', 'awayPoints',
+              'winnerTeamId', 'updatedAt'
+            ]);
           allow update: if isWorkflowActor(seasonId, matchupId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'lineMatchId', 'lineupId', 'seasonId', 'matchupId', 'lineNumber',
@@ -717,7 +724,7 @@ service cloud.firestore {
               && request.resource.data.lastCorrectionReason is string
               && request.resource.data.lastCorrectionReason.size() > 0
               && isSeasonEC(seasonId))
-            || (isMatchupTeamCaptain(seasonId, matchupId)
+            || ((isEC() || isSeasonEC(seasonId))
               && resource.data.scheduleStatus in ['toBeScheduled', 'scheduled']
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                 'venueId', 'venueNameSnapshot', 'venueAddressSnapshot', 'scheduledAt', 'sets',
