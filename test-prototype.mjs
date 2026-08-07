@@ -323,6 +323,9 @@ assert(lineupSubmit.includes('byId("lineupTeam").disabled = captainOnly'),"Capta
 assert(lineupSubmit.includes("captainTeamsFromAuthorization"),"Captain team resolution must include authorized membership");
 assert(lineupSubmit.includes('["submitted", "approved"]'),"Submitted and approved lineups must render read-only");
 assert(lineupSubmit.includes("This lineup has been approved and cannot be changed."),"Approved lineup writes must be blocked");
+assert(!lineupSubmit.includes('transaction.update(matchupRef'),"Saving a captain draft must not write the parent Matchup document");
+assert(lineupSubmit.includes('transaction.set(lineupRef')&&lineupSubmit.includes('status: "draft"'),"Saving a captain draft must persist the lineup document for later auto-population");
+assert(html.includes('lineup-bootstrap.js?v=21')&&serviceWorker.includes('/lineup-bootstrap.js?v=21')&&serviceWorker.includes('/lineup-submit.js?v=21'),"Captain draft fix must use consistent cache-busted lineup versions");
 assert(firebaseData.includes('loadCanonicalPlayers'),"Season dashboards must load canonical Player Master names");
 assert(js.includes("function")&&js.includes("linePlayerLabel = (player = {})"),"Matches by Round is missing the player name and ID formatter");
 assert(js.includes("`${name} (${playerId})`"),"Matches by Round must display Player Name (Player ID)");

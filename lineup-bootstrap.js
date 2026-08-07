@@ -11,7 +11,7 @@
     if(message)message.textContent=`Submit Lineup startup failed: ${error?.message||error}`;
   };
   window.addEventListener("unhandledrejection",event=>{if(String(event.reason?.stack||event.reason||"").includes("lineup"))fail(event.reason);});
-  import("./lineup-submit.js?v=20").catch(fail);
+  import("./lineup-submit.js?v=21").catch(fail);
   };
   window.addEventListener("alphaopen:route-changed",event=>{if(event.detail?.route==="lineup")start();});
   if((location.hash.slice(1)||"home")==="lineup")start();

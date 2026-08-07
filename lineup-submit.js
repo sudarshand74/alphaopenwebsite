@@ -323,13 +323,10 @@ async function save(nextStatus) {
     return;
   }
   const lineupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId, "lineups", teamId);
-  const matchupRef = doc(db, "seasons", state.seasonId, "matchups", matchup.matchupId);
   await runTransaction(db, async transaction => {
     const current = await transaction.get(lineupRef);
     if (current.exists() && lockedLineupStatus(current.data().status)) throw new Error("This lineup has been approved and cannot be changed.");
     transaction.set(lineupRef, { seasonId: state.seasonId, matchupId: matchup.matchupId, teamId, status: "draft", revisionNumber: Number(current.data() && current.data().revisionNumber || 0), ruleVersionId: state.season.activeRuleVersionId || "v1", lines: selectedLines, validation: null, submittedByUid: current.data() && current.data().submittedByUid || null, submittedAt: current.data() && current.data().submittedAt || null, rejectionReason: null, rejectedByUid: null, rejectedAt: null, updatedByUid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
-    const lineupStatusField = matchup.homeTeamId === teamId ? "homeLineupStatus" : "awayLineupStatus";
-    transaction.update(matchupRef, { [lineupStatusField]: "pendingSubmission", updatedAt: serverTimestamp() });
   });
   submissionConfirmation(null, "", false);
   status("Draft lineup saved.");
