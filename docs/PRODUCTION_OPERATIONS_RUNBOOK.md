@@ -7,13 +7,14 @@
 | System | AlphaOpen Tennis League |
 | Document owner | AlphaOpen Super Admin |
 | Source repository | `https://github.com/sudarshand74/alphaopenwebsite` |
-| Production baseline | Git commit `ae83150c7e6b9de35777b3b2033e3043c5674b20` |
-| Production baseline tag | `production-baseline-2026-07-29` |
-| Last verified | July 29, 2026 |
+| Production baseline | Record the exact `main` commit in each release record; do not rely on a hard-coded baseline here |
+| Production baseline tag | Create an annotated tag for significant verified production releases |
+| Last documentation review | August 6, 2026 |
 | Review frequency | Before each season and after any material operational or security change |
 
 This runbook describes how to operate, change, deploy, verify, back up, and recover the AlphaOpen application. It is the operational companion to:
 
+- `docs/README.md` and the linked owner/engineering guides
 - `ALPHAOPEN_APP_SPEC.md`
 - `FIRESTORE_DATA_MODEL.md`
 - `AlphaOpen_Architecture_Review_Board_Detailed_Design.docx`
@@ -27,16 +28,19 @@ Update this runbook in the same Git branch whenever an application change modifi
 | --- | --- | --- | --- |
 | Local | Local web server or Firebase Emulator Suite | Visual checks and isolated development | A temporary `codex/*` feature branch |
 | Development | `alphaopen-development-2026` | End-to-end testing with development data | An approved feature-branch commit |
+| UAT | `alphaopen-test-system` | Product-owner acceptance before production | The same approved source tested in DEV |
 | Production | `alphaopen-production` | Live AlphaOpen operations and public dashboards | The approved commit on `main` |
 
 Firebase aliases in `.firebaserc`:
 
 - `default` and `dev`: `alphaopen-development-2026`
+- `test` and `uat`: `alphaopen-test-system`
 - `prod`: `alphaopen-production`
 
 Primary hosted URLs:
 
 - Development: `https://alphaopen-development-2026.web.app`
+- UAT: `https://alphaopen-test-system.web.app`
 - Production: `https://alphaopen-production.web.app`
 
 The Firebase project must always be specified explicitly in deployment commands. Do not rely only on the current Firebase CLI alias.
@@ -53,7 +57,7 @@ AlphaOpen is a static HTML, CSS, and JavaScript application hosted by Firebase H
 
 Guests do not sign in. Captains, EC members, Neutral Approvers, and Super Admins use the restricted Operations sign-in flow. An ordinary Player Master record does not grant sign-in access.
 
-There is currently no GitHub-to-Firebase deployment automation. GitHub records the approved source; Firebase CLI deployments are initiated manually from the local repository.
+GitHub Actions runs read-only lint, test, and build checks. There is no GitHub-to-Firebase deployment automation. GitHub records the approved source; Firebase CLI deployments are initiated manually from the local repository.
 
 ## 4. Roles and access model
 
@@ -470,38 +474,42 @@ An application workbook export does not export Google/Firebase Authentication ac
 
 ### 10.2 Minimum backup schedule
 
+- Firestore managed backup: automatic daily backup with 98-day retention.
+- Firestore PITR: continuous seven-day recovery window.
 - Before every season bulk upload, replacement, activation, completion, or reset.
 - Before material Player ID or identity migration.
 - Before a production release that changes Firestore rules or data-writing behavior.
 - After season completion.
-- At least weekly during an active season.
+- Authentication export: monthly and before identity/provider changes.
+
+Run the combined manual Firestore and Authentication backup with:
+
+```powershell
+npm.cmd run backup:manual
+```
 
 ### 10.3 Backup verification
 
-A backup is not verified merely because a file downloaded.
+A backup is not verified merely because a file downloaded. Run:
+
+```powershell
+npm.cmd run backup:status
+```
 
 Check:
 
-- File opens without repair warnings.
-- Export timestamp and environment are recorded.
-- Expected sheets and document counts are present.
-- Permanent document paths and IDs are included.
-- Private records are stored only in the restricted backup location.
-- A second authorized person or restoration test confirms usability periodically.
+- The daily schedule exists and its newest backup is `READY` and no more than 36 hours old.
+- PITR and database delete protection are enabled.
+- A recent manual Firestore export and checksum-verified Authentication export exist.
+- The export timestamp, project, operation, bucket path, and Git commit are recorded.
+- Private records exist only in the restricted backup project.
+- A quarterly isolated restoration test confirms usability.
 
-### 10.4 Decisions still required
+### 10.4 Approved protection and detailed recovery procedure
 
-The owner must define:
+The approved backup project is `alphaopen-backups-2026`; its restricted bucket is `gs://alphaopen-prod-backups-2026`. Manual Firestore exports are retained for 30 days, Authentication exports for 180 days, season archives for 365 days, and deleted bucket objects have seven-day soft-delete protection. Initial objectives are a one-minute recovery point within the PITR window, less than 24 hours from daily backups, and a four-hour recovery-time target to be replaced after a measured rehearsal.
 
-- Approved primary and secondary backup locations.
-- Encryption and access restrictions.
-- Retention period.
-- Recovery-time objective.
-- Recovery-point objective.
-- Restore-test frequency.
-- People authorized to restore production data.
-
-Record those decisions in this runbook; do not store credentials or recovery secrets here.
+Use `docs/BACKUP_RESTORE.md` for status checks, manual backup, retention changes, restore procedures, and troubleshooting. No production import, PITR write-back, database cutover, or recovery-database deletion may occur without explicit owner approval.
 
 ## 11. Incident response
 
@@ -625,4 +633,3 @@ After this runbook is accepted:
 4. Create short Captain, Neutral Approver, and EC guides.
 5. Create a tested backup restoration procedure.
 6. Add CI checks, then consider automated DEV deployment.
-
