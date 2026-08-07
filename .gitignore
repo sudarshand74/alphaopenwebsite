@@ -1,5 +1,6 @@
 # Logs
 logs
+output/backup-logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -21,6 +22,8 @@ emulator-data/
 # Runtime data
 .artifact_runtime/
 outputs/
+output/backups/
+tmp/
 pids
 *.pid
 *.seed
@@ -31,6 +34,7 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage
+dist/
 
 # nyc test coverage
 .nyc_output

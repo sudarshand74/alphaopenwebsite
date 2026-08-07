@@ -1,0 +1,17 @@
+{
+  "name": "alphaopen-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "node scripts/ci-lint.mjs",
+    "test": "node --test test-prototype.mjs tests/critical-workflows.test.mjs && npm --prefix functions test",
+    "build": "node scripts/build-static-site.mjs",
+    "check": "npm run lint && npm test && npm run build",
+    "backup:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup-status.ps1",
+    "backup:manual": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/manual-prod-backup.ps1 -ConfirmProject alphaopen-production"
+  }
+}
